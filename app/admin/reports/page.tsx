@@ -36,11 +36,12 @@ export default function AdminReportsPage() {
   }
 
   const handleResolve = async (reportId: string, action: 'resolved' | 'dismissed') => {
-    const report = mockDb.getReportById(reportId)
+    const report = await mockDb.updateReport(reportId, {
+      status: action,
+      resolvedAt: new Date().toISOString(),
+      resolution: resolution || `Report ${action} by admin`,
+    })
     if (report) {
-      report.status = action
-      report.resolvedAt = new Date().toISOString()
-      report.resolution = resolution || `Report ${action} by admin`
       
       toast({
         title: action === 'resolved' ? 'Report Resolved' : 'Report Dismissed',
@@ -59,7 +60,7 @@ export default function AdminReportsPage() {
 
   const ReportCard = ({ report }: { report: Report }) => {
     const reporter = mockDb.getUserById(report.reporterId)
-    const reported = mockDb.getUserById(report.reportedId)
+    const reported = mockDb.getUserById(report.reportedId || report.reportedUserId || '')
 
     return (
       <Card className="hover:border-primary transition-colors">

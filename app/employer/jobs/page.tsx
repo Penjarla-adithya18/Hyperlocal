@@ -66,7 +66,7 @@ export default function EmployerJobsPage() {
   const cancelledJobs = jobs.filter(j => j.status === 'cancelled')
 
   const JobCard = ({ job }: { job: Job }) => {
-    const applicationsCount = mockDb.getApplicationsByJob(job.id).length
+    const applicationsCount = job.applicationCount ?? mockDb.getApplicationsByJob(job.id).length
 
     return (
       <Card className="hover:border-primary transition-colors">

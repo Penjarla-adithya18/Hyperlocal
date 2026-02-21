@@ -2,6 +2,10 @@
 import { User, UserRole } from './types';
 import { mockUserOps, mockWorkerProfileOps, mockEmployerProfileOps } from './mockDb';
 
+const useSupabaseBackend =
+  typeof globalThis !== 'undefined' &&
+  (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
+
 // Simulated OTP storage (in real app, this would be server-side)
 const otpStore = new Map<string, { otp: string; expiresAt: number }>();
 
@@ -64,6 +68,29 @@ export async function registerUser(data: {
   businessName?: string;
   organizationName?: string;
 }): Promise<{ success: boolean; user?: User; message: string }> {
+  if (useSupabaseBackend) {
+    try {
+      const response = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        return { success: false, message: payload.message || 'Registration failed' };
+      }
+
+      return {
+        success: true,
+        user: payload.user,
+        message: payload.message || 'Registration successful',
+      };
+    } catch {
+      return { success: false, message: 'Registration failed' };
+    }
+  }
+
   // Check if user already exists
   const existing = await mockUserOps.findByPhone(data.phoneNumber);
   if (existing) {
@@ -112,6 +139,29 @@ export async function loginUser(
   phoneNumber: string,
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
+  if (useSupabaseBackend) {
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber, password }),
+      });
+
+      const payload = await response.json();
+      if (!response.ok || !payload.success) {
+        return { success: false, message: payload.message || 'Login failed' };
+      }
+
+      return {
+        success: true,
+        user: payload.user,
+        message: payload.message || 'Login successful',
+      };
+    } catch {
+      return { success: false, message: 'Login failed' };
+    }
+  }
+
   await new Promise(resolve => setTimeout(resolve, 400));
 
   const user = await mockUserOps.findByPhone(phoneNumber);
@@ -179,6 +229,9 @@ export function setCurrentUser(user: User | null): void {
 
 // Logout
 export function logout(): void {
+  if (useSupabaseBackend && typeof fetch !== 'undefined') {
+    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
+  }
   setCurrentUser(null);
   if (typeof window !== 'undefined') {
     localStorage.removeItem('userPassword');

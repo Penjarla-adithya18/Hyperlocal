@@ -15,6 +15,8 @@ export type TrustLevel = 'basic' | 'active' | 'trusted';
 export interface User {
   id: string;
   fullName: string;
+  email?: string;
+  phone?: string;
   phoneNumber: string;
   role: UserRole;
   createdAt: string;
@@ -22,6 +24,9 @@ export interface User {
   trustScore: number;
   trustLevel: TrustLevel;
   isVerified: boolean;
+  companyName?: string;
+  companyDescription?: string;
+  skills?: string[];
 }
 
 export interface WorkerProfile {
@@ -33,6 +38,7 @@ export interface WorkerProfile {
   location?: string;
   profilePictureUrl?: string;
   bio?: string;
+  profileCompleted?: boolean;
 }
 
 export interface EmployerProfile {
@@ -56,9 +62,18 @@ export interface Job {
   latitude?: number;
   longitude?: number;
   pay: number;
+  payAmount?: number;
+  payType?: 'hourly' | 'fixed';
   paymentStatus: PaymentStatus;
   escrowAmount?: number;
+  escrowRequired?: boolean;
   timing: string;
+  duration?: string;
+  experienceRequired?: 'entry' | 'intermediate' | 'expert';
+  requirements?: string;
+  benefits?: string;
+  slots?: number;
+  startDate?: string;
   status: JobStatus;
   createdAt: string;
   updatedAt: string;
@@ -73,7 +88,23 @@ export interface Application {
   status: ApplicationStatus;
   matchScore: number;
   coverMessage?: string;
+  coverLetter?: string;
   createdAt: string;
+  updatedAt: string;
+}
+
+export interface ChatConversation {
+  id: string;
+  participants: string[];
+  jobId?: string;
+  applicationId?: string;
+  lastMessage?: {
+    id: string;
+    senderId: string;
+    message: string;
+    createdAt: string;
+    read: boolean;
+  };
   updatedAt: string;
 }
 
@@ -90,11 +121,13 @@ export interface ChatSession {
 
 export interface ChatMessage {
   id: string;
-  sessionId: string;
+  sessionId?: string;
+  conversationId?: string;
   senderId: string;
   message: string;
   createdAt: string;
-  isRead: boolean;
+  isRead?: boolean;
+  read?: boolean;
 }
 
 export interface Rating {
@@ -123,13 +156,28 @@ export interface TrustScore {
 export interface Report {
   id: string;
   reporterId: string;
+  reportedId?: string;
   reportedUserId?: string;
   reportedJobId?: string;
+  type?: string;
   reason: string;
   description: string;
   status: 'pending' | 'reviewing' | 'resolved' | 'dismissed';
+  resolution?: string;
   createdAt: string;
   resolvedAt?: string;
+}
+
+export interface EscrowTransaction {
+  id: string;
+  jobId: string;
+  employerId: string;
+  workerId: string;
+  amount: number;
+  status: 'pending' | 'held' | 'released' | 'refunded';
+  createdAt: string;
+  releasedAt?: string;
+  refundedAt?: string;
 }
 
 export interface Notification {

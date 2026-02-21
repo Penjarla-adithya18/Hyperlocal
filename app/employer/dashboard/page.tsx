@@ -96,7 +96,7 @@ export default function EmployerDashboardPage() {
             <h1 className="text-3xl font-bold mb-2">Welcome, {employerProfile?.businessName || user?.fullName}!</h1>
             <p className="text-muted-foreground">Manage your job postings and find the right talent</p>
           </div>
-          <Link href="/employer/post-job">
+          <Link href="/employer/jobs/post">
             <Button size="lg" className="bg-accent hover:bg-accent/90 gap-2">
               <PlusCircle className="w-5 h-5" />
               Post a Job
@@ -143,7 +143,7 @@ export default function EmployerDashboardPage() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
           <div className="grid md:grid-cols-3 gap-4">
-            <Link href="/employer/post-job">
+            <Link href="/employer/jobs/post">
               <Button variant="outline" className="w-full justify-start gap-3 h-auto py-4">
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
                   <PlusCircle className="w-5 h-5 text-accent" />
@@ -155,7 +155,7 @@ export default function EmployerDashboardPage() {
               </Button>
             </Link>
 
-            <Link href="/employer/applicants">
+            <Link href="/employer/jobs">
               <Button variant="outline" className="w-full justify-start gap-3 h-auto py-4">
                 <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                   <Users className="w-5 h-5 text-primary" />
@@ -167,7 +167,7 @@ export default function EmployerDashboardPage() {
               </Button>
             </Link>
 
-            <Link href="/employer/messages">
+            <Link href="/employer/chat">
               <Button variant="outline" className="w-full justify-start gap-3 h-auto py-4">
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
                   <TrendingUp className="w-5 h-5 text-accent" />
@@ -202,7 +202,7 @@ export default function EmployerDashboardPage() {
               <p className="text-muted-foreground mb-6">
                 Start by posting your first job to connect with local workers
               </p>
-              <Link href="/employer/post-job">
+              <Link href="/employer/jobs/post">
                 <Button className="bg-accent hover:bg-accent/90">
                   <PlusCircle className="w-4 h-4 mr-2" />
                   Post Your First Job

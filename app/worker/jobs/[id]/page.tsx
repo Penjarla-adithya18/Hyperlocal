@@ -44,7 +44,8 @@ export default function JobDetailsPage() {
         setEmployer(employerData)
 
         if (user) {
-          const existingApplication = mockDb.getApplicationsByWorker(user.id)
+          const workerApplications = await mockDb.getApplicationsByWorker(user.id)
+          const existingApplication = workerApplications
             .find(app => app.jobId === jobData.id)
           setApplication(existingApplication || null)
         }

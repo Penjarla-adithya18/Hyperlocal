@@ -161,6 +161,32 @@ export function getBasicRecommendations(
   return categoryJobs.slice(0, limit);
 }
 
+export async function matchJobs(
+  worker: { id: string },
+  jobs: Job[],
+  getWorkerProfile?: (workerId: string) => Promise<WorkerProfile | null>
+): Promise<Array<{ job: Job; score: number }>> {
+  if (!getWorkerProfile) {
+    return jobs
+      .filter((job) => job.status === 'active')
+      .map((job) => ({ job, score: 50 }))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  const profile = await getWorkerProfile(worker.id);
+  if (!profile) {
+    return jobs
+      .filter((job) => job.status === 'active')
+      .map((job) => ({ job, score: 35 }))
+      .sort((a, b) => b.score - a.score);
+  }
+
+  return jobs
+    .filter((job) => job.status === 'active')
+    .map((job) => ({ job, score: calculateMatchScore(profile, job) }))
+    .sort((a, b) => b.score - a.score);
+}
+
 // Detect fraud keywords in job description
 export function detectFraudKeywords(text: string): {
   isSuspicious: boolean;

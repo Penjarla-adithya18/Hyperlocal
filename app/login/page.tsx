@@ -12,6 +12,10 @@ import { useAuth } from '@/contexts/AuthContext';
 import { loginUser, getUserPassword } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 
+const useSupabaseBackend =
+  typeof globalThis !== 'undefined' &&
+  (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
+
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
@@ -50,7 +54,7 @@ export default function LoginPage() {
       if (result.success && result.user) {
         // Verify password (mock auth)
         const storedPassword = getUserPassword(formData.phoneNumber);
-        if (storedPassword !== formData.password) {
+        if (!useSupabaseBackend && storedPassword !== formData.password) {
           toast({
             title: 'Login Failed',
             description: 'Invalid phone number or password',

@@ -37,9 +37,8 @@ export default function AdminUsersPage() {
 
   const handleBanUser = async (userId: string) => {
     if (confirm('Are you sure you want to ban this user?')) {
-      const user = mockDb.getUserById(userId)
-      if (user) {
-        user.isVerified = false
+      const updated = await mockDb.updateUser(userId, { isVerified: false })
+      if (updated) {
         toast({
           title: 'User Banned',
           description: 'User has been banned from the platform'
@@ -50,9 +49,8 @@ export default function AdminUsersPage() {
   }
 
   const handleVerifyUser = async (userId: string) => {
-    const user = mockDb.getUserById(userId)
-    if (user) {
-      user.isVerified = true
+    const updated = await mockDb.updateUser(userId, { isVerified: true })
+    if (updated) {
       toast({
         title: 'User Verified',
         description: 'User has been verified'
@@ -66,8 +64,8 @@ export default function AdminUsersPage() {
 
   const filteredUsers = users.filter(u => 
     u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    u.phone.includes(searchQuery)
+    (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (u.phone || u.phoneNumber || '').includes(searchQuery)
   )
 
   const UserCard = ({ user }: { user: User }) => (
@@ -86,8 +84,8 @@ export default function AdminUsersPage() {
                 <CheckCircle className="h-4 w-4 text-green-600" />
               )}
             </div>
-            <p className="text-sm text-muted-foreground truncate">{user.email}</p>
-            <p className="text-sm text-muted-foreground">{user.phone}</p>
+            <p className="text-sm text-muted-foreground truncate">{user.email || 'N/A'}</p>
+            <p className="text-sm text-muted-foreground">{user.phone || user.phoneNumber}</p>
             
             {user.role === 'worker' && user.skills && (
               <div className="flex flex-wrap gap-1 mt-2">
@@ -183,8 +181,8 @@ export default function AdminUsersPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {workers.filter(u => 
                 u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                u.phone.includes(searchQuery)
+                (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (u.phone || u.phoneNumber || '').includes(searchQuery)
               ).map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}
@@ -195,8 +193,8 @@ export default function AdminUsersPage() {
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
               {employers.filter(u => 
                 u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                u.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                u.phone.includes(searchQuery)
+                (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                (u.phone || u.phoneNumber || '').includes(searchQuery)
               ).map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}

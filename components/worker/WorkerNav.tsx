@@ -16,7 +16,7 @@ export function WorkerNav() {
     { href: '/worker/dashboard', label: 'Dashboard', icon: Home },
     { href: '/worker/jobs', label: 'Find Jobs', icon: Search },
     { href: '/worker/applications', label: 'My Applications', icon: Briefcase },
-    { href: '/worker/messages', label: 'Messages', icon: MessageSquare, badge: 0 },
+    { href: '/worker/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
     { href: '/worker/profile', label: 'Profile', icon: User },
   ];
 
@@ -96,3 +96,5 @@ export function WorkerNav() {
     </nav>
   );
 }
+
+export default WorkerNav;

@@ -19,10 +19,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Load user from localStorage on mount
-    const currentUser = getCurrentUser();
-    setUser(currentUser);
-    setLoading(false);
+    const loadAuthState = async () => {
+      const useSupabase =
+        typeof globalThis !== 'undefined' &&
+        (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
+
+      if (useSupabase) {
+        try {
+          const response = await fetch('/api/auth/me');
+          if (response.ok) {
+            const payload = await response.json();
+            setUser(payload.user || null);
+            if (payload.user) {
+              saveUser(payload.user);
+            }
+          } else {
+            setUser(null);
+          }
+        } catch {
+          const currentUser = getCurrentUser();
+          setUser(currentUser);
+        } finally {
+          setLoading(false);
+        }
+        return;
+      }
+
+      const currentUser = getCurrentUser();
+      setUser(currentUser);
+      setLoading(false);
+    };
+
+    void loadAuthState();
   }, []);
 
   const login = (newUser: User) => {

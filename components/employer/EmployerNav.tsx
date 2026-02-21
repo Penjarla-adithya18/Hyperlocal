@@ -14,10 +14,10 @@ export function EmployerNav() {
 
   const navItems = [
     { href: '/employer/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/employer/post-job', label: 'Post Job', icon: PlusCircle },
+    { href: '/employer/jobs/post', label: 'Post Job', icon: PlusCircle },
     { href: '/employer/jobs', label: 'My Jobs', icon: Briefcase },
-    { href: '/employer/applicants', label: 'Applicants', icon: Users, badge: 0 },
-    { href: '/employer/messages', label: 'Messages', icon: MessageSquare, badge: 0 },
+    { href: '/employer/jobs', label: 'Applicants', icon: Users, badge: 0 },
+    { href: '/employer/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
   ];
 
   return (
@@ -58,7 +58,7 @@ export function EmployerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
-            <Link href="/employer/settings">
+            <Link href="/employer/dashboard">
               <Button variant="ghost" size="icon">
                 <Settings className="w-5 h-5" />
               </Button>
@@ -100,3 +100,5 @@ export function EmployerNav() {
     </nav>
   );
 }
+
+export default EmployerNav;

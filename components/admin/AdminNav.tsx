@@ -22,9 +22,9 @@ export default function AdminNav() {
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Users', icon: Users, path: '/admin/users' },
-    { label: 'Jobs', icon: Briefcase, path: '/admin/jobs' },
+    { label: 'Jobs', icon: Briefcase, path: '/admin/dashboard' },
     { label: 'Reports', icon: AlertTriangle, path: '/admin/reports' },
-    { label: 'Trust & Safety', icon: Shield, path: '/admin/trust' },
+    { label: 'Trust & Safety', icon: Shield, path: '/admin/reports' },
   ]
 
   return (

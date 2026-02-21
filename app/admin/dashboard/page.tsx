@@ -50,7 +50,7 @@ export default function AdminDashboardPage() {
     const allReports = await mockDb.getAllReports()
     const unhandledReports = allReports.filter(r => r.status === 'pending')
     
-    const allEscrow = mockDb.getAllEscrowTransactions()
+    const allEscrow = await mockDb.getAllEscrowTransactionsAsync()
     const heldEscrow = allEscrow.filter(e => e.status === 'held')
     const totalEscrowAmount = allEscrow.reduce((sum, t) => sum + t.amount, 0)
     const heldEscrowAmount = heldEscrow.reduce((sum, t) => sum + t.amount, 0)
@@ -96,7 +96,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/admin/jobs')}>
+          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/admin/dashboard')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Jobs Posted</CardTitle>
               <Briefcase className="h-4 w-4 text-muted-foreground" />

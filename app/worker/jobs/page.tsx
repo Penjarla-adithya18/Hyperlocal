@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/mockDb'
 import { matchJobs } from '@/lib/aiMatching'
-import { Job, User } from '@/lib/types'
+import { Application, Job, User } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -20,6 +20,7 @@ export default function WorkerJobsPage() {
   const { user } = useAuth()
   const [jobs, setJobs] = useState<Job[]>([])
   const [matchedJobs, setMatchedJobs] = useState<Array<{ job: Job; score: number }>>([])
+  const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -36,6 +37,9 @@ export default function WorkerJobsPage() {
       const allJobs = await mockDb.getAllJobs()
       const activeJobs = allJobs.filter(j => j.status === 'active')
       setJobs(activeJobs)
+
+      const myApplications = user ? await mockDb.getApplicationsByWorker(user.id) : []
+      setApplications(myApplications)
 
       if (user) {
         const matches = await matchJobs(user as User, activeJobs)
@@ -61,7 +65,7 @@ export default function WorkerJobsPage() {
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
     const employer = mockDb.getUserById(job.employerId)
-    const hasApplied = user ? mockDb.getApplicationsByWorker(user.id).some(app => app.jobId === job.id) : false
+    const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (
       <Card className="hover:border-primary transition-colors">

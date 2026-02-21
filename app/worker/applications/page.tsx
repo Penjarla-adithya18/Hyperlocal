@@ -16,6 +16,7 @@ export default function WorkerApplicationsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const [applications, setApplications] = useState<Application[]>([])
+  const [jobsById, setJobsById] = useState<Record<string, Job>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,6 +30,13 @@ export default function WorkerApplicationsPage() {
     try {
       const workerApplications = await mockDb.getApplicationsByWorker(user.id)
       setApplications(workerApplications)
+
+      const allJobs = await mockDb.getAllJobs()
+      const byId = allJobs.reduce((acc, job) => {
+        acc[job.id] = job
+        return acc
+      }, {} as Record<string, Job>)
+      setJobsById(byId)
     } catch (error) {
       console.error('Failed to load applications:', error)
     } finally {
@@ -41,7 +49,7 @@ export default function WorkerApplicationsPage() {
   const rejectedApps = applications.filter(a => a.status === 'rejected')
 
   const ApplicationCard = ({ application }: { application: Application }) => {
-    const job = mockDb.getJobById(application.jobId)
+    const job = jobsById[application.jobId]
     if (!job) return null
 
     return (

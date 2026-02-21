@@ -5,12 +5,14 @@ import {
   EmployerProfile,
   Job,
   Application,
+  ChatConversation,
   ChatSession,
   ChatMessage,
   Rating,
   TrustScore,
   Report,
   Notification,
+  EscrowTransaction,
   UserRole,
   JobStatus,
   ApplicationStatus,
@@ -29,6 +31,7 @@ let ratings: Rating[] = [];
 let trustScores: TrustScore[] = [];
 let reports: Report[] = [];
 let notifications: Notification[] = [];
+let escrowTransactions: EscrowTransaction[] = [];
 
 // Initialize with sample data
 export function initializeMockData() {
@@ -183,6 +186,18 @@ export function initializeMockData() {
       complaintCount: 0,
       successfulPayments: 8,
       updatedAt: new Date().toISOString(),
+    },
+  ];
+
+  escrowTransactions = [
+    {
+      id: `escrow-${Date.now()}`,
+      jobId: 'job-1',
+      employerId: 'employer-1',
+      workerId: 'worker-1',
+      amount: 300,
+      status: 'held',
+      createdAt: new Date().toISOString(),
     },
   ];
 }
@@ -650,3 +665,358 @@ function updateTrustScore(userId: string) {
 if (users.length === 0) {
   initializeMockData();
 }
+
+function normalizeUser(user: User): User {
+  const profile = user.role === 'employer'
+    ? employerProfiles.find((p) => p.userId === user.id)
+    : workerProfiles.find((p) => p.userId === user.id);
+
+  return {
+    ...user,
+    phone: user.phoneNumber,
+    email: user.email || `${user.phoneNumber}@hyperlocal.test`,
+    companyName: user.companyName || (user.role === 'employer' ? (profile as EmployerProfile | undefined)?.businessName : undefined),
+    companyDescription:
+      user.companyDescription ||
+      (user.role === 'employer' ? (profile as EmployerProfile | undefined)?.description : undefined),
+    skills: user.skills || (user.role === 'worker' ? (profile as WorkerProfile | undefined)?.skills || [] : []),
+  };
+}
+
+function normalizeJob(job: Job): Job {
+  return {
+    ...job,
+    payAmount: job.payAmount ?? job.pay,
+    payType: job.payType ?? (job.jobType === 'gig' ? 'fixed' : 'hourly'),
+    duration: job.duration ?? job.timing,
+    experienceRequired: job.experienceRequired ?? 'entry',
+    escrowRequired: job.escrowRequired ?? job.paymentStatus === 'locked',
+  };
+}
+
+function normalizeApplication(application: Application): Application {
+  return {
+    ...application,
+    coverLetter: application.coverLetter ?? application.coverMessage,
+  };
+}
+
+function mapSessionToConversation(session: ChatSession): ChatConversation {
+  const sessionMessages = chatMessages
+    .filter((m) => m.sessionId === session.id)
+    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+  const last = sessionMessages[0];
+  return {
+    id: session.id,
+    participants: [session.workerId, session.employerId],
+    jobId: session.jobId,
+    applicationId: session.applicationId,
+    updatedAt: session.lastMessageAt || session.createdAt,
+    lastMessage: last
+      ? {
+          id: last.id,
+          senderId: last.senderId,
+          message: last.message,
+          createdAt: last.createdAt,
+          read: !!last.isRead,
+        }
+      : undefined,
+  };
+}
+
+const useSupabaseBackend =
+  typeof globalThis !== 'undefined' &&
+  (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
+
+async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(input, {
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init?.headers || {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API error: ${response.status}`);
+  }
+
+  return (await response.json()) as T;
+}
+
+export const mockDb = {
+  async getAllUsers(): Promise<User[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: User[] }>('/api/users');
+      users = (result.data || []) as User[];
+      return result.data;
+    }
+    const allUsers = await mockUserOps.getAll();
+    return allUsers.map(normalizeUser);
+  },
+
+  getUserById(userId: string): User | null {
+    const user = users.find((u) => u.id === userId);
+    return user ? normalizeUser(user) : null;
+  },
+
+  async updateUser(userId: string, updates: Partial<User>): Promise<User | null> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: User | null }>(`/api/users/${userId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      if (!result.data) return null;
+      const index = users.findIndex((u) => u.id === userId);
+      if (index !== -1) {
+        users[index] = result.data;
+      }
+      return result.data;
+    }
+
+    const updated = await mockUserOps.update(userId, updates);
+    return updated ? normalizeUser(updated) : null;
+  },
+
+  async getAllJobs(): Promise<Job[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Job[] }>('/api/jobs');
+      return result.data;
+    }
+    const allJobs = await mockJobOps.getAll();
+    return allJobs.map(normalizeJob);
+  },
+
+  async getJobsByEmployer(employerId: string): Promise<Job[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Job[] }>(`/api/jobs?employerId=${employerId}`);
+      return result.data;
+    }
+    const employerJobs = await mockJobOps.findByEmployerId(employerId);
+    return employerJobs.map(normalizeJob);
+  },
+
+  async getJobById(jobId: string): Promise<Job | null> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Job | null }>(`/api/jobs/${jobId}`);
+      return result.data;
+    }
+    const job = await mockJobOps.findById(jobId);
+    return job ? normalizeJob(job) : null;
+  },
+
+  async createJob(payload: Record<string, any>): Promise<Job> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Job }>('/api/jobs', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      return result.data;
+    }
+
+    const job = await mockJobOps.create({
+      employerId: payload.employerId,
+      title: payload.title,
+      description: payload.description,
+      jobType:
+        payload.payType === 'fixed'
+          ? 'gig'
+          : payload.duration?.toLowerCase().includes('month')
+          ? 'full-time'
+          : 'part-time',
+      category: payload.category || 'Other',
+      requiredSkills: payload.requiredSkills || [],
+      location: payload.location || '',
+      pay: Number(payload.payAmount || payload.pay || 0),
+      paymentStatus: payload.escrowRequired ? 'locked' : 'pending',
+      escrowAmount: payload.escrowRequired ? Number(payload.payAmount || payload.pay || 0) : undefined,
+      timing: payload.duration || payload.timing || 'Flexible',
+      status: payload.status || 'active',
+      applicationCount: 0,
+      views: 0,
+      payAmount: Number(payload.payAmount || payload.pay || 0),
+      payType: payload.payType || 'hourly',
+      duration: payload.duration || payload.timing || 'Flexible',
+      experienceRequired: payload.experienceRequired || 'entry',
+      requirements: payload.requirements,
+      benefits: payload.benefits,
+      escrowRequired: !!payload.escrowRequired,
+      slots: payload.slots,
+      startDate: payload.startDate,
+    });
+
+    return normalizeJob(job);
+  },
+
+  async deleteJob(jobId: string): Promise<boolean> {
+    if (useSupabaseBackend) {
+      await apiFetch('/api/jobs/' + jobId, { method: 'DELETE' });
+      return true;
+    }
+    return mockJobOps.delete(jobId);
+  },
+
+  async updateJob(jobId: string, updates: Partial<Job>): Promise<Job | null> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Job | null }>(`/api/jobs/${jobId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      return result.data;
+    }
+
+    const updated = await mockJobOps.update(jobId, updates);
+    return updated ? normalizeJob(updated) : null;
+  },
+
+  async getAllApplications(): Promise<Application[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Application[] }>('/api/applications');
+      applications = result.data || [];
+      return applications.map(normalizeApplication);
+    }
+
+    const all = [...applications];
+    return all.map(normalizeApplication);
+  },
+
+  getApplicationsByJob(jobId: string): Application[] {
+    return applications.filter((a) => a.jobId === jobId).map(normalizeApplication);
+  },
+
+  async getApplicationsByWorker(workerId: string): Promise<Application[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Application[] }>(`/api/applications?workerId=${workerId}`);
+      return result.data;
+    }
+    const workerApps = await mockApplicationOps.findByWorkerId(workerId);
+    return workerApps.map(normalizeApplication);
+  },
+
+  async createApplication(payload: Record<string, any>): Promise<Application> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Application }>('/api/applications', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      return result.data;
+    }
+
+    const created = await mockApplicationOps.create({
+      jobId: payload.jobId,
+      workerId: payload.workerId,
+      status: payload.status || 'pending',
+      matchScore: payload.matchScore ?? 0,
+      coverMessage: payload.coverLetter || payload.coverMessage,
+      coverLetter: payload.coverLetter,
+    });
+
+    return normalizeApplication(created);
+  },
+
+  async getConversationsByUser(userId: string): Promise<ChatConversation[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: ChatConversation[] }>(`/api/chat/conversations?userId=${userId}`);
+      return result.data;
+    }
+
+    const sessions = await mockChatOps.findSessionsByUserId(userId);
+    return sessions.map(mapSessionToConversation);
+  },
+
+  async getMessagesByConversation(conversationId: string): Promise<ChatMessage[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: ChatMessage[] }>(`/api/chat/messages?conversationId=${conversationId}`);
+      return result.data;
+    }
+
+    const messages = await mockChatOps.getMessages(conversationId);
+    return messages.map((message) => ({
+      ...message,
+      conversationId: message.sessionId,
+      read: !!message.isRead,
+    }));
+  },
+
+  async sendMessage(payload: { conversationId: string; senderId: string; message: string }): Promise<ChatMessage> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: ChatMessage }>('/api/chat/messages', {
+        method: 'POST',
+        body: JSON.stringify(payload),
+      });
+      return result.data;
+    }
+
+    const created = await mockChatOps.sendMessage({
+      sessionId: payload.conversationId,
+      senderId: payload.senderId,
+      message: payload.message,
+      isRead: false,
+    });
+
+    return {
+      ...created,
+      conversationId: created.sessionId,
+      read: !!created.isRead,
+    };
+  },
+
+  async getAllReports(): Promise<Report[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Report[] }>('/api/reports');
+      reports = result.data || [];
+      return result.data;
+    }
+    return [...reports];
+  },
+
+  getReportById(reportId: string): Report | null {
+    return reports.find((report) => report.id === reportId) || null;
+  },
+
+  async updateReport(reportId: string, updates: Partial<Report>): Promise<Report | null> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: Report | null }>(`/api/reports/${reportId}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+
+      if (!result.data) return null;
+      reports = reports.map((report) => (report.id === reportId ? { ...report, ...result.data } : report));
+      return result.data;
+    }
+
+    const report = reports.find((item) => item.id === reportId);
+    if (!report) return null;
+    Object.assign(report, updates);
+    return report;
+  },
+
+  createEscrowTransaction(transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): EscrowTransaction {
+    const created: EscrowTransaction = {
+      ...transaction,
+      id: `escrow-${Date.now()}-${Math.random()}`,
+      createdAt: new Date().toISOString(),
+    };
+    escrowTransactions.push(created);
+    return created;
+  },
+
+  getEscrowTransactionById(transactionId: string): EscrowTransaction | null {
+    return escrowTransactions.find((transaction) => transaction.id === transactionId) || null;
+  },
+
+  getAllEscrowTransactions(): EscrowTransaction[] {
+    return [...escrowTransactions];
+  },
+
+  async getAllEscrowTransactionsAsync(): Promise<EscrowTransaction[]> {
+    if (useSupabaseBackend) {
+      const result = await apiFetch<{ data: EscrowTransaction[] }>('/api/escrow');
+      escrowTransactions = result.data || [];
+      return escrowTransactions;
+    }
+    return [...escrowTransactions];
+  },
+};
