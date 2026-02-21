@@ -1,6 +1,8 @@
 // Mock authentication service
 import { User, UserRole } from './types';
 import { mockUserOps, mockWorkerProfileOps, mockEmployerProfileOps } from './mockDb';
+import { getSupabaseBrowserClient } from './supabase/client';
+import { mapUser } from './supabase/mappers';
 
 const useSupabaseBackend =
   typeof globalThis !== 'undefined' &&
@@ -70,21 +72,62 @@ export async function registerUser(data: {
 }): Promise<{ success: boolean; user?: User; message: string }> {
   if (useSupabaseBackend) {
     try {
-      const response = await fetch('/api/auth/signup', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(data),
-      });
+      const supabase = getSupabaseBrowserClient();
 
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        return { success: false, message: payload.message || 'Registration failed' };
+      const { data: existing, error: findError } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone_number', data.phoneNumber)
+        .maybeSingle();
+
+      if (findError) throw findError;
+      if (existing) {
+        return { success: false, message: 'Phone number already registered' };
+      }
+
+      const { data: created, error } = await supabase
+        .from('users')
+        .insert({
+          full_name: data.fullName,
+          phone_number: data.phoneNumber,
+          role: data.role,
+          password_hash: data.password,
+          profile_completed: false,
+          trust_score: 50,
+          trust_level: 'basic',
+          is_verified: true,
+          company_name: data.role === 'employer' ? data.businessName || null : null,
+        })
+        .select('*')
+        .single();
+
+      if (error) throw error;
+
+      if (data.role === 'worker') {
+        const { error: profileError } = await supabase.from('worker_profiles').insert({
+          user_id: created.id,
+          skills: [],
+          availability: '',
+          categories: [],
+        });
+
+        if (profileError) throw profileError;
+      }
+
+      if (data.role === 'employer') {
+        const { error: profileError } = await supabase.from('employer_profiles').insert({
+          user_id: created.id,
+          business_name: data.businessName || '',
+          organization_name: data.organizationName || null,
+        });
+
+        if (profileError) throw profileError;
       }
 
       return {
         success: true,
-        user: payload.user,
-        message: payload.message || 'Registration successful',
+        user: mapUser(created),
+        message: 'Registration successful',
       };
     } catch {
       return { success: false, message: 'Registration failed' };
@@ -141,21 +184,23 @@ export async function loginUser(
 ): Promise<{ success: boolean; user?: User; message: string }> {
   if (useSupabaseBackend) {
     try {
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phoneNumber, password }),
-      });
+      const supabase = getSupabaseBrowserClient();
 
-      const payload = await response.json();
-      if (!response.ok || !payload.success) {
-        return { success: false, message: payload.message || 'Login failed' };
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle();
+
+      if (error) throw error;
+      if (!data || data.password_hash !== password) {
+        return { success: false, message: 'Invalid phone number or password' };
       }
 
       return {
         success: true,
-        user: payload.user,
-        message: payload.message || 'Login successful',
+        user: mapUser(data),
+        message: 'Login successful',
       };
     } catch {
       return { success: false, message: 'Login failed' };
@@ -229,9 +274,6 @@ export function setCurrentUser(user: User | null): void {
 
 // Logout
 export function logout(): void {
-  if (useSupabaseBackend && typeof fetch !== 'undefined') {
-    fetch('/api/auth/logout', { method: 'POST' }).catch(() => undefined);
-  }
   setCurrentUser(null);
   if (typeof window !== 'undefined') {
     localStorage.removeItem('userPassword');

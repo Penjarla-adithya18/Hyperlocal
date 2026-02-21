@@ -18,6 +18,15 @@ import {
   ApplicationStatus,
   PaymentStatus,
 } from './types';
+import { getSupabaseBrowserClient } from './supabase/client';
+import {
+  mapApplication,
+  mapConversation,
+  mapJob,
+  mapMessage,
+  mapReport,
+  mapUser,
+} from './supabase/mappers';
 
 // In-memory storage
 let users: User[] = [];
@@ -730,19 +739,286 @@ const useSupabaseBackend =
   (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
 
 async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(input, {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(init?.headers || {}),
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`API error: ${response.status}`);
+  if (!useSupabaseBackend) {
+    throw new Error('Supabase backend is disabled');
   }
 
-  return (await response.json()) as T;
+  const supabase = getSupabaseBrowserClient();
+  const method = (init?.method || 'GET').toUpperCase();
+  const [path, queryString] = input.split('?');
+  const params = new URLSearchParams(queryString || '');
+  const body = typeof init?.body === 'string' ? JSON.parse(init.body) : undefined;
+
+  if (path === '/api/users' && method === 'GET') {
+    const { data, error } = await supabase.from('users').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return { data: (data || []).map(mapUser) } as T;
+  }
+
+  const userMatch = path.match(/^\/api\/users\/([^/]+)$/);
+  if (userMatch && method === 'PATCH') {
+    const userId = userMatch[1];
+    const payload: Record<string, any> = {};
+    if (body?.fullName !== undefined) payload.full_name = body.fullName;
+    if (body?.phoneNumber !== undefined) payload.phone_number = body.phoneNumber;
+    if (body?.role !== undefined) payload.role = body.role;
+    if (body?.profileCompleted !== undefined) payload.profile_completed = body.profileCompleted;
+    if (body?.trustScore !== undefined) payload.trust_score = body.trustScore;
+    if (body?.trustLevel !== undefined) payload.trust_level = body.trustLevel;
+    if (body?.isVerified !== undefined) payload.is_verified = body.isVerified;
+    if (body?.companyName !== undefined) payload.company_name = body.companyName;
+    if (body?.companyDescription !== undefined) payload.company_description = body.companyDescription;
+    if (body?.skills !== undefined) payload.skills = body.skills;
+    if (body?.email !== undefined) payload.email = body.email;
+
+    const { data, error } = await supabase.from('users').update(payload).eq('id', userId).select('*').maybeSingle();
+    if (error) throw error;
+    return { data: data ? mapUser(data) : null } as T;
+  }
+
+  if (path === '/api/jobs' && method === 'GET') {
+    const employerId = params.get('employerId');
+    let query = supabase.from('jobs').select('*').order('created_at', { ascending: false });
+    if (employerId) {
+      query = query.eq('employer_id', employerId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return { data: (data || []).map(mapJob) } as T;
+  }
+
+  if (path === '/api/jobs' && method === 'POST') {
+    const payload = {
+      employer_id: body.employerId,
+      title: body.title,
+      description: body.description,
+      job_type: body.jobType || (body.payType === 'fixed' ? 'gig' : 'part-time'),
+      category: body.category,
+      required_skills: body.requiredSkills || [],
+      location: body.location,
+      pay: Number(body.pay ?? body.payAmount ?? 0),
+      pay_amount: Number(body.payAmount ?? body.pay ?? 0),
+      pay_type: body.payType || 'hourly',
+      payment_status: body.escrowRequired ? 'locked' : 'pending',
+      escrow_amount: body.escrowRequired ? Number(body.payAmount ?? body.pay ?? 0) : null,
+      escrow_required: !!body.escrowRequired,
+      timing: body.timing || body.duration || 'Flexible',
+      duration: body.duration || body.timing || 'Flexible',
+      experience_required: body.experienceRequired || 'entry',
+      requirements: body.requirements || null,
+      benefits: body.benefits || null,
+      slots: body.slots || 1,
+      start_date: body.startDate || null,
+      status: body.status || 'active',
+      application_count: 0,
+      views: 0,
+    };
+
+    const { data, error } = await supabase.from('jobs').insert(payload).select('*').single();
+    if (error) throw error;
+    return { data: mapJob(data) } as T;
+  }
+
+  const jobMatch = path.match(/^\/api\/jobs\/([^/]+)$/);
+  if (jobMatch && method === 'GET') {
+    const jobId = jobMatch[1];
+    const { data, error } = await supabase.from('jobs').select('*').eq('id', jobId).maybeSingle();
+    if (error) throw error;
+    return { data: data ? mapJob(data) : null } as T;
+  }
+
+  if (jobMatch && method === 'DELETE') {
+    const jobId = jobMatch[1];
+    const { error } = await supabase.from('jobs').delete().eq('id', jobId);
+    if (error) throw error;
+    return { success: true } as T;
+  }
+
+  if (jobMatch && method === 'PATCH') {
+    const jobId = jobMatch[1];
+    const payload: Record<string, any> = {};
+    if (body?.title !== undefined) payload.title = body.title;
+    if (body?.description !== undefined) payload.description = body.description;
+    if (body?.jobType !== undefined) payload.job_type = body.jobType;
+    if (body?.category !== undefined) payload.category = body.category;
+    if (body?.requiredSkills !== undefined) payload.required_skills = body.requiredSkills;
+    if (body?.location !== undefined) payload.location = body.location;
+    if (body?.pay !== undefined) payload.pay = body.pay;
+    if (body?.payAmount !== undefined) payload.pay_amount = body.payAmount;
+    if (body?.payType !== undefined) payload.pay_type = body.payType;
+    if (body?.paymentStatus !== undefined) payload.payment_status = body.paymentStatus;
+    if (body?.escrowAmount !== undefined) payload.escrow_amount = body.escrowAmount;
+    if (body?.escrowRequired !== undefined) payload.escrow_required = body.escrowRequired;
+    if (body?.timing !== undefined) payload.timing = body.timing;
+    if (body?.duration !== undefined) payload.duration = body.duration;
+    if (body?.experienceRequired !== undefined) payload.experience_required = body.experienceRequired;
+    if (body?.requirements !== undefined) payload.requirements = body.requirements;
+    if (body?.benefits !== undefined) payload.benefits = body.benefits;
+    if (body?.slots !== undefined) payload.slots = body.slots;
+    if (body?.startDate !== undefined) payload.start_date = body.startDate;
+    if (body?.status !== undefined) payload.status = body.status;
+    payload.updated_at = new Date().toISOString();
+
+    const { data, error } = await supabase.from('jobs').update(payload).eq('id', jobId).select('*').maybeSingle();
+    if (error) throw error;
+    return { data: data ? mapJob(data) : null } as T;
+  }
+
+  if (path === '/api/applications' && method === 'GET') {
+    const workerId = params.get('workerId');
+    let query = supabase.from('applications').select('*').order('created_at', { ascending: false });
+    if (workerId) {
+      query = query.eq('worker_id', workerId);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return { data: (data || []).map(mapApplication) } as T;
+  }
+
+  if (path === '/api/applications' && method === 'POST') {
+    const payload = {
+      job_id: body.jobId,
+      worker_id: body.workerId,
+      status: body.status || 'pending',
+      match_score: Number(body.matchScore || 0),
+      cover_message: body.coverMessage || body.coverLetter || null,
+      cover_letter: body.coverLetter || null,
+    };
+
+    const { data, error } = await supabase.from('applications').insert(payload).select('*').single();
+    if (error) throw error;
+    return { data: mapApplication(data) } as T;
+  }
+
+  if (path === '/api/chat/conversations' && method === 'GET') {
+    const userId = params.get('userId');
+    let query = supabase.from('chat_conversations').select('*').order('updated_at', { ascending: false });
+    if (userId) {
+      query = query.contains('participants', [userId]);
+    }
+
+    const { data, error } = await query;
+    if (error) throw error;
+
+    const conversations = data || [];
+    if (conversations.length === 0) {
+      return { data: [] } as T;
+    }
+
+    const conversationIds = conversations.map((conversation) => conversation.id);
+    const { data: messages, error: messagesError } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .in('conversation_id', conversationIds)
+      .order('created_at', { ascending: false });
+
+    if (messagesError) throw messagesError;
+
+    const latestByConversation = new Map<string, any>();
+    for (const message of messages || []) {
+      if (!latestByConversation.has(message.conversation_id)) {
+        latestByConversation.set(message.conversation_id, message);
+      }
+    }
+
+    return {
+      data: conversations.map((conversation) =>
+        mapConversation({
+          ...conversation,
+          last_message: latestByConversation.get(conversation.id),
+        })
+      ),
+    } as T;
+  }
+
+  if (path === '/api/chat/messages' && method === 'GET') {
+    const conversationId = params.get('conversationId');
+    if (!conversationId) {
+      return { data: [] } as T;
+    }
+
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('*')
+      .eq('conversation_id', conversationId)
+      .order('created_at', { ascending: true });
+
+    if (error) throw error;
+    return { data: (data || []).map(mapMessage) } as T;
+  }
+
+  if (path === '/api/chat/messages' && method === 'POST') {
+    const payload = {
+      conversation_id: body.conversationId,
+      sender_id: body.senderId,
+      message: body.message,
+      read: false,
+    };
+
+    const { data, error } = await supabase.from('chat_messages').insert(payload).select('*').single();
+    if (error) throw error;
+
+    await supabase
+      .from('chat_conversations')
+      .update({ updated_at: new Date().toISOString() })
+      .eq('id', body.conversationId);
+
+    return { data: mapMessage(data) } as T;
+  }
+
+  if (path === '/api/reports' && method === 'GET') {
+    const { data, error } = await supabase.from('reports').select('*').order('created_at', { ascending: false });
+    if (error) throw error;
+    return { data: (data || []).map(mapReport) } as T;
+  }
+
+  const reportMatch = path.match(/^\/api\/reports\/([^/]+)$/);
+  if (reportMatch && method === 'PATCH') {
+    const reportId = reportMatch[1];
+    const payload: Record<string, any> = {};
+    if (body?.status !== undefined) payload.status = body.status;
+    if (body?.resolution !== undefined) payload.resolution = body.resolution;
+    if (body?.reason !== undefined) payload.reason = body.reason;
+    if (body?.description !== undefined) payload.description = body.description;
+    if (body?.type !== undefined) payload.type = body.type;
+    if (body?.reportedId !== undefined) payload.reported_id = body.reportedId;
+    if (body?.reportedUserId !== undefined) payload.reported_user_id = body.reportedUserId;
+    if (body?.reportedJobId !== undefined) payload.reported_job_id = body.reportedJobId;
+    if (body?.resolvedAt !== undefined) payload.resolved_at = body.resolvedAt;
+    if (!payload.resolved_at && (body?.status === 'resolved' || body?.status === 'dismissed')) {
+      payload.resolved_at = new Date().toISOString();
+    }
+
+    const { data, error } = await supabase.from('reports').update(payload).eq('id', reportId).select('*').maybeSingle();
+    if (error) throw error;
+    return { data: data ? mapReport(data) : null } as T;
+  }
+
+  if (path === '/api/escrow' && method === 'GET') {
+    const { data, error } = await supabase
+      .from('escrow_transactions')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) throw error;
+    return {
+      data: (data || []).map((row) => ({
+        id: row.id,
+        jobId: row.job_id,
+        employerId: row.employer_id,
+        workerId: row.worker_id,
+        amount: Number(row.amount || 0),
+        status: row.status,
+        createdAt: row.created_at,
+        releasedAt: row.released_at || undefined,
+        refundedAt: row.refunded_at || undefined,
+      })),
+    } as T;
+  }
+
+  throw new Error(`Unsupported Supabase API route: ${method} ${input}`);
 }
 
 export const mockDb = {
