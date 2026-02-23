@@ -9,12 +9,16 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps } from '@/lib/api'
+import { supabase } from '@/lib/supabase/client'
+import { filterChatMessage } from '@/lib/chatFilter'
 import { ChatConversation, ChatMessage, User } from '@/lib/types'
 import { Send, Search, MessageCircle } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
+import { useToast } from '@/hooks/use-toast'
 
 export default function WorkerChatPage() {
   const { user } = useAuth()
+  const { toast } = useToast()
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -29,9 +33,34 @@ export default function WorkerChatPage() {
     }
   }, [user])
 
+  // Realtime subscription — re-subscribe whenever conversation changes
   useEffect(() => {
-    if (selectedConversation) {
-      loadMessages(selectedConversation.id)
+    if (!selectedConversation) return
+
+    loadMessages(selectedConversation.id)
+
+    const channel = supabase
+      .channel(`chat:${selectedConversation.id}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: `conversation_id=eq.${selectedConversation.id}`,
+        },
+        (payload) => {
+          const incoming = payload.new as ChatMessage
+          // Avoid duplicates from our own optimistic updates
+          setMessages((prev) =>
+            prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]
+          )
+        }
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
     }
   }, [selectedConversation])
 
@@ -71,13 +100,24 @@ export default function WorkerChatPage() {
   const handleSendMessage = async () => {
     if (!newMessage.trim() || !selectedConversation || !user) return
 
+    // Safety filter — block unsafe content before sending
+    const filterResult = filterChatMessage(newMessage.trim())
+    if (filterResult.blocked) {
+      toast({
+        title: 'Message blocked',
+        description: filterResult.reason,
+        variant: 'destructive',
+      })
+      return
+    }
+
     const message = await mockDb.sendMessage({
       conversationId: selectedConversation.id,
       senderId: user.id,
       message: newMessage.trim()
     })
 
-    setMessages([...messages, message])
+    setMessages((prev) => [...prev, message])
     setNewMessage('')
     loadConversations()
   }

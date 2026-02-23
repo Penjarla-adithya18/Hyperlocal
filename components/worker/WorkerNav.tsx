@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, Bell, LogOut } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, Bell, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 
@@ -18,6 +18,7 @@ export function WorkerNav() {
     { href: '/worker/applications', label: 'My Applications', icon: Briefcase },
     { href: '/worker/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
     { href: '/worker/profile', label: 'Profile', icon: User },
+    { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   return (

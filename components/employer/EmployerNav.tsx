@@ -18,6 +18,7 @@ export function EmployerNav() {
     { href: '/employer/jobs', label: 'My Jobs', icon: Briefcase },
     { href: '/employer/jobs', label: 'Applicants', icon: Users, badge: 0 },
     { href: '/employer/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
+    { href: '/settings', label: 'Settings', icon: Settings },
   ];
 
   return (
@@ -58,7 +59,7 @@ export function EmployerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
-            <Link href="/employer/dashboard">
+            <Link href="/settings">
               <Button variant="ghost" size="icon">
                 <Settings className="w-5 h-5" />
               </Button>

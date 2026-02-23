@@ -21,42 +21,46 @@ export {
   setUserPassword,
 }
 
-const otpStore = new Map<string, { otp: string; expiresAt: number; attempts: number }>()
+// ─── WATI WhatsApp OTP ────────────────────────────────────────────────────────
+// Calls the `wati` Supabase Edge Function which sends a WhatsApp OTP via WATI.
+// Falls back gracefully (console log) when WATI credentials are not yet set.
 
-export function generateOTP(): string {
-  return Math.floor(100000 + Math.random() * 900000).toString()
-}
+const EDGE_BASE =
+  process.env.NEXT_PUBLIC_SUPABASE_URL
+    ? `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1`
+    : '/functions/v1'
 
 export async function sendOTP(
   phoneNumber: string
 ): Promise<{ success: boolean; message: string }> {
-  await new Promise((r) => setTimeout(r, 300))
-  const otp = generateOTP()
-  otpStore.set(phoneNumber, { otp, expiresAt: Date.now() + 5 * 60 * 1000, attempts: 0 })
-  return { success: true, message: `OTP sent to ${phoneNumber}` }
+  try {
+    const res = await fetch(`${EDGE_BASE}/wati`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'send_otp', phone: phoneNumber }),
+    })
+    const data = await res.json()
+    return { success: data.success ?? false, message: data.message ?? 'OTP request sent' }
+  } catch {
+    return { success: false, message: 'Failed to send OTP. Please try again.' }
+  }
 }
 
 export async function verifyOTP(
   phoneNumber: string,
   otp: string
 ): Promise<{ success: boolean; message: string }> {
-  await new Promise((r) => setTimeout(r, 200))
-  const stored = otpStore.get(phoneNumber)
-  if (!stored) return { success: false, message: 'OTP not found or expired' }
-  if (Date.now() > stored.expiresAt) {
-    otpStore.delete(phoneNumber)
-    return { success: false, message: 'OTP expired' }
+  try {
+    const res = await fetch(`${EDGE_BASE}/wati`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify_otp', phone: phoneNumber, otp_code: otp }),
+    })
+    const data = await res.json()
+    return { success: data.success ?? false, message: data.message ?? '' }
+  } catch {
+    return { success: false, message: 'OTP verification failed. Please try again.' }
   }
-  if (stored.attempts >= 5) {
-    otpStore.delete(phoneNumber)
-    return { success: false, message: 'OTP verification attempts exceeded' }
-  }
-  if (stored.otp !== otp) {
-    otpStore.set(phoneNumber, { ...stored, attempts: stored.attempts + 1 })
-    return { success: false, message: 'Invalid OTP' }
-  }
-  otpStore.delete(phoneNumber)
-  return { success: true, message: 'OTP verified successfully' }
 }
 
 export async function registerUser(data: {

@@ -1,18 +1,26 @@
+// lib/supabase/client.ts
+// Lightweight Supabase browser client — used ONLY for Realtime subscriptions.
+// All data operations go through lib/api.ts (Edge Functions).
 import { createClient } from '@supabase/supabase-js'
 
-let browserClient: ReturnType<typeof createClient> | null = null
+const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!
+const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 
+// Singleton used for Realtime channel subscriptions in chat pages
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: {
+    persistSession: false,   // Auth is handled by our own Edge Function sessions
+    autoRefreshToken: false,
+    detectSessionInUrl: false,
+  },
+  realtime: {
+    params: {
+      eventsPerSecond: 10,
+    },
+  },
+})
+
+/** @deprecated Use named export `supabase` instead */
 export function getSupabaseBrowserClient() {
-  if (browserClient) return browserClient
-
-  const env = (globalThis as any)?.process?.env || {}
-  const supabaseUrl = env.NEXT_PUBLIC_SUPABASE_URL
-  const supabaseAnonKey = env.NEXT_PUBLIC_SUPABASE_ANON_KEY
-
-  if (!supabaseUrl || !supabaseAnonKey) {
-    throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
-  }
-
-  browserClient = createClient(supabaseUrl, supabaseAnonKey)
-  return browserClient
+  return supabase
 }

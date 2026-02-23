@@ -188,6 +188,15 @@ create index if not exists idx_trust_scores_user on trust_scores(user_id);
 create index if not exists idx_notifications_user on notifications(user_id);
 create index if not exists idx_ratings_to_user on ratings(to_user_id);
 
+-- OTP verifications (used by WATI edge function)
+create table if not exists otp_verifications (
+  phone_number text primary key,
+  otp_code text not null,
+  expires_at timestamptz not null,
+  attempts integer not null default 0,
+  created_at timestamptz not null default now()
+);
+
 alter table users enable row level security;
 alter table worker_profiles enable row level security;
 alter table employer_profiles enable row level security;

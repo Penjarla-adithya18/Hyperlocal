@@ -55,6 +55,21 @@ Deno.serve(async (req: Request) => {
         return errorResponse('Forbidden', 403)
       }
 
+      // Posting limit for new (basic-trust) employers — max 3 active jobs
+      if (!isAdmin && (auth.user as Record<string, unknown>).trust_level === 'basic') {
+        const { count, error: countError } = await supabase
+          .from('jobs')
+          .select('id', { count: 'exact', head: true })
+          .eq('employer_id', requestedEmployerId)
+          .eq('status', 'active')
+        if (!countError && (count ?? 0) >= 3) {
+          return errorResponse(
+            'New accounts are limited to 3 active job postings. Complete jobs and earn reviews to unlock more.',
+            403
+          )
+        }
+      }
+
       const pay = Number(body.payAmount ?? body.pay ?? 0)
       const payload = {
         employer_id: requestedEmployerId,
