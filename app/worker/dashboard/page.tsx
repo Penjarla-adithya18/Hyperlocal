@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/mockDb';
+import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 
@@ -237,7 +237,7 @@ export default function WorkerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-primary">₹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-primary">â‚¹{job.pay.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">{job.timing}</div>
                     </div>
                     <Link href={`/worker/jobs/${job.id}`}>

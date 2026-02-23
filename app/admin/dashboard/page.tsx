@@ -1,11 +1,11 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 import { Users, Briefcase, TrendingUp, AlertTriangle, IndianRupee, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 
@@ -36,38 +36,20 @@ export default function AdminDashboardPage() {
   }, [user, router])
 
   const loadStats = async () => {
-    const allUsers = await mockDb.getAllUsers()
-    const workers = allUsers.filter(u => u.role === 'worker')
-    const employers = allUsers.filter(u => u.role === 'employer')
-    
-    const allJobs = await mockDb.getAllJobs()
-    const activeJobs = allJobs.filter(j => j.status === 'active')
-    const completedJobs = allJobs.filter(j => j.status === 'completed')
-    
-    const allApplications = await mockDb.getAllApplications()
-    const pendingApplications = allApplications.filter(a => a.status === 'pending')
-    
-    const allReports = await mockDb.getAllReports()
-    const unhandledReports = allReports.filter(r => r.status === 'pending')
-    
-    const allEscrow = await mockDb.getAllEscrowTransactionsAsync()
-    const heldEscrow = allEscrow.filter(e => e.status === 'held')
-    const totalEscrowAmount = allEscrow.reduce((sum, t) => sum + t.amount, 0)
-    const heldEscrowAmount = heldEscrow.reduce((sum, t) => sum + t.amount, 0)
-
+    const data = await mockDb.getAdminStats()
     setStats({
-      totalUsers: allUsers.length,
-      totalWorkers: workers.length,
-      totalEmployers: employers.length,
-      totalJobs: allJobs.length,
-      activeJobs: activeJobs.length,
-      completedJobs: completedJobs.length,
-      totalApplications: allApplications.length,
-      pendingApplications: pendingApplications.length,
-      totalReports: allReports.length,
-      unhandledReports: unhandledReports.length,
-      totalEscrow: totalEscrowAmount,
-      heldEscrow: heldEscrowAmount
+      totalUsers: data.totalUsers ?? 0,
+      totalWorkers: data.totalWorkers ?? 0,
+      totalEmployers: data.totalEmployers ?? 0,
+      totalJobs: data.totalJobs ?? 0,
+      activeJobs: data.activeJobs ?? 0,
+      completedJobs: data.completedJobs ?? 0,
+      totalApplications: data.totalApplications ?? 0,
+      pendingApplications: data.pendingApplications ?? 0,
+      totalReports: data.totalReports ?? 0,
+      unhandledReports: data.unhandledReports ?? 0,
+      totalEscrow: data.totalEscrow ?? 0,
+      heldEscrow: data.heldEscrow ?? 0,
     })
   }
 
@@ -153,11 +135,11 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Escrow Volume</p>
-                <p className="text-2xl font-bold">₹{stats.totalEscrow.toLocaleString()}</p>
+                <p className="text-2xl font-bold">â‚¹{stats.totalEscrow.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Currently Held in Escrow</p>
-                <p className="text-xl font-semibold text-primary">₹{stats.heldEscrow.toLocaleString()}</p>
+                <p className="text-xl font-semibold text-primary">â‚¹{stats.heldEscrow.toLocaleString()}</p>
               </div>
             </CardContent>
           </Card>

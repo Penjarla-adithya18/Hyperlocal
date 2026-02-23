@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -66,7 +66,7 @@ export default function EmployerJobsPage() {
   const cancelledJobs = jobs.filter(j => j.status === 'cancelled')
 
   const JobCard = ({ job }: { job: Job }) => {
-    const applicationsCount = job.applicationCount ?? mockDb.getApplicationsByJob(job.id).length
+    const applicationsCount = job.applicationCount ?? 0
 
     return (
       <Card className="hover:border-primary transition-colors">
@@ -102,7 +102,7 @@ export default function EmployerJobsPage() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              <span>₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
+              <span>â‚¹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />

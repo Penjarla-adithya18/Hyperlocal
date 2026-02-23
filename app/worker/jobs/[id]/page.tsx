@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb, mockUserOps } from '@/lib/api'
 import { Job, User, Application } from '@/lib/types'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
@@ -40,7 +40,7 @@ export default function JobDetailsPage() {
       const jobData = await mockDb.getJobById(params.id as string)
       if (jobData) {
         setJob(jobData)
-        const employerData = mockDb.getUserById(jobData.employerId)
+        const employerData = await mockUserOps.findById(jobData.employerId)
         setEmployer(employerData)
 
         if (user) {

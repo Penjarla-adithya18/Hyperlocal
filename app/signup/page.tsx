@@ -10,7 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Briefcase, User, ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { sendOTP, verifyOTP, registerUser, setUserPassword } from '@/lib/auth';
+import { sendOTP, verifyOTP, registerUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 
 function SignupPageContent() {
@@ -36,7 +36,6 @@ function SignupPageContent() {
   });
 
   const [otpSent, setOtpSent] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState('');
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
@@ -60,11 +59,6 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
-        // Extract OTP from message (for demo purposes)
-        const otpMatch = result.message.match(/OTP is: (\d{6})/);
-        if (otpMatch) {
-          setGeneratedOtp(otpMatch[1]);
-        }
         toast({
           title: 'OTP Sent',
           description: result.message,
@@ -131,10 +125,10 @@ function SignupPageContent() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (formData.password.length < 8) {
       toast({
         title: 'Weak Password',
-        description: 'Password must be at least 6 characters long',
+        description: 'Password must be at least 8 characters long',
         variant: 'destructive',
       });
       return;
@@ -170,9 +164,6 @@ function SignupPageContent() {
       });
 
       if (result.success && result.user) {
-        // Store password for mock auth
-        setUserPassword(formData.phoneNumber, formData.password);
-
         login(result.user);
         toast({
           title: 'Registration Successful',
@@ -291,11 +282,6 @@ function SignupPageContent() {
                         }
                         maxLength={6}
                       />
-                      {generatedOtp && (
-                        <p className="text-xs text-muted-foreground">
-                          Demo OTP: <span className="font-mono font-bold text-primary">{generatedOtp}</span>
-                        </p>
-                      )}
                     </div>
 
                     <Button onClick={handleVerifyOTP} disabled={loading} className="w-full">
@@ -377,7 +363,7 @@ function SignupPageContent() {
                   <Input
                     id="password"
                     type="password"
-                    placeholder="Minimum 6 characters"
+                    placeholder="Minimum 8 characters"
                     value={formData.password}
                     onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                     required

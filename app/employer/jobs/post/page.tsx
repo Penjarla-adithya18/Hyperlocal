@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Briefcase, MapPin, Clock, IndianRupee, X, Plus, Calendar } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
@@ -272,7 +272,7 @@ export default function PostJobPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="payAmount">
-                    {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (₹) *
+                    {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (â‚¹) *
                   </Label>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />

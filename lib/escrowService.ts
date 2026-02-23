@@ -1,5 +1,5 @@
 import { EscrowTransaction } from './types'
-import { mockDb } from './mockDb'
+import { mockDb } from './api'
 
 export async function createEscrowTransaction(
   jobId: string,

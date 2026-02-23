@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 
 export default function EmployerJobEditPage() {
   const params = useParams()

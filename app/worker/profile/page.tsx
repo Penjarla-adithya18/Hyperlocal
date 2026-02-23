@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { User, Loader2, X, Plus, Star, Sparkles } from 'lucide-react';
-import { mockWorkerProfileOps, mockUserOps } from '@/lib/mockDb';
+import { mockWorkerProfileOps, mockUserOps } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { useToast } from '@/hooks/use-toast';

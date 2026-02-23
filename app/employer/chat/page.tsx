@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
 import EmployerNav from '@/components/employer/EmployerNav'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb, mockUserOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, User } from '@/lib/types'
 import { Send, Search, MessageCircle } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -18,6 +18,7 @@ export default function EmployerChatPage() {
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
+  const [usersById, setUsersById] = useState<Record<string, User>>({})
   const [newMessage, setNewMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -42,6 +43,21 @@ export default function EmployerChatPage() {
     if (!user) return
     const userConvs = await mockDb.getConversationsByUser(user.id)
     setConversations(userConvs)
+    const participantIds = [...new Set(
+      userConvs
+        .flatMap((conversation) => conversation.participants)
+        .filter((participantId) => participantId !== user.id)
+    )]
+    if (participantIds.length > 0) {
+      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+      setUsersById((previous) => {
+        const next = { ...previous }
+        for (const fetched of fetchedUsers) {
+          if (fetched) next[fetched.id] = fetched
+        }
+        return next
+      })
+    }
     if (userConvs.length > 0 && !selectedConversation) {
       setSelectedConversation(userConvs[0])
     }
@@ -73,7 +89,7 @@ export default function EmployerChatPage() {
   const getOtherUser = (conversation: ChatConversation): User | null => {
     if (!user) return null
     const otherUserId = conversation.participants.find(id => id !== user.id)
-    return otherUserId ? mockDb.getUserById(otherUserId) : null
+    return otherUserId ? usersById[otherUserId] || null : null
   }
 
   const filteredConversations = conversations.filter(conv => {

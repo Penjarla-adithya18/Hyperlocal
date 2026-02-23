@@ -9,12 +9,8 @@ import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Briefcase, ArrowLeft, Loader2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { loginUser, getUserPassword } from '@/lib/auth';
+import { loginUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
-
-const useSupabaseBackend =
-  typeof globalThis !== 'undefined' &&
-  (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -52,18 +48,6 @@ export default function LoginPage() {
       const result = await loginUser(formData.phoneNumber, formData.password);
 
       if (result.success && result.user) {
-        // Verify password (mock auth)
-        const storedPassword = getUserPassword(formData.phoneNumber);
-        if (!useSupabaseBackend && storedPassword !== formData.password) {
-          toast({
-            title: 'Login Failed',
-            description: 'Invalid phone number or password',
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
-        }
-
         login(result.user);
         toast({
           title: 'Login Successful',

@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 import { Report } from '@/lib/types'
 import { AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -31,6 +31,7 @@ export default function AdminReportsPage() {
   }, [currentUser, router])
 
   const loadReports = async () => {
+    await mockDb.getAllUsers()
     const allReports = await mockDb.getAllReports()
     setReports(allReports)
   }

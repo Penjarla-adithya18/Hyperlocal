@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
@@ -19,7 +19,7 @@ import {
   Clock,
   CheckCircle2,
 } from 'lucide-react';
-import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/mockDb';
+import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
 
 export default function EmployerDashboardPage() {
@@ -247,7 +247,7 @@ export default function EmployerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-accent">₹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-accent">â‚¹{job.pay.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         {job.paymentStatus === 'locked' ? (
                           <>

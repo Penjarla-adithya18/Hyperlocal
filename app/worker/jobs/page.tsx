@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb, mockUserOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp } from 'lucide-react'
@@ -21,6 +21,7 @@ export default function WorkerJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [matchedJobs, setMatchedJobs] = useState<Array<{ job: Job; score: number }>>([])
   const [applications, setApplications] = useState<Application[]>([])
+  const [employersById, setEmployersById] = useState<Record<string, User>>({})
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
@@ -37,6 +38,15 @@ export default function WorkerJobsPage() {
       const allJobs = await mockDb.getAllJobs()
       const activeJobs = allJobs.filter(j => j.status === 'active')
       setJobs(activeJobs)
+      const employerIds = [...new Set(activeJobs.map((job) => job.employerId))]
+      if (employerIds.length > 0) {
+        const employers = await Promise.all(employerIds.map((id) => mockUserOps.findById(id)))
+        const employerMap: Record<string, User> = {}
+        for (const employer of employers) {
+          if (employer) employerMap[employer.id] = employer
+        }
+        setEmployersById(employerMap)
+      }
 
       const myApplications = user ? await mockDb.getApplicationsByWorker(user.id) : []
       setApplications(myApplications)
@@ -64,7 +74,7 @@ export default function WorkerJobsPage() {
   })
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
-    const employer = mockDb.getUserById(job.employerId)
+    const employer = employersById[job.employerId]
     const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (
@@ -103,7 +113,7 @@ export default function WorkerJobsPage() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold">₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
+              <span className="font-semibold">â‚¹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />

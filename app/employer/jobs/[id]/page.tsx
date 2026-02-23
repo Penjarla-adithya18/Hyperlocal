@@ -6,7 +6,7 @@ import EmployerNav from '@/components/employer/EmployerNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { mockDb } from '@/lib/mockDb'
+import { mockDb } from '@/lib/api'
 import { Job } from '@/lib/types'
 
 export default function EmployerJobDetailPage() {

@@ -142,10 +142,63 @@ create table if not exists user_sessions (
   created_at timestamptz not null default now()
 );
 
+create table if not exists trust_scores (
+  user_id uuid primary key references users(id) on delete cascade,
+  score numeric not null default 50,
+  level text not null default 'basic' check (level in ('basic','active','trusted')),
+  job_completion_rate numeric not null default 0,
+  average_rating numeric not null default 0,
+  total_ratings integer not null default 0,
+  complaint_count integer not null default 0,
+  successful_payments integer not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists ratings (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references jobs(id) on delete cascade,
+  application_id uuid not null references applications(id) on delete cascade,
+  from_user_id uuid not null references users(id) on delete cascade,
+  to_user_id uuid not null references users(id) on delete cascade,
+  rating numeric not null check (rating >= 1 and rating <= 5),
+  feedback text,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references users(id) on delete cascade,
+  type text not null check (type in ('job_match','application','message','payment','rating','system')),
+  title text not null,
+  message text not null,
+  is_read boolean not null default false,
+  link text,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists idx_jobs_employer on jobs(employer_id);
 create index if not exists idx_applications_worker on applications(worker_id);
 create index if not exists idx_applications_job on applications(job_id);
+create unique index if not exists idx_applications_unique on applications(job_id, worker_id);
 create index if not exists idx_chat_messages_conversation on chat_messages(conversation_id);
 create index if not exists idx_reports_status on reports(status);
 create index if not exists idx_user_sessions_user on user_sessions(user_id);
 create index if not exists idx_user_sessions_token on user_sessions(token);
+create index if not exists idx_trust_scores_user on trust_scores(user_id);
+create index if not exists idx_notifications_user on notifications(user_id);
+create index if not exists idx_ratings_to_user on ratings(to_user_id);
+
+alter table users enable row level security;
+alter table worker_profiles enable row level security;
+alter table employer_profiles enable row level security;
+alter table jobs enable row level security;
+alter table applications enable row level security;
+alter table chat_conversations enable row level security;
+alter table chat_messages enable row level security;
+alter table reports enable row level security;
+alter table escrow_transactions enable row level security;
+alter table user_sessions enable row level security;
+alter table trust_scores enable row level securi
+ty;
+alter table ratings enable row level security;
+alter table notifications enable row level security;
