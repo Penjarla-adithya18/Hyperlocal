@@ -56,7 +56,7 @@ Deno.serve(async (req: Request) => {
       }
 
       // Posting limit for new (basic-trust) employers — max 3 active jobs
-      if (!isAdmin && (auth.user as Record<string, unknown>).trust_level === 'basic') {
+      if (!isAdmin && (auth.user as unknown as Record<string, unknown>).trust_level === 'basic') {
         const { count, error: countError } = await supabase
           .from('jobs')
           .select('id', { count: 'exact', head: true })

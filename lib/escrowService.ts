@@ -1,5 +1,5 @@
 import { EscrowTransaction } from './types'
-import { mockDb } from './api'
+import { mockEscrowOps } from './api'
 
 export async function createEscrowTransaction(
   jobId: string,
@@ -7,7 +7,7 @@ export async function createEscrowTransaction(
   workerId: string,
   amount: number
 ): Promise<EscrowTransaction> {
-  return mockDb.createEscrowTransaction({
+  return mockEscrowOps.create({
     jobId,
     employerId,
     workerId,
@@ -17,37 +17,21 @@ export async function createEscrowTransaction(
 }
 
 export async function releaseEscrowPayment(transactionId: string): Promise<EscrowTransaction | null> {
-  const transaction = mockDb.getEscrowTransactionById(transactionId)
-  if (!transaction || transaction.status !== 'held') {
-    throw new Error('Invalid transaction or transaction not held')
-  }
-
-  transaction.status = 'released'
-  transaction.releasedAt = new Date().toISOString()
-  
-  return transaction
+  return mockEscrowOps.update(transactionId, {
+    status: 'released',
+    releasedAt: new Date().toISOString(),
+  })
 }
 
 export async function refundEscrowPayment(transactionId: string): Promise<EscrowTransaction | null> {
-  const transaction = mockDb.getEscrowTransactionById(transactionId)
-  if (!transaction || transaction.status !== 'held') {
-    throw new Error('Invalid transaction or transaction not held')
-  }
-
-  transaction.status = 'refunded'
-  transaction.refundedAt = new Date().toISOString()
-  
-  return transaction
+  return mockEscrowOps.update(transactionId, {
+    status: 'refunded',
+    refundedAt: new Date().toISOString(),
+  })
 }
 
 export async function getTransactionsByUser(userId: string, role: 'worker' | 'employer'): Promise<EscrowTransaction[]> {
-  const allTransactions = mockDb.getAllEscrowTransactions()
-  
-  if (role === 'worker') {
-    return allTransactions.filter(t => t.workerId === userId)
-  } else {
-    return allTransactions.filter(t => t.employerId === userId)
-  }
+  return mockEscrowOps.findByUser(userId, role)
 }
 
 export function calculateTrustScore(

@@ -36,7 +36,10 @@ export async function sendOTP(
   try {
     const res = await fetch(`${EDGE_BASE}/wati`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      },
       body: JSON.stringify({ action: 'send_otp', phone: phoneNumber }),
     })
     const data = await res.json()
@@ -53,7 +56,10 @@ export async function verifyOTP(
   try {
     const res = await fetch(`${EDGE_BASE}/wati`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
+      },
       body: JSON.stringify({ action: 'verify_otp', phone: phoneNumber, otp_code: otp }),
     })
     const data = await res.json()

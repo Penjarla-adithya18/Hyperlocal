@@ -330,7 +330,7 @@ export default function LandingPage() {
             </div>
           </div>
           <div className="border-t pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; 2024 HyperLocal Jobs. All rights reserved. Built for local communities.</p>
+            <p>&copy; 2026 HyperLocal Jobs. All rights reserved. Built for local communities.</p>
           </div>
         </div>
       </footer>

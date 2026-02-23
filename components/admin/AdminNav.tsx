@@ -4,8 +4,8 @@ import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
-  LayoutDashboard, Users, Briefcase, AlertTriangle, 
-  Shield, LogOut, Menu, X 
+  LayoutDashboard, Users, AlertTriangle, 
+  LogOut, Menu, X 
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -22,9 +22,7 @@ export default function AdminNav() {
   const navItems = [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Users', icon: Users, path: '/admin/users' },
-    { label: 'Jobs', icon: Briefcase, path: '/admin/dashboard' },
     { label: 'Reports', icon: AlertTriangle, path: '/admin/reports' },
-    { label: 'Trust & Safety', icon: Shield, path: '/admin/reports' },
   ]
 
   return (

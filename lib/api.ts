@@ -360,6 +360,28 @@ export const mockChatOps = {
   },
 }
 
+// ─── Escrow ────────────────────────────────────────────────────────────────
+
+export const mockEscrowOps = {
+  create: async (transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): Promise<EscrowTransaction> => {
+    const res = await call<R<EscrowTransaction>>('escrow', 'POST', {}, transaction)
+    return res.data
+  },
+  getAll: async (): Promise<EscrowTransaction[]> => {
+    const res = await call<R<EscrowTransaction[]>>('escrow')
+    return res.data
+  },
+  update: async (id: string, updates: Partial<EscrowTransaction>): Promise<EscrowTransaction | null> => {
+    const res = await call<R<EscrowTransaction | null>>('escrow', 'PATCH', { id }, updates)
+    return res.data
+  },
+  findByUser: async (userId: string, _role: 'worker' | 'employer'): Promise<EscrowTransaction[]> => {
+    // The edge function auto-filters by the logged-in user; fetch all and return
+    const res = await call<R<EscrowTransaction[]>>('escrow')
+    return res.data || []
+  },
+}
+
 // ─── mockDb facade (drop-in replacement for the old mockDb export) ─────────
 
 // Local in-memory cache for users (used by getUserById which must be sync)

@@ -116,7 +116,7 @@ Deno.serve(async (req: Request) => {
 
     // ── ACTION: verify_otp ───────────────────────────────────────────────────
     if (action === 'verify_otp') {
-      const { otp_code } = body as Record<string, string>
+      const otp_code = (body as { otp_code?: string }).otp_code
       if (!otp_code) return errorResponse('otp_code is required', 400)
 
       const { data: record, error } = await supabase

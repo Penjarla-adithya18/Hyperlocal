@@ -197,6 +197,14 @@ create table if not exists otp_verifications (
   created_at timestamptz not null default now()
 );
 
+-- Function used by applications edge function to increment job application count
+create or replace function increment_application_count(job_id uuid)
+returns void language plpgsql as $$
+begin
+  update jobs set application_count = application_count + 1 where id = job_id;
+end;
+$$;
+
 alter table users enable row level security;
 alter table worker_profiles enable row level security;
 alter table employer_profiles enable row level security;
