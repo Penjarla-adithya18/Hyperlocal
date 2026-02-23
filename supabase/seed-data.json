@@ -1,0 +1,606 @@
+{
+  "seedData": {
+    "description": "HyperLocal AI Job & Skill Matching Platform - Real Seed Data",
+    "dateCreated": "2026-02-23",
+    "targetCities": ["Vijayawada", "Guntur", "Visakhapatnam", "Kakinada", "Tirupati"],
+    "users": [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440001",
+        "full_name": "Rajesh Kumar",
+        "email": "rajesh.kumar@example.com",
+        "phone_number": "+919876543210",
+        "role": "worker",
+        "password_hash": "$2b$10$example_hash_1",
+        "profile_completed": true,
+        "trust_score": 78,
+        "trust_level": "active",
+        "is_verified": true,
+        "skills": ["cleaning", "housekeeping", "cooking"],
+        "created_at": "2025-12-15T10:30:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440002",
+        "full_name": "Priya Sharma",
+        "email": "priya.sharma@example.com",
+        "phone_number": "+919876543211",
+        "role": "worker",
+        "password_hash": "$2b$10$example_hash_2",
+        "profile_completed": true,
+        "trust_score": 85,
+        "trust_level": "trusted",
+        "is_verified": true,
+        "skills": ["graphic design", "social media", "content writing"],
+        "created_at": "2025-11-20T14:15:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440003",
+        "full_name": "Suresh Patel",
+        "email": "suresh.patel@example.com",
+        "phone_number": "+919876543212",
+        "role": "worker",
+        "password_hash": "$2b$10$example_hash_3",
+        "profile_completed": true,
+        "trust_score": 72,
+        "trust_level": "active",
+        "is_verified": true,
+        "skills": ["plumbing", "electrical", "carpentry"],
+        "created_at": "2026-01-05T09:45:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440004",
+        "full_name": "Ananya Desai",
+        "email": "ananya.desai@example.com",
+        "phone_number": "+919876543213",
+        "role": "worker",
+        "password_hash": "$2b$10$example_hash_4",
+        "profile_completed": false,
+        "trust_score": 50,
+        "trust_level": "basic",
+        "is_verified": true,
+        "skills": [],
+        "created_at": "2026-02-01T11:20:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440005",
+        "full_name": "Arjun Singh",
+        "email": "arjun.singh@example.com",
+        "phone_number": "+919876543214",
+        "role": "worker",
+        "password_hash": "$2b$10$example_hash_5",
+        "profile_completed": true,
+        "trust_score": 88,
+        "trust_level": "trusted",
+        "is_verified": true,
+        "skills": ["web development", "app development", "ui design"],
+        "created_at": "2025-10-12T16:00:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440050",
+        "full_name": "Vijay Reddy",
+        "email": "vijay.reddy@example.com",
+        "phone_number": "+919876543220",
+        "role": "employer",
+        "password_hash": "$2b$10$example_hash_50",
+        "profile_completed": true,
+        "trust_score": 82,
+        "trust_level": "active",
+        "is_verified": true,
+        "company_name": "Reddy's Consulting",
+        "company_description": "IT consulting and software development",
+        "created_at": "2025-08-20T08:30:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440051",
+        "full_name": "Meera Nair",
+        "email": "meera.nair@example.com",
+        "phone_number": "+919876543221",
+        "role": "employer",
+        "password_hash": "$2b$10$example_hash_51",
+        "profile_completed": true,
+        "trust_score": 90,
+        "trust_level": "trusted",
+        "is_verified": true,
+        "company_name": "Nair Hospitality Group",
+        "company_description": "Hotels and event management",
+        "created_at": "2025-07-10T12:45:00Z"
+      },
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440052",
+        "full_name": "Ashok Kumar",
+        "email": "ashok.kumar@example.com",
+        "phone_number": "+919876543222",
+        "role": "employer",
+        "password_hash": "$2b$10$example_hash_52",
+        "profile_completed": true,
+        "trust_score": 65,
+        "trust_level": "basic",
+        "is_verified": true,
+        "company_name": "Kumar Home Services",
+        "company_description": "Cleaning and maintenance services",
+        "created_at": "2026-01-15T10:00:00Z"
+      }
+    ],
+    "worker_profiles": [
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "skills": ["cleaning", "housekeeping", "cooking"],
+        "availability": "Flexible, prefer mornings",
+        "experience": "5 years in hospitality sector",
+        "categories": ["cleaning", "cooking", "hospitality"],
+        "location": "Vijayawada",
+        "bio": "Experienced professional ready for gig work"
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440002",
+        "skills": ["graphic design", "social media", "content writing"],
+        "availability": "Flexible, can work weekends",
+        "experience": "3 years in digital marketing",
+        "categories": ["design", "marketing", "content"],
+        "location": "Visakhapatnam",
+        "bio": "Creative professional with strong design portfolio"
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440003",
+        "skills": ["plumbing", "electrical", "carpentry"],
+        "availability": "Available on call",
+        "experience": "7 years in construction and maintenance",
+        "categories": ["construction", "maintenance", "repairs"],
+        "location": "Guntur",
+        "bio": "Skilled tradesperson, reliable and punctual"
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440005",
+        "skills": ["web development", "app development", "ui design"],
+        "availability": "Flexible, prefer remote work",
+        "experience": "4 years in software development",
+        "categories": ["technology", "programming", "design"],
+        "location": "Vijayawada",
+        "bio": "Full-stack developer, open to freelance projects"
+      }
+    ],
+    "employer_profiles": [
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440050",
+        "business_name": "Reddy's Consulting",
+        "organization_name": "Reddy's IT Solutions Pvt Ltd",
+        "location": "Vijayawada",
+        "business_type": "IT Services",
+        "description": "Leading IT consulting and software development company"
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440051",
+        "business_name": "Nair Hospitality Group",
+        "organization_name": "Nair Hotels & Events",
+        "location": "Visakhapatnam",
+        "business_type": "Hospitality",
+        "description": "Premium hotel and event management services"
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440052",
+        "business_name": "Kumar Home Services",
+        "organization_name": "Kumar Services Network",
+        "location": "Guntur",
+        "business_type": "Home Services",
+        "description": "Professional cleaning and maintenance solutions"
+      }
+    ],
+    "jobs": [
+      {
+        "id": "660e8400-e29b-41d4-a716-446655440001",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440051",
+        "title": "Hotel Room Cleaner",
+        "description": "Looking for experienced housekeeping staff for our luxury hotel. Must be reliable and detail-oriented.",
+        "job_type": "part-time",
+        "category": "hospitality",
+        "required_skills": ["cleaning", "housekeeping", "customer service"],
+        "location": "Visakhapatnam, Pink City Complex",
+        "latitude": 17.6869,
+        "longitude": 83.2185,
+        "pay": 500,
+        "pay_amount": 3500,
+        "pay_type": "daily",
+        "payment_status": "released",
+        "escrow_amount": 3500,
+        "escrow_required": true,
+        "timing": "6:00 AM - 2:00 PM, Mon-Sat",
+        "duration": "1 month contract",
+        "experience_required": "entry",
+        "requirements": "High school pass, police verification",
+        "benefits": "Meals provided, ID badge",
+        "slots": 3,
+        "start_date": "2026-02-25",
+        "status": "active",
+        "application_count": 5,
+        "views": 89,
+        "created_at": "2026-02-10T10:00:00Z"
+      },
+      {
+        "id": "660e8400-e29b-41d4-a716-446655440002",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "title": "Mobile App Development",
+        "description": "Develop a cross-platform mobile app for our e-commerce platform. Must have React Native or Flutter experience.",
+        "job_type": "full-time",
+        "category": "technology",
+        "required_skills": ["mobile development", "react native", "api integration"],
+        "location": "Vijayawada, IT Hub",
+        "latitude": 16.9891,
+        "longitude": 82.2475,
+        "pay": 75000,
+        "pay_amount": 75000,
+        "pay_type": "fixed",
+        "payment_status": "locked",
+        "escrow_amount": 75000,
+        "escrow_required": true,
+        "timing": "9:00 AM - 6:00 PM, Mon-Fri",
+        "duration": "3 months",
+        "experience_required": "intermediate",
+        "requirements": "3+ years experience, portfolio required",
+        "benefits": "Flexible hours, work from home allowed",
+        "slots": 1,
+        "start_date": "2026-03-01",
+        "status": "active",
+        "application_count": 12,
+        "views": 234,
+        "created_at": "2026-02-15T14:30:00Z"
+      },
+      {
+        "id": "660e8400-e29b-41d4-a716-446655440003",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440052",
+        "title": "Home Deep Cleaning Service",
+        "description": "Professional deep cleaning for residential apartments. Includes kitchen, bathrooms, and all bedrooms.",
+        "job_type": "gig",
+        "category": "cleaning",
+        "required_skills": ["cleaning", "housekeeping"],
+        "location": "Guntur, Suryabagh",
+        "latitude": 16.5889,
+        "longitude": 80.6245,
+        "pay": 2000,
+        "pay_amount": 2000,
+        "pay_type": "fixed",
+        "payment_status": "pending",
+        "escrow_amount": 2000,
+        "escrow_required": true,
+        "timing": "Flexible, any time",
+        "duration": "1 day",
+        "experience_required": "entry",
+        "requirements": "Background check required",
+        "benefits": "Supplies provided",
+        "slots": 5,
+        "start_date": "2026-02-28",
+        "status": "draft",
+        "application_count": 0,
+        "views": 0,
+        "created_at": "2026-02-20T09:15:00Z"
+      },
+      {
+        "id": "660e8400-e29b-41d4-a716-446655440004",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440051",
+        "title": "Event Coordinator Assistant",
+        "description": "Assist in organizing corporate events and conferences. Coordinate with vendors and manage logistics.",
+        "job_type": "part-time",
+        "category": "events",
+        "required_skills": ["event management", "coordination", "communication"],
+        "location": "Visakhapatnam, Convention Center",
+        "latitude": 17.7009,
+        "longitude": 83.3173,
+        "pay": 300,
+        "pay_amount": 2100,
+        "pay_type": "daily",
+        "payment_status": "released",
+        "escrow_amount": 2100,
+        "escrow_required": true,
+        "timing": "Flexible, as needed",
+        "duration": "2 weeks",
+        "experience_required": "entry",
+        "requirements": "Good communication skills",
+        "benefits": "Networking opportunity",
+        "slots": 2,
+        "start_date": "2026-03-10",
+        "status": "active",
+        "application_count": 3,
+        "views": 45,
+        "created_at": "2026-02-18T11:45:00Z"
+      },
+      {
+        "id": "660e8400-e29b-41d4-a716-446655440005",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "title": "Graphic Designer for Branding",
+        "description": "Create brand identity and marketing materials for our startup. Logo, business cards, social media templates.",
+        "job_type": "gig",
+        "category": "design",
+        "required_skills": ["graphic design", "ui design", "branding"],
+        "location": "Vijayawada, Tech Park",
+        "latitude": 16.9891,
+        "longitude": 82.2475,
+        "pay": 5000,
+        "pay_amount": 5000,
+        "pay_type": "fixed",
+        "payment_status": "locked",
+        "escrow_amount": 5000,
+        "escrow_required": true,
+        "timing": "Flexible",
+        "duration": "1 week",
+        "experience_required": "intermediate",
+        "requirements": "Portfolio required, Adobe Suite experience",
+        "benefits": "Long-term collaboration possible",
+        "slots": 1,
+        "start_date": "2026-02-24",
+        "status": "active",
+        "application_count": 8,
+        "views": 156,
+        "created_at": "2026-02-12T15:20:00Z"
+      }
+    ],
+    "applications": [
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440001",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440001",
+        "status": "accepted",
+        "match_score": 87,
+        "cover_message": "I have 5 years of housekeeping experience and am very reliable.",
+        "cover_letter": "Experienced housekeeping professional ready to deliver excellent service",
+        "created_at": "2026-02-16T10:30:00Z"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440002",
+        "job_id": "660e8400-e29b-41d4-a716-446655440002",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440005",
+        "status": "accepted",
+        "match_score": 92,
+        "cover_message": "Perfect match for your mobile app development needs",
+        "cover_letter": "4 years React Native experience with 5 shipped apps",
+        "created_at": "2026-02-16T14:15:00Z"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440003",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440003",
+        "status": "pending",
+        "match_score": 64,
+        "cover_message": "I am interested in this opportunity",
+        "cover_letter": "Willing to learn and work hard",
+        "created_at": "2026-02-17T09:45:00Z"
+      },
+      {
+        "id": "770e8400-e29b-41d4-a716-446655440004",
+        "job_id": "660e8400-e29b-41d4-a716-446655440005",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440002",
+        "status": "accepted",
+        "match_score": 89,
+        "cover_message": "Creative designer with strong branding background",
+        "cover_letter": "3 years experience in digital marketing and graphic design",
+        "created_at": "2026-02-17T11:20:00Z"
+      }
+    ],
+    "chat_conversations": [
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440001",
+        "participants": ["550e8400-e29b-41d4-a716-446655440001", "550e8400-e29b-41d4-a716-446655440051"],
+        "worker_id": "550e8400-e29b-41d4-a716-446655440001",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440051",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "application_id": "770e8400-e29b-41d4-a716-446655440001",
+        "created_at": "2026-02-16T10:45:00Z"
+      },
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440002",
+        "participants": ["550e8400-e29b-41d4-a716-446655440005", "550e8400-e29b-41d4-a716-446655440050"],
+        "worker_id": "550e8400-e29b-41d4-a716-446655440005",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "job_id": "660e8400-e29b-41d4-a716-446655440002",
+        "application_id": "770e8400-e29b-41d4-a716-446655440002",
+        "created_at": "2026-02-16T14:30:00Z"
+      },
+      {
+        "id": "880e8400-e29b-41d4-a716-446655440003",
+        "participants": ["550e8400-e29b-41d4-a716-446655440002", "550e8400-e29b-41d4-a716-446655440050"],
+        "worker_id": "550e8400-e29b-41d4-a716-446655440002",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "job_id": "660e8400-e29b-41d4-a716-446655440005",
+        "application_id": "770e8400-e29b-41d4-a716-446655440004",
+        "created_at": "2026-02-17T11:35:00Z"
+      }
+    ],
+    "chat_messages": [
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440001",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440001",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440051",
+        "message": "Hi Rajesh! Thanks for applying. When can you start?",
+        "read": true,
+        "created_at": "2026-02-16T11:00:00Z"
+      },
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440002",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440001",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440001",
+        "message": "I can start from 25th February. What time should I report?",
+        "read": true,
+        "created_at": "2026-02-16T11:15:00Z"
+      },
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440003",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440002",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440050",
+        "message": "Hi Arjun! Great to see your experience. Let's discuss project details.",
+        "read": true,
+        "created_at": "2026-02-16T14:45:00Z"
+      },
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440004",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440002",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440005",
+        "message": "Thanks! I'd love to hear more about your requirements.",
+        "read": true,
+        "created_at": "2026-02-16T15:00:00Z"
+      },
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440005",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440003",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440050",
+        "message": "Hi Priya! Your portfolio looks amazing. Can we schedule a call?",
+        "read": true,
+        "created_at": "2026-02-17T12:00:00Z"
+      },
+      {
+        "id": "990e8400-e29b-41d4-a716-446655440006",
+        "conversation_id": "880e8400-e29b-41d4-a716-446655440003",
+        "sender_id": "550e8400-e29b-41d4-a716-446655440002",
+        "message": "Absolutely! I'm available on video call anytime this week.",
+        "read": false,
+        "created_at": "2026-02-17T12:10:00Z"
+      }
+    ],
+    "ratings": [
+      {
+        "id": "aa0e8400-e29b-41d4-a716-446655440001",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "application_id": "770e8400-e29b-41d4-a716-446655440001",
+        "from_user_id": "550e8400-e29b-41d4-a716-446655440051",
+        "to_user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "rating": 5,
+        "feedback": "Excellent work! Very professional and reliable. Highly recommended.",
+        "created_at": "2026-02-20T15:30:00Z"
+      },
+      {
+        "id": "aa0e8400-e29b-41d4-a716-446655440002",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "application_id": "770e8400-e29b-41d4-a716-446655440001",
+        "from_user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "to_user_id": "550e8400-e29b-41d4-a716-446655440051",
+        "rating": 5,
+        "feedback": "Great experience! Clear communication and fair payment. Thank you!",
+        "created_at": "2026-02-20T16:00:00Z"
+      }
+    ],
+    "trust_scores": [
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "score": 78,
+        "level": "active",
+        "job_completion_rate": 94,
+        "average_rating": 4.8,
+        "total_ratings": 15,
+        "complaint_count": 0,
+        "successful_payments": 14
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440002",
+        "score": 85,
+        "level": "trusted",
+        "job_completion_rate": 98,
+        "average_rating": 4.9,
+        "total_ratings": 22,
+        "complaint_count": 0,
+        "successful_payments": 21
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440005",
+        "score": 88,
+        "level": "trusted",
+        "job_completion_rate": 100,
+        "average_rating": 5.0,
+        "total_ratings": 12,
+        "complaint_count": 0,
+        "successful_payments": 12
+      },
+      {
+        "user_id": "550e8400-e29b-41d4-a716-446655440051",
+        "score": 90,
+        "level": "trusted",
+        "job_completion_rate": 96,
+        "average_rating": 4.8,
+        "total_ratings": 18,
+        "complaint_count": 0,
+        "successful_payments": 18
+      }
+    ],
+    "escrow_transactions": [
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440001",
+        "job_id": "660e8400-e29b-41d4-a716-446655440001",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440051",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440001",
+        "amount": 3500,
+        "status": "released",
+        "created_at": "2026-02-16T10:30:00Z",
+        "released_at": "2026-02-20T16:30:00Z"
+      },
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440002",
+        "job_id": "660e8400-e29b-41d4-a716-446655440002",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440005",
+        "amount": 75000,
+        "status": "held",
+        "created_at": "2026-02-16T14:20:00Z"
+      },
+      {
+        "id": "bb0e8400-e29b-41d4-a716-446655440003",
+        "job_id": "660e8400-e29b-41d4-a716-446655440005",
+        "employer_id": "550e8400-e29b-41d4-a716-446655440050",
+        "worker_id": "550e8400-e29b-41d4-a716-446655440002",
+        "amount": 5000,
+        "status": "held",
+        "created_at": "2026-02-17T11:40:00Z"
+      }
+    ],
+    "notifications": [
+      {
+        "id": "cc0e8400-e29b-41d4-a716-446655440001",
+        "user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "type": "job_match",
+        "title": "New Job Match",
+        "message": "You matched 87% with Hotel Room Cleaner job at Nair Hospitality",
+        "is_read": true,
+        "link": "/worker/jobs/660e8400-e29b-41d4-a716-446655440001",
+        "created_at": "2026-02-15T10:00:00Z"
+      },
+      {
+        "id": "cc0e8400-e29b-41d4-a716-446655440002",
+        "user_id": "550e8400-e29b-41d4-a716-446655440001",
+        "type": "application",
+        "title": "Application Accepted",
+        "message": "Your application for Hotel Room Cleaner was accepted!",
+        "is_read": true,
+        "link": "/worker/applications",
+        "created_at": "2026-02-16T12:00:00Z"
+      },
+      {
+        "id": "cc0e8400-e29b-41d4-a716-446655440003",
+        "user_id": "550e8400-e29b-41d4-a716-446655440005",
+        "type": "job_match",
+        "title": "Perfect Match Found",
+        "message": "You matched 92% with Mobile App Development role",
+        "is_read": true,
+        "link": "/worker/jobs/660e8400-e29b-41d4-a716-446655440002",
+        "created_at": "2026-02-15T14:00:00Z"
+      },
+      {
+        "id": "cc0e8400-e29b-41d4-a716-446655440004",
+        "user_id": "550e8400-e29b-41d4-a716-446655440051",
+        "type": "payment",
+        "title": "Payment Released",
+        "message": "Payment of ₹3,500 has been released to Rajesh Kumar",
+        "is_read": true,
+        "link": "/employer/dashboard",
+        "created_at": "2026-02-20T16:30:00Z"
+      }
+    ],
+    "reports": [
+      {
+        "id": "dd0e8400-e29b-41d4-a716-446655440001",
+        "reporter_id": "550e8400-e29b-41d4-a716-446655440001",
+        "reported_user_id": "550e8400-e29b-41d4-a716-446655440004",
+        "type": "suspicious_behavior",
+        "reason": "Job seems suspicious - asking for upfront payment",
+        "description": "The employer asked me to pay registration fee before starting",
+        "status": "resolved",
+        "resolution": "Account flagged for review",
+        "created_at": "2026-02-18T10:00:00Z",
+        "resolved_at": "2026-02-19T15:30:00Z"
+      }
+    ]
+  }
+}
