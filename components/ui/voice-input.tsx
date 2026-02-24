@@ -71,6 +71,7 @@ export function VoiceInput({ onResult, lang = 'en-IN', className, append }: Voic
         .map(r => r[0].transcript)
         .join(' ')
         .trim()
+        .replace(/[.!?,;:]+$/, '') // strip trailing punctuation added by speech recognition
       onResult(transcript)
       setTimeout(() => setState('idle'), 600)
     }

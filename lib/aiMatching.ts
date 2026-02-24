@@ -105,6 +105,31 @@ export function extractSkills(description: string): string[] {
   return Array.from(extractedSkills);
 }
 
+// Mapping from employer slug-style categories to worker display-name categories
+const CATEGORY_ALIASES: Record<string, string[]> = {
+  'home-services': ['Cleaning', 'Gardening', 'Security', 'Housekeeping'],
+  'delivery': ['Delivery', 'Driving'],
+  'repair': ['Plumbing', 'Electrical', 'Mechanical', 'Carpentry'],
+  'construction': ['Construction', 'Carpentry', 'Painting'],
+  'office-work': ['Office Work', 'Data Entry', 'Customer Service', 'Teaching'],
+  'hospitality': ['Hospitality', 'Cooking'],
+  'teaching': ['Teaching'],
+  'sales': ['Sales', 'Retail'],
+  'other': ['Other'],
+}
+
+function categoryMatches(jobCategory: string, workerCategories: string[]): boolean {
+  const jc = jobCategory.toLowerCase()
+  const wc = workerCategories.map(c => c.toLowerCase())
+  // Direct match (case-insensitive)
+  if (wc.includes(jc)) return true
+  // Alias match (slug → display names)
+  const aliases = CATEGORY_ALIASES[jc] ?? []
+  if (aliases.some(a => wc.includes(a.toLowerCase()))) return true
+  // Reverse: worker category matches part of job category
+  return wc.some(w => jc.includes(w) || w.includes(jc))
+}
+
 // Calculate match score between worker and job
 export function calculateMatchScore(
   workerProfile: WorkerProfile,
@@ -129,7 +154,7 @@ export function calculateMatchScore(
   }
 
   // 2. Category matching (20 points)
-  if (workerProfile.categories.includes(job.category)) {
+  if (categoryMatches(job.category, workerProfile.categories)) {
     score += 20;
   }
 
@@ -381,7 +406,7 @@ export function explainJobMatch(
   return reasons.join('. ') + '.';
 }
 
-// Job categories
+// Job categories — used on both worker profile and employer post form
 export const JOB_CATEGORIES = [
   'Hospitality',
   'Cooking',
@@ -402,5 +427,10 @@ export const JOB_CATEGORIES = [
   'Office Work',
   'Data Entry',
   'Customer Service',
+  'Healthcare',
+  'Beauty & Wellness',
+  'IT & Tech Support',
+  'Photography',
+  'Event Management',
   'Other',
 ];

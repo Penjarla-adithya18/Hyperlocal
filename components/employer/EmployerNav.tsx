@@ -17,7 +17,6 @@ export function EmployerNav() {
     { href: '/employer/dashboard', label: 'Dashboard', icon: Home },
     { href: '/employer/jobs/post', label: 'Post Job', icon: PlusCircle },
     { href: '/employer/jobs', label: 'My Jobs', icon: Briefcase },
-    { href: '/employer/jobs', label: 'Applicants', icon: Users, badge: 0 },
     { href: '/employer/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
     { href: '/settings', label: 'Settings', icon: Settings },
   ];

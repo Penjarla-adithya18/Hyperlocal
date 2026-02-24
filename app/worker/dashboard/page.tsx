@@ -79,10 +79,12 @@ export default function WorkerDashboardPage() {
 
   const profileCompleteness = workerProfile
     ? Math.round(
-        ((workerProfile.skills.length > 0 ? 25 : 0) +
-          (workerProfile.availability ? 25 : 0) +
-          (workerProfile.categories.length > 0 ? 25 : 0) +
-          (workerProfile.experience ? 25 : 0))
+        (workerProfile.skills.length > 0 ? 20 : 0) +
+        (workerProfile.categories.length > 0 ? 20 : 0) +
+        (workerProfile.availability ? 15 : 0) +
+        (workerProfile.experience ? 20 : 0) +
+        (workerProfile.location ? 15 : 0) +
+        (workerProfile.bio ? 10 : 0)
       )
     : 0;
 

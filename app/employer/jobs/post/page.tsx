@@ -13,7 +13,8 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { mockDb } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Briefcase, MapPin, Clock, IndianRupee, X, Plus, Calendar, AlertTriangle } from 'lucide-react'
+import { IndianRupee, X, Plus, Calendar } from 'lucide-react'
+import { JOB_CATEGORIES } from '@/lib/aiMatching'
 import { Checkbox } from '@/components/ui/checkbox'
 import { LocationInput } from '@/components/ui/location-input'
 
@@ -21,10 +22,13 @@ const SKILLS = [
   'Plumber', 'Electrician', 'Carpenter', 'Painter', 'Mason', 'Welder',
   'Driver', 'Delivery', 'Cook', 'Cleaner', 'Security Guard', 'Gardener',
   'Mechanic', 'AC Repair', 'Sales', 'Customer Service', 'Data Entry',
-  'Content Writing', 'Teaching', 'Photography'
+  'Content Writing', 'Teaching', 'Photography',
 ]
 
-const DURATIONS = ['1 hour', '2 hours', '3 hours', '4 hours', 'Half day', 'Full day', '2-3 days', '1 week', '2 weeks', '1 month', 'Ongoing']
+const DURATION_PRESETS = [
+  '1 hour', '2 hours', '3 hours', '4 hours', 'Half day', 'Full day',
+  '2-3 days', '1 week', '2 weeks', '1 month', 'Ongoing',
+]
 
 export default function PostJobPage() {
   const router = useRouter()
@@ -186,13 +190,9 @@ export default function PostJobPage() {
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="home-services">Home Services</SelectItem>
-                      <SelectItem value="delivery">Delivery & Logistics</SelectItem>
-                      <SelectItem value="repair">Repair & Maintenance</SelectItem>
-                      <SelectItem value="construction">Construction</SelectItem>
-                      <SelectItem value="office-work">Office Work</SelectItem>
-                      <SelectItem value="hospitality">Hospitality</SelectItem>
-                      <SelectItem value="other">Other</SelectItem>
+                      {JOB_CATEGORIES.map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -287,7 +287,7 @@ export default function PostJobPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="payAmount">
-                    {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (â‚¹) *
+                    {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (₹) *
                   </Label>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -307,21 +307,18 @@ export default function PostJobPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="duration">Duration *</Label>
-                  <Select
+                  <Label htmlFor="duration">Duration * <span className="text-xs text-muted-foreground">(type or choose)</span></Label>
+                  <Input
+                    id="duration"
+                    list="duration-presets"
+                    placeholder="e.g., Half day, 1 week, Ongoing..."
                     value={formData.duration}
-                    onValueChange={(value) => setFormData({ ...formData, duration: value })}
+                    onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                     required
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select duration" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {DURATIONS.map((duration) => (
-                        <SelectItem key={duration} value={duration}>{duration}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  />
+                  <datalist id="duration-presets">
+                    {DURATION_PRESETS.map(d => <option key={d} value={d} />)}
+                  </datalist>
                 </div>
 
                 <div className="space-y-2">

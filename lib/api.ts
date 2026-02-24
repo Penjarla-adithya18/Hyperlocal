@@ -111,10 +111,7 @@ export async function resetPassword(
   newPassword: string
 ): Promise<{ success: boolean; message: string }> {
   const res = await call<SR>('auth', 'POST', {}, { action: 'reset-password', currentPassword, newPassword })
-  if (res.success) {
-    setSessionToken(null)
-    if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
-  }
+  // Do NOT clear session — user stays logged in after changing password
   return res
 }
 
@@ -530,6 +527,28 @@ export const mockDb = {
   async sendMessage(payload: { conversationId: string; senderId: string; message: string }): Promise<ChatMessage> {
     const res = await call<R<ChatMessage>>('chat', 'POST', {}, { type: 'message', ...payload })
     return res.data
+  },
+
+  async createConversation(data: {
+    workerId: string
+    employerId: string
+    jobId: string
+    applicationId?: string
+    participants: string[]
+  }): Promise<ChatConversation> {
+    const res = await call<R<ChatConversation>>('chat', 'POST', {}, { type: 'conversation', ...data })
+    return res.data
+  },
+
+  async findConversationByJob(userId: string, jobId: string): Promise<ChatConversation | null> {
+    try {
+      const convs = await this.getConversationsByUser(userId)
+      return convs.find(c => c.jobId === jobId) ?? null
+    } catch { return null }
+  },
+
+  async deleteAccount(userId: string): Promise<void> {
+    await call<{ success: boolean }>('users', 'DELETE', { id: userId })
   },
 
   async getAllReports(): Promise<Report[]> {

@@ -86,6 +86,22 @@ export default function JobDetailsPage() {
   const handleApply = async () => {
     if (!user || !job) return
 
+    // Cover letter validation
+    if (coverLetter.trim().length < 20) {
+      toast({
+        title: 'Cover Letter Too Short',
+        description: 'Please write at least 20 characters explaining why you are a good fit.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // Duplicate application guard (in case state is stale)
+    if (application) {
+      toast({ title: 'Already Applied', description: 'You have already applied to this job.' })
+      return
+    }
+
     setApplying(true)
     try {
       const newApplication = await mockDb.createApplication({
@@ -97,6 +113,16 @@ export default function JobDetailsPage() {
 
       setApplication(newApplication)
       setShowApplicationForm(false)
+
+      // Create a conversation so employer can chat with the worker
+      await mockDb.createConversation({
+        workerId: user.id,
+        employerId: job.employerId,
+        jobId: job.id,
+        applicationId: newApplication.id,
+        participants: [user.id, job.employerId]
+      }).catch(() => {})
+
       toast({
         title: 'Success!',
         description: 'Your application has been submitted successfully',

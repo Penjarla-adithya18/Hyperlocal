@@ -8,9 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockUserOps } from '@/lib/api'
-import { supabase } from '@/lib/supabase/client'
-import { filterChatMessage } from '@/lib/chatFilter'
+import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
 import { Send, Search, MessageCircle, Flag, AlertCircle } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -25,7 +23,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
-import { mockReportOps } from '@/lib/api'
+import { filterChatMessage } from '@/lib/chatFilter'
 
 export default function EmployerChatPage() {
   const { user } = useAuth()
@@ -49,35 +47,18 @@ export default function EmployerChatPage() {
     }
   }, [user])
 
-  // Realtime subscription — re-subscribe whenever conversation changes
+  // Poll for new messages every 5s (replaces Supabase realtime)
   useEffect(() => {
     if (!selectedConversation) return
 
     loadMessages(selectedConversation.id)
 
-    const channel = supabase
-      .channel(`chat:${selectedConversation.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `conversation_id=eq.${selectedConversation.id}`,
-        },
-        (payload) => {
-          const incoming = payload.new as ChatMessage
-          setMessages((prev) =>
-            prev.some((m) => m.id === incoming.id) ? prev : [...prev, incoming]
-          )
-        }
-      )
-      .subscribe()
+    const interval = setInterval(() => {
+      loadMessages(selectedConversation.id)
+    }, 5000)
 
-    return () => {
-      supabase.removeChannel(channel)
-    }
-  }, [selectedConversation])
+    return () => clearInterval(interval)
+  }, [selectedConversation?.id])
 
   useEffect(() => {
     scrollToBottom()
@@ -101,6 +82,16 @@ export default function EmployerChatPage() {
         }
         return next
       })
+    }
+    // Check sessionStorage for a conversation to pre-select (from employer/jobs chat button)
+    const targetConvId = sessionStorage.getItem('targetChatConvId')
+    if (targetConvId) {
+      sessionStorage.removeItem('targetChatConvId')
+      const targetConv = userConvs.find(c => c.id === targetConvId)
+      if (targetConv) {
+        setSelectedConversation(targetConv)
+        return
+      }
     }
     if (userConvs.length > 0 && !selectedConversation) {
       setSelectedConversation(userConvs[0])

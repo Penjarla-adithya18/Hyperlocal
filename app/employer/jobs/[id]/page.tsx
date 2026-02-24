@@ -120,6 +120,44 @@ export default function EmployerJobDetailPage() {
     finally { setActionLoading(false) }
   }
 
+  const handleAcceptApplication = async (appId: string) => {
+    setActionLoading(true)
+    try {
+      await mockApplicationOps.update(appId, { status: 'accepted' })
+      toast({ title: 'Application Accepted!', description: 'The worker has been notified.' })
+      loadData()
+    } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
+    finally { setActionLoading(false) }
+  }
+
+  const handleRejectApplication = async (appId: string) => {
+    setActionLoading(true)
+    try {
+      await mockApplicationOps.update(appId, { status: 'rejected' })
+      toast({ title: 'Application Rejected', description: 'The worker has been notified.' })
+      loadData()
+    } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
+    finally { setActionLoading(false) }
+  }
+
+  const handleChatWithWorker = async (app: Application) => {
+    if (!user || !job) return
+    try {
+      let conv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
+      if (!conv) {
+        conv = await mockDb.createConversation({
+          workerId: app.workerId,
+          employerId: user.id,
+          jobId: job.id,
+          applicationId: app.id,
+          participants: [app.workerId, user.id]
+        })
+      }
+      if (conv) sessionStorage.setItem('targetChatConvId', conv.id)
+    } catch { /* ignore, just navigate */ }
+    router.push('/employer/chat')
+  }
+
   if (loading) return (
     <div className="min-h-screen bg-background">
       <EmployerNav />
@@ -205,8 +243,15 @@ export default function EmployerJobDetailPage() {
 
             <Card>
               <CardHeader>
-                <CardTitle>Applications ({applications.length})</CardTitle>
-                <CardDescription>Workers who applied</CardDescription>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle>Applications ({applications.length})</CardTitle>
+                    <CardDescription>Workers who applied</CardDescription>
+                  </div>
+                  <Button size="sm" variant="outline" onClick={loadData} disabled={actionLoading}>
+                    <RefreshCcw className="w-4 h-4 mr-1" /> Refresh
+                  </Button>
+                </div>
               </CardHeader>
               <CardContent>
                 {applications.length === 0 ? (
@@ -235,9 +280,17 @@ export default function EmployerJobDetailPage() {
                               </div>
                             </div>
                           </div>
-                          <Button size="sm" variant="outline" onClick={() => router.push('/employer/chat')}>
-                            <MessageSquare className="w-4 h-4 mr-1" /> Chat
-                          </Button>
+                          <div className="flex gap-1.5">
+                            {app.status === 'pending' && (
+                              <>
+                                <Button size="sm" variant="outline" className="text-green-600 hover:bg-green-50 border-green-300" onClick={() => handleAcceptApplication(app.id)} disabled={actionLoading}>✓ Accept</Button>
+                                <Button size="sm" variant="outline" className="text-destructive hover:bg-destructive/10 border-destructive/30" onClick={() => handleRejectApplication(app.id)} disabled={actionLoading}>✗ Reject</Button>
+                              </>
+                            )}
+                            <Button size="sm" variant="outline" onClick={() => handleChatWithWorker(app)}>
+                              <MessageSquare className="w-4 h-4 mr-1" /> Chat
+                            </Button>
+                          </div>
                         </div>
                       )
                     })}

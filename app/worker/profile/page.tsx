@@ -10,8 +10,9 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp } from 'lucide-react';
-import { mockWorkerProfileOps, mockUserOps } from '@/lib/api';
+import { Progress } from '@/components/ui/progress';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2 } from 'lucide-react';
+import { mockWorkerProfileOps, mockUserOps, mockDb } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { VoiceInput } from '@/components/ui/voice-input';
@@ -19,7 +20,8 @@ import { useToast } from '@/hooks/use-toast';
 
 export default function WorkerProfilePage() {
   const router = useRouter();
-  const { user, updateUser } = useAuth();
+  const { user, updateUser, logout } = useAuth();
+  const [deletingAccount, setDeletingAccount] = useState(false);
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -114,23 +116,30 @@ export default function WorkerProfilePage() {
   };
 
   const removeSkill = (skill: string) => {
-    setFormData({
-      ...formData,
-      skills: formData.skills.filter((s) => s !== skill),
-    });
+    setFormData(prev => ({ ...prev, skills: prev.skills.filter((s) => s !== skill) }));
   };
 
   const toggleCategory = (category: string) => {
-    if (formData.categories.includes(category)) {
-      setFormData({
-        ...formData,
-        categories: formData.categories.filter((c) => c !== category),
-      });
-    } else {
-      setFormData({
-        ...formData,
-        categories: [...formData.categories, category],
-      });
+    setFormData(prev => ({
+      ...prev,
+      categories: prev.categories.includes(category)
+        ? prev.categories.filter((c) => c !== category)
+        : [...prev.categories, category],
+    }));
+  };
+
+  const handleDeleteAccount = async () => {
+    if (!user) return;
+    if (!window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
+    setDeletingAccount(true);
+    try {
+      await mockDb.deleteAccount(user.id);
+      logout();
+      router.push('/login');
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete account. Please try again.', variant: 'destructive' });
+    } finally {
+      setDeletingAccount(false);
     }
   };
 
@@ -214,6 +223,31 @@ export default function WorkerProfilePage() {
           <p className="text-muted-foreground">
             Complete your profile to get better AI-powered job recommendations
           </p>
+          {/* Live Profile Completeness */}
+          {(() => {
+            const pct = Math.round(
+              (formData.skills.length > 0 ? 20 : 0) +
+              (formData.categories.length > 0 ? 20 : 0) +
+              (formData.availability ? 15 : 0) +
+              (formData.experience ? 20 : 0) +
+              (formData.location ? 15 : 0) +
+              (formData.bio ? 10 : 0)
+            );
+            return (
+              <div className="mt-4 p-4 rounded-lg border bg-card">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-sm font-medium">Profile Completeness</span>
+                  <span className="text-sm font-bold text-primary">{pct}%</span>
+                </div>
+                <Progress value={pct} className="h-2" />
+                {pct < 100 && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {pct < 50 ? 'Add skills, categories and availability to improve your job matches.' : 'Almost there! Fill in remaining fields for the best recommendations.'}
+                  </p>
+                )}
+              </div>
+            );
+          })()}
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
@@ -440,6 +474,23 @@ export default function WorkerProfilePage() {
               Cancel
             </Button>
           </div>
+
+          {/* Danger Zone */}
+          <Card className="p-6 border-destructive/40">
+            <div className="flex items-center gap-3 mb-3">
+              <Trash2 className="w-5 h-5 text-destructive" />
+              <h2 className="text-xl font-semibold text-destructive">Danger Zone</h2>
+            </div>
+            <p className="text-sm text-muted-foreground mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeleteAccount}
+              disabled={deletingAccount}
+            >
+              {deletingAccount ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting...</> : 'Delete My Account'}
+            </Button>
+          </Card>
         </form>
       </div>
     </div>

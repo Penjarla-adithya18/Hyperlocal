@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps } from '@/lib/api'
-import { matchJobs } from '@/lib/aiMatching'
+import { matchJobs, JOB_CATEGORIES } from '@/lib/aiMatching'
 import { Application, Job, User } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Navigation, ChevronLeft, ChevronRight } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
@@ -88,7 +88,7 @@ export default function WorkerJobsPage() {
                          job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          job.requiredSkills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))
     
-    const matchesCategory = categoryFilter === 'all' || job.category === categoryFilter
+    const matchesCategory = categoryFilter === 'all' || job.category.toLowerCase() === categoryFilter.toLowerCase()
     const matchesLocation = !locationFilter || job.location.toLowerCase().includes(locationFilter.toLowerCase())
 
     return matchesSearch && matchesCategory && matchesLocation
@@ -148,7 +148,7 @@ export default function WorkerJobsPage() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold">â‚¹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
+              <span className="font-semibold">&#8377;{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -218,14 +218,11 @@ export default function WorkerJobsPage() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                  <SelectItem value="home-services">Home Services</SelectItem>
-                  <SelectItem value="delivery">Delivery</SelectItem>
-                  <SelectItem value="repair">Repair</SelectItem>
-                  <SelectItem value="construction">Construction</SelectItem>
-                  <SelectItem value="office-work">Office Work</SelectItem>
-                  <SelectItem value="hospitality">Hospitality</SelectItem>
-                </SelectContent>
+                <SelectItem value="all">All Categories</SelectItem>
+                {JOB_CATEGORIES.map(cat => (
+                  <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                ))}
+              </SelectContent>
               </Select>
               <Input
                 placeholder="Location"
