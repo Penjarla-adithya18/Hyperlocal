@@ -4,6 +4,7 @@ import {
   registerUser as apiRegister,
   loginUser as apiLogin,
   resetPassword as apiResetPassword,
+  forgotPasswordReset as apiForgotPasswordReset,
   getCurrentUser,
   setCurrentUser,
   logout,
@@ -32,7 +33,7 @@ const EDGE_BASE =
 
 export async function sendOTP(
   phoneNumber: string
-): Promise<{ success: boolean; message: string }> {
+): Promise<{ success: boolean; message: string; otp?: string }> {
   try {
     const res = await fetch(`${EDGE_BASE}/wati`, {
       method: 'POST',
@@ -43,7 +44,7 @@ export async function sendOTP(
       body: JSON.stringify({ action: 'send_otp', phone: phoneNumber }),
     })
     const data = await res.json()
-    return { success: data.success ?? false, message: data.message ?? 'OTP request sent' }
+    return { success: data.success ?? false, message: data.message ?? 'OTP request sent', otp: data.otp }
   } catch {
     return { success: false, message: 'Failed to send OTP. Please try again.' }
   }
@@ -92,4 +93,11 @@ export async function resetPassword(
   newPassword: string
 ): Promise<{ success: boolean; message: string }> {
   return apiResetPassword(currentPassword, newPassword)
+}
+
+export async function forgotPassword(
+  phoneNumber: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  return apiForgotPasswordReset(phoneNumber, newPassword)
 }

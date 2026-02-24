@@ -175,6 +175,59 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ success: true, message: 'Logged out' })
     }
 
+    // Unauthenticated password reset after OTP verification
+    if (action === 'forgot-password') {
+      const { phoneNumber, newPassword } = body
+      if (!phoneNumber || !newPassword) {
+        return errorResponse('phoneNumber and newPassword are required', 400)
+      }
+      if (String(newPassword).length < 8) {
+        return errorResponse('Password must be at least 8 characters', 400)
+      }
+      const { data: userRow, error: findErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle()
+      if (findErr || !userRow) return errorResponse('No account found with this phone number', 404)
+
+      const newHash = await hashPassword(newPassword)
+      const { error: updateErr } = await supabase
+        .from('users')
+        .update({ password_hash: newHash })
+        .eq('id', userRow.id)
+      if (updateErr) throw updateErr
+      // Invalidate all sessions for this user
+      await supabase.from('user_sessions').delete().eq('user_id', userRow.id)
+      return jsonResponse({ success: true, message: 'Password reset successful. Please log in.' })
+    }
+
+    // Unauthenticated password reset after OTP verification
+    if (action === 'forgot-password') {
+      const { phoneNumber, newPassword } = body
+      if (!phoneNumber || !newPassword) {
+        return errorResponse('phoneNumber and newPassword are required', 400)
+      }
+      if (String(newPassword).length < 8) {
+        return errorResponse('Password must be at least 8 characters', 400)
+      }
+      const { data: userRow, error: findErr } = await supabase
+        .from('users')
+        .select('id')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle()
+      if (findErr || !userRow) return errorResponse('No account found with this phone number', 404)
+
+      const newHash = await hashPassword(newPassword)
+      const { error: updateErr } = await supabase
+        .from('users')
+        .update({ password_hash: newHash })
+        .eq('id', userRow.id)
+      if (updateErr) throw updateErr
+      await supabase.from('user_sessions').delete().eq('user_id', userRow.id)
+      return jsonResponse({ success: true, message: 'Password reset successful. Please log in.' })
+    }
+
     if (action === 'get-user-by-phone') {
       const auth = await requireAuth(req, supabase)
       if ('error' in auth) return auth.error

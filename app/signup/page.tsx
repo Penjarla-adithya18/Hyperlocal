@@ -8,7 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, User, ArrowLeft, Loader2 } from 'lucide-react';
+import { Briefcase, User, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendOTP, verifyOTP, registerUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -36,6 +36,7 @@ function SignupPageContent() {
   });
 
   const [otpSent, setOtpSent] = useState(false);
+  const [displayOtp, setDisplayOtp] = useState<string | null>(null);
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
@@ -59,9 +60,10 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
+        setDisplayOtp(result.otp ?? null);
         toast({
-          title: 'OTP Sent',
-          description: result.message,
+          title: 'OTP Generated',
+          description: 'Your OTP is displayed on screen.',
         });
       }
     } catch (error) {
@@ -262,14 +264,24 @@ function SignupPageContent() {
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Sending OTP...
+                        Generating OTP...
                       </>
                     ) : (
-                      'Send OTP'
+                      'Get OTP'
                     )}
                   </Button>
                 ) : (
                   <>
+                    {/* OTP display banner */}
+                    {displayOtp && (
+                      <div className="flex items-center gap-3 rounded-lg border-2 border-green-400 bg-green-50 dark:bg-green-950/30 px-4 py-3">
+                        <KeyRound className="h-5 w-5 text-green-600 shrink-0" />
+                        <div>
+                          <p className="text-xs text-green-700 dark:text-green-400 font-medium">Your OTP (demo mode)</p>
+                          <p className="text-2xl font-bold tracking-widest text-green-800 dark:text-green-300">{displayOtp}</p>
+                        </div>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="otp">Enter OTP</Label>
                       <Input

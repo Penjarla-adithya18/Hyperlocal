@@ -118,6 +118,14 @@ export async function resetPassword(
   return res
 }
 
+export async function forgotPasswordReset(
+  phoneNumber: string,
+  newPassword: string
+): Promise<{ success: boolean; message: string }> {
+  const res = await call<SR>('auth', 'POST', {}, { action: 'forgot-password', phoneNumber, newPassword })
+  return res
+}
+
 export async function getUserByPhone(phoneNumber: string): Promise<User | null> {
   const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-phone', phoneNumber })
   return res.data

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
-import { resetPassword, logout } from '@/lib/auth'
+import { resetPassword, logout, sendOTP, verifyOTP } from '@/lib/auth'
 import { mockUserOps } from '@/lib/api'
 import WorkerNav from '@/components/worker/WorkerNav'
 import EmployerNav from '@/components/employer/EmployerNav'
@@ -15,7 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Shield, Lock, Phone, LogOut, Star, AlertTriangle } from 'lucide-react'
+import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound } from 'lucide-react'
 
 export default function SettingsPage() {
   const { user, updateUser } = useAuth()
@@ -29,6 +29,7 @@ export default function SettingsPage() {
   // Update phone form
   const [phoneForm, setPhoneForm] = useState({ phone: user?.phoneNumber ?? '', otp: '' })
   const [otpSent, setOtpSent] = useState(false)
+  const [displayOtp, setDisplayOtp] = useState<string | null>(null)
   const [phoneLoading, setPhoneLoading] = useState(false)
 
   useEffect(() => {
@@ -84,20 +85,13 @@ export default function SettingsPage() {
     }
     setPhoneLoading(true)
     try {
-      const res = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/wati`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'send_otp', phone: phoneForm.phone }),
-        }
-      )
-      const data = await res.json()
-      if (data.success) {
+      const res = await sendOTP(phoneForm.phone)
+      if (res.success) {
         setOtpSent(true)
-        toast({ title: 'OTP sent via WhatsApp' })
+        setDisplayOtp(res.otp ?? null)
+        toast({ title: 'OTP generated', description: 'Your OTP is shown on screen.' })
       } else {
-        toast({ title: data.message ?? 'Failed to send OTP', variant: 'destructive' })
+        toast({ title: res.message ?? 'Failed to generate OTP', variant: 'destructive' })
       }
     } finally {
       setPhoneLoading(false)
@@ -108,16 +102,7 @@ export default function SettingsPage() {
     e.preventDefault()
     setPhoneLoading(true)
     try {
-      // Verify OTP
-      const verifyRes = await fetch(
-        `${process.env.NEXT_PUBLIC_SUPABASE_URL}/functions/v1/wati`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'verify_otp', phone: phoneForm.phone, otp_code: phoneForm.otp }),
-        }
-      )
-      const verifyData = await verifyRes.json()
+      const verifyData = await verifyOTP(phoneForm.phone, phoneForm.otp)
       if (!verifyData.success) {
         toast({ title: verifyData.message ?? 'Invalid OTP', variant: 'destructive' })
         return
@@ -129,6 +114,7 @@ export default function SettingsPage() {
         updateUser({ phoneNumber: phoneForm.phone })
         toast({ title: 'Phone number updated' })
         setOtpSent(false)
+        setDisplayOtp(null)
         setPhoneForm((prev) => ({ ...prev, otp: '' }))
       }
     } finally {
@@ -238,7 +224,7 @@ export default function SettingsPage() {
               Update Phone Number
             </CardTitle>
             <CardDescription>
-              A WhatsApp OTP will be sent to verify your new number
+              An OTP will be displayed on screen to verify your new number
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -270,6 +256,15 @@ export default function SettingsPage() {
 
               {otpSent && (
                 <div>
+                  {displayOtp && (
+                    <div className="flex items-center gap-3 rounded-lg border-2 border-green-400 bg-green-50 dark:bg-green-950/30 px-4 py-3 mb-3">
+                      <KeyRound className="h-5 w-5 text-green-600 shrink-0" />
+                      <div>
+                        <p className="text-xs text-green-700 dark:text-green-400 font-medium">Your OTP (demo mode)</p>
+                        <p className="text-2xl font-bold tracking-widest text-green-800 dark:text-green-300">{displayOtp}</p>
+                      </div>
+                    </div>
+                  )}
                   <Label htmlFor="otp">Enter OTP (6 digits)</Label>
                   <Input
                     id="otp"

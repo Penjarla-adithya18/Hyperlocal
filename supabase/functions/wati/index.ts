@@ -111,7 +111,8 @@ Deno.serve(async (req: Request) => {
       const message = TEMPLATES.otp([otp])
       await sendWhatsAppMessage(phone, message)
 
-      return jsonResponse({ success: true, message: `OTP sent to ${phone} via WhatsApp` })
+      // Always return OTP in response so it can be displayed on screen in dev/demo mode
+      return jsonResponse({ success: true, otp, message: `OTP generated for ${phone}` })
     }
 
     // ── ACTION: verify_otp ───────────────────────────────────────────────────
