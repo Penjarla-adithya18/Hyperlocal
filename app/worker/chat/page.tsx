@@ -12,9 +12,20 @@ import { mockDb, mockUserOps } from '@/lib/api'
 import { supabase } from '@/lib/supabase/client'
 import { filterChatMessage } from '@/lib/chatFilter'
 import { ChatConversation, ChatMessage, User } from '@/lib/types'
-import { Send, Search, MessageCircle } from 'lucide-react'
+import { Send, Search, MessageCircle, Flag } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Label } from '@/components/ui/label'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { Textarea } from '@/components/ui/textarea'
+import { mockReportOps } from '@/lib/api'
 
 export default function WorkerChatPage() {
   const { user } = useAuth()
@@ -25,6 +36,10 @@ export default function WorkerChatPage() {
   const [usersById, setUsersById] = useState<Record<string, User>>({})
   const [newMessage, setNewMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
+  const [reportDialogOpen, setReportDialogOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('spam')
+  const [reportDescription, setReportDescription] = useState('')
+  const [submittingReport, setSubmittingReport] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -124,6 +139,31 @@ export default function WorkerChatPage() {
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  const handleReportAbuse = async () => {
+    if (!user || !selectedConversation) return
+    const otherUser = getOtherUser(selectedConversation)
+    if (!otherUser) return
+    setSubmittingReport(true)
+    try {
+      await mockReportOps.create({
+        reporterId: user.id,
+        reportedUserId: otherUser.id,
+        type: 'chat_abuse',
+        reason: reportReason,
+        description: reportDescription || reportReason,
+        status: 'pending',
+      })
+      toast({ title: 'Report submitted', description: 'Our team will review and take action.' })
+      setReportDialogOpen(false)
+      setReportReason('spam')
+      setReportDescription('')
+    } catch {
+      toast({ title: 'Failed to submit report', variant: 'destructive' })
+    } finally {
+      setSubmittingReport(false)
+    }
   }
 
   const getOtherUser = (conversation: ChatConversation): User | null => {
@@ -228,7 +268,7 @@ export default function WorkerChatPage() {
                         {getOtherUser(selectedConversation)?.fullName.charAt(0)}
                       </AvatarFallback>
                     </Avatar>
-                    <div>
+                    <div className="flex-1">
                       <CardTitle className="text-lg">
                         {getOtherUser(selectedConversation)?.fullName}
                       </CardTitle>
@@ -236,6 +276,15 @@ export default function WorkerChatPage() {
                         {getOtherUser(selectedConversation)?.companyName || 'Employer'}
                       </p>
                     </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-muted-foreground hover:text-destructive"
+                      title="Report abuse"
+                      onClick={() => setReportDialogOpen(true)}
+                    >
+                      <Flag className="h-4 w-4" />
+                    </Button>
                   </div>
                 </CardHeader>
                 <ScrollArea className="flex-1 p-6">
@@ -304,6 +353,62 @@ export default function WorkerChatPage() {
           </Card>
         </div>
       </main>
+
+      {/* Report Abuse Dialog */}
+      <Dialog open={reportDialogOpen} onOpenChange={setReportDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Report Abuse</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Reason for report</Label>
+              <RadioGroup value={reportReason} onValueChange={setReportReason} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="spam" id="r-spam" />
+                  <Label htmlFor="r-spam">Spam or fake job offer</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="inappropriate" id="r-inappropriate" />
+                  <Label htmlFor="r-inappropriate">Inappropriate or offensive content</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="payment_outside_platform" id="r-payment" />
+                  <Label htmlFor="r-payment">Requesting payment outside platform</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="harassment" id="r-harassment" />
+                  <Label htmlFor="r-harassment">Harassment or threats</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="scam" id="r-scam" />
+                  <Label htmlFor="r-scam">Scam or fraudulent activity</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div>
+              <Label htmlFor="report-desc" className="text-sm font-medium mb-1 block">
+                Additional details <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="report-desc"
+                placeholder="Describe the issue..."
+                rows={3}
+                value={reportDescription}
+                onChange={(e) => setReportDescription(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" onClick={handleReportAbuse} disabled={submittingReport}>
+              {submittingReport ? 'Submitting...' : 'Submit Report'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

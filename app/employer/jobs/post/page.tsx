@@ -15,6 +15,7 @@ import { mockDb } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Briefcase, MapPin, Clock, IndianRupee, X, Plus, Calendar } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
+import { LocationInput } from '@/components/ui/location-input'
 
 const SKILLS = [
   'Plumber', 'Electrician', 'Carpenter', 'Painter', 'Mason', 'Welder',
@@ -38,6 +39,8 @@ export default function PostJobPage() {
     description: '',
     category: '',
     location: '',
+    locationLat: undefined as number | undefined,
+    locationLng: undefined as number | undefined,
     payAmount: '',
     payType: 'hourly' as 'hourly' | 'fixed',
     duration: '',
@@ -95,15 +98,16 @@ export default function PostJobPage() {
         employerId: user.id,
         requiredSkills: selectedSkills,
         payAmount: parseFloat(formData.payAmount),
-        status: 'active'
+        status: 'draft',
+        paymentStatus: 'pending',
       })
 
       toast({
-        title: 'Success!',
-        description: 'Your job has been posted successfully',
+        title: 'Job Created!',
+        description: 'Complete escrow payment to make your job live.',
       })
 
-      router.push(`/employer/jobs/${newJob.id}`)
+      router.push(`/employer/payment/${newJob.id}`)
     } catch (error) {
       toast({
         title: 'Error',
@@ -180,17 +184,13 @@ export default function PostJobPage() {
 
                 <div className="space-y-2">
                   <Label htmlFor="location">Location *</Label>
-                  <div className="relative">
-                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="location"
-                      className="pl-10"
-                      placeholder="City, Area"
-                      value={formData.location}
-                      onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                      required
-                    />
-                  </div>
+                  <LocationInput
+                    id="location"
+                    value={formData.location}
+                    onChange={(val, latLng) => setFormData({ ...formData, location: val, locationLat: latLng?.lat, locationLng: latLng?.lng })}
+                    placeholder="City, Area"
+                    required
+                  />
                 </div>
               </div>
             </CardContent>

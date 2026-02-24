@@ -35,7 +35,13 @@ Deno.serve(async (req: Request) => {
       }
 
       let query = supabase.from('jobs').select('*').order('created_at', { ascending: false })
-      if (employerId) query = query.eq('employer_id', employerId)
+      if (employerId) {
+        // Employer fetching their own jobs — show all statuses
+        query = query.eq('employer_id', employerId)
+      } else {
+        // Public browse (workers) — only show active + escrow locked jobs
+        query = query.eq('status', 'active').eq('payment_status', 'locked')
+      }
       if (status) query = query.eq('status', status)
       if (category) query = query.eq('category', category)
       if (location) query = query.ilike('location', `%${location}%`)
@@ -56,7 +62,14 @@ Deno.serve(async (req: Request) => {
       }
 
       // Posting limit for new (basic-trust) employers — max 3 active jobs
-      if (!isAdmin && (auth.user as unknown as Record<string, unknown>).trust_level === 'basic') {
+      const { data: employerRow, error: employerError } = await supabase
+        .from('users')
+        .select('trust_level')
+        .eq('id', requestedEmployerId)
+        .maybeSingle()
+      if (employerError) throw employerError
+
+      if (!isAdmin && (employerRow?.trust_level ?? 'basic') === 'basic') {
         const { count, error: countError } = await supabase
           .from('jobs')
           .select('id', { count: 'exact', head: true })
@@ -71,6 +84,19 @@ Deno.serve(async (req: Request) => {
       }
 
       const pay = Number(body.payAmount ?? body.pay ?? 0)
+
+      // Fraud keyword detection
+      const FRAUD_KEYWORDS = [
+        'registration fee', 'deposit required', 'pay to apply', 'advance payment',
+        'training fee', 'security deposit', 'upfront payment', 'send money',
+        'guaranteed income', 'get rich quick', 'no experience needed high pay',
+      ]
+      const textToCheck = `${body.title ?? ''} ${body.description ?? ''}`.toLowerCase()
+      const foundFraud = FRAUD_KEYWORDS.filter(kw => textToCheck.includes(kw))
+      if (foundFraud.length >= 2) {
+        return errorResponse(`Job blocked by fraud filter: suspicious keywords detected (${foundFraud.join(', ')})`, 422)
+      }
+
       const payload = {
         employer_id: requestedEmployerId,
         title: body.title,

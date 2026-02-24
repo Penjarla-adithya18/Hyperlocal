@@ -175,6 +175,7 @@ export interface EscrowTransaction {
   workerId: string;
   amount: number;
   status: 'pending' | 'held' | 'released' | 'refunded';
+  commission?: number;
   createdAt: string;
   releasedAt?: string;
   refundedAt?: string;

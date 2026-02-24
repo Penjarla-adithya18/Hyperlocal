@@ -1,6 +1,63 @@
 // AI-based job matching and skill extraction service
 import { Job, WorkerProfile } from './types';
 
+// ────────────────────────────────────────────────────────────────────────────
+// Optional Gemini AI integration (NEXT_PUBLIC_GEMINI_API_KEY env var)
+// Falls back to keyword-based matching when key is absent.
+// ────────────────────────────────────────────────────────────────────────────
+const GEMINI_API_KEY = typeof window !== 'undefined'
+  ? (process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '')
+  : ''
+
+async function callGemini(prompt: string): Promise<string | null> {
+  if (!GEMINI_API_KEY) return null
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+      }
+    )
+    if (!res.ok) return null
+    const json = await res.json()
+    return (json?.candidates?.[0]?.content?.parts?.[0]?.text as string) ?? null
+  } catch { return null }
+}
+
+/**
+ * Extract skills from a natural language description.
+ * Uses Gemini when available, otherwise falls back to keyword matching.
+ */
+export async function extractSkillsWithAI(description: string): Promise<string[]> {
+  const prompt = `Extract a JSON array of professional skills from this job description. Return ONLY a JSON array like ["skill1","skill2"]. Description: "${description.slice(0, 500)}"`
+  const result = await callGemini(prompt)
+  if (result) {
+    try {
+      const match = result.match(/\[[\s\S]*?\]/)
+      if (match) return JSON.parse(match[0]) as string[]
+    } catch { /* fall through */ }
+  }
+  return extractSkills(description)
+}
+
+/**
+ * Generate a personalized match explanation using Gemini or fallback to local logic.
+ */
+export async function generateMatchExplanationWithAI(
+  workerProfile: WorkerProfile,
+  job: Job,
+  matchScore: number
+): Promise<string> {
+  const prompt = `A worker has skills: ${workerProfile.skills.join(', ')} and works in: ${workerProfile.categories.join(', ')}.
+A job requires: ${job.requiredSkills.join(', ')} in ${job.category} at ${job.location}.
+Match score: ${matchScore}%. Write ONE short sentence (max 20 words) explaining why this is a ${matchScore >= 70 ? 'great' : matchScore >= 40 ? 'good' : 'possible'} match.`
+  const result = await callGemini(prompt)
+  if (result) return result.trim().replace(/^["']|["']$/g, '')
+  return explainJobMatch(workerProfile, job, matchScore)
+}
+
 // Mock AI skill extraction from natural language
 export function extractSkills(description: string): string[] {
   const skillsMap: Record<string, string[]> = {

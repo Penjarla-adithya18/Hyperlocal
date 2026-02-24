@@ -2,6 +2,9 @@
 -- Run in Supabase SQL editor
 
 create extension if not exists "pgcrypto";
+-- Enable pgvector for semantic job matching (requires Supabase Pro or pgvector addon)
+-- Run: CREATE EXTENSION IF NOT EXISTS vector;
+-- After enabling, the embedding column below will populate via Edge Functions.
 
 create table if not exists users (
   id uuid primary key default gen_random_uuid(),
@@ -72,8 +75,14 @@ create table if not exists jobs (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   application_count integer not null default 0,
-  views integer not null default 0
+  views integer not null default 0,
+  -- pgvector embedding for semantic AI matching (1536 dims for text-embedding-3-small)
+  -- Uncomment after enabling pgvector extension:
+  -- embedding vector(1536)
 );
+
+-- Uncomment to add vector similarity search index after enabling pgvector:
+-- CREATE INDEX ON jobs USING ivfflat (embedding vector_cosine_ops) WITH (lists = 100);
 
 create table if not exists applications (
   id uuid primary key default gen_random_uuid(),
@@ -129,6 +138,7 @@ create table if not exists escrow_transactions (
   worker_id uuid not null references users(id) on delete cascade,
   amount numeric not null,
   status text not null default 'pending' check (status in ('pending','held','released','refunded')),
+  commission numeric default 0,
   created_at timestamptz not null default now(),
   released_at timestamptz,
   refunded_at timestamptz
@@ -215,7 +225,59 @@ alter table chat_messages enable row level security;
 alter table reports enable row level security;
 alter table escrow_transactions enable row level security;
 alter table user_sessions enable row level security;
-alter table trust_scores enable row level securi
-ty;
+alter table trust_scores enable row level security;
 alter table ratings enable row level security;
 alter table notifications enable row level security;
+
+-- ─── Scheduled Jobs (pg_cron) ────────────────────────────────────────────────
+-- Enable pg_cron in Supabase dashboard: Extensions → pg_cron → Enable
+-- Then run the following in the Supabase SQL editor:
+--
+-- 1. Recalculate trust scores nightly at 2 AM UTC
+-- SELECT cron.schedule(
+--   'trust-score-refresh',
+--   '0 2 * * *',
+--   $$
+--     UPDATE trust_scores ts
+--     SET
+--       rating_score = LEAST(30, COALESCE((
+--         SELECT AVG(rating) * 6 FROM ratings WHERE to_user_id = ts.user_id
+--       ), 0)),
+--       completion_bonus = LEAST(20, (
+--         SELECT COUNT(*) * 4 FROM applications
+--         WHERE worker_id = ts.user_id AND status = 'completed'
+--       )),
+--       updated_at = now()
+--     WHERE true;
+--     UPDATE users u
+--     SET trust_score = LEAST(100, 50 + ts.rating_score + ts.completion_bonus),
+--         trust_level = CASE
+--           WHEN LEAST(100, 50 + ts.rating_score + ts.completion_bonus) >= 80 THEN 'trusted'
+--           WHEN LEAST(100, 50 + ts.rating_score + ts.completion_bonus) >= 60 THEN 'active'
+--           ELSE 'basic'
+--         END
+--     FROM trust_scores ts
+--     WHERE u.id = ts.user_id;
+--   $$
+-- );
+--
+-- 2. Auto-expire jobs older than 30 days that are still active
+-- SELECT cron.schedule(
+--   'job-auto-expire',
+--   '0 0 * * *',
+--   $$
+--     UPDATE jobs
+--     SET status = 'cancelled'
+--     WHERE status = 'active'
+--       AND created_at < now() - interval '30 days';
+--   $$
+-- );
+--
+-- 3. Clean up expired OTP records hourly
+-- SELECT cron.schedule(
+--   'otp-cleanup',
+--   '0 * * * *',
+--   $$
+--     DELETE FROM otp_verifications WHERE expires_at < now();
+--   $$
+-- );

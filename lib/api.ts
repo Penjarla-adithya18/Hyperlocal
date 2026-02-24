@@ -301,18 +301,24 @@ export const mockReportOps = {
   },
 }
 
-// ─── Notifications (stub – extend with a notifications edge function) ──────
+// ─── Notifications ───────────────────────────────────────────────────────────
 
 export const mockNotificationOps = {
-  create: async (_notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> => {
-    // TODO: implement notifications edge function
-    throw new Error('Notifications edge function not yet implemented')
+  create: async (notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> => {
+    const res = await call<R<Notification>>('notifications', 'POST', {}, notification)
+    return res.data
   },
   findByUserId: async (_userId: string): Promise<Notification[]> => {
-    return []
+    // Edge function reads userId from JWT — the _userId param is ignored
+    const res = await call<R<Notification[]>>('notifications', 'GET')
+    return res.data || []
   },
-  markAsRead: async (_id: string): Promise<boolean> => {
-    return false
+  markAsRead: async (id: string): Promise<boolean> => {
+    await call<R<Notification>>('notifications', 'PATCH', { id })
+    return true
+  },
+  markAllRead: async (): Promise<void> => {
+    await call<R<{ ok: boolean }>>('notifications', 'DELETE')
   },
 }
 
@@ -381,6 +387,37 @@ export const mockEscrowOps = {
     return res.data || []
   },
 }
+
+// ─── Ratings ───────────────────────────────────────────────────────────────
+
+export interface Rating {
+  id: string
+  jobId: string
+  applicationId?: string
+  fromUserId: string
+  toUserId: string
+  rating: number
+  feedback?: string
+  createdAt: string
+}
+
+export const mockRatingOps = {
+  create: async (payload: {
+    jobId: string
+    applicationId?: string
+    toUserId: string
+    rating: number
+    feedback?: string
+  }): Promise<Rating> => {
+    const res = await call<R<Rating>>('ratings', 'POST', {}, payload)
+    return res.data
+  },
+  getByUser: async (userId: string): Promise<Rating[]> => {
+    const res = await call<R<Rating[]>>('ratings', 'GET', { userId })
+    return res.data || []
+  },
+}
+
 
 // ─── mockDb facade (drop-in replacement for the old mockDb export) ─────────
 

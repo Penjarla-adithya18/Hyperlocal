@@ -14,6 +14,7 @@ import { User, Loader2, X, Plus, Star, Sparkles } from 'lucide-react';
 import { mockWorkerProfileOps, mockUserOps } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, JOB_CATEGORIES } from '@/lib/aiMatching';
+import { VoiceInput } from '@/components/ui/voice-input';
 import { useToast } from '@/hooks/use-toast';
 
 export default function WorkerProfilePage() {
@@ -294,13 +295,21 @@ export default function WorkerProfilePage() {
             <div className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="experience">Work Experience</Label>
-                <Textarea
-                  id="experience"
-                  placeholder="e.g., I worked in a hotel for 5 years doing cleaning and customer service..."
-                  value={formData.experience}
-                  onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
-                  rows={4}
-                />
+                <div className="flex gap-2 items-start">
+                  <Textarea
+                    id="experience"
+                    placeholder="e.g., I worked in a hotel for 5 years doing cleaning and customer service..."
+                    value={formData.experience}
+                    onChange={(e) => setFormData({ ...formData, experience: e.target.value })}
+                    rows={4}
+                    className="flex-1"
+                  />
+                  <VoiceInput
+                    onResult={(t) => setFormData(prev => ({ ...prev, experience: prev.experience ? prev.experience + ' ' + t : t }))}
+                    lang="en-IN"
+                    append
+                  />
+                </div>
                 <Button
                   type="button"
                   variant="outline"

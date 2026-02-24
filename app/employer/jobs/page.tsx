@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/api'
 import { Job } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2 } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 
@@ -61,6 +61,7 @@ export default function EmployerJobsPage() {
     }
   }
 
+  const draftJobs = jobs.filter(j => j.status === 'draft')
   const activeJobs = jobs.filter(j => j.status === 'active')
   const completedJobs = jobs.filter(j => j.status === 'completed')
   const cancelledJobs = jobs.filter(j => j.status === 'cancelled')
@@ -83,13 +84,25 @@ export default function EmployerJobsPage() {
                 )}
               </div>
             </div>
-            <Badge variant={
-              job.status === 'active' ? 'default' : 
-              job.status === 'completed' ? 'outline' : 
-              'destructive'
-            }>
-              {job.status}
-            </Badge>
+            <div className="flex flex-col items-end gap-1">
+              <Badge variant={
+                job.status === 'active' ? 'default' :
+                job.status === 'draft' ? 'secondary' :
+                job.status === 'completed' ? 'outline' :
+                'destructive'
+              }>
+                {job.status === 'draft' ? '⏳ Pending Payment' : job.status}
+              </Badge>
+              {job.status !== 'draft' && (
+                <span className="text-xs flex items-center gap-1">
+                  {job.paymentStatus === 'locked' ? (
+                    <><Lock className="w-3 h-3 text-green-500" /><span className="text-green-600">Escrow Secured</span></>
+                  ) : (
+                    <><AlertCircle className="w-3 h-3 text-amber-500" /><span className="text-amber-600">Escrow Pending</span></>
+                  )}
+                </span>
+              )}
+            </div>
           </div>
         </CardHeader>
         <CardContent>
@@ -115,15 +128,26 @@ export default function EmployerJobsPage() {
           </div>
 
           <div className="flex gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              className="flex-1"
-              onClick={() => router.push(`/employer/jobs/${job.id}`)}
-            >
-              <Eye className="h-4 w-4 mr-2" />
-              View Details
-            </Button>
+            {job.status === 'draft' ? (
+              <Button
+                size="sm"
+                className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
+                onClick={() => router.push(`/employer/payment/${job.id}`)}
+              >
+                <Lock className="h-4 w-4 mr-2" />
+                Complete Payment to Go Live
+              </Button>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="flex-1"
+                onClick={() => router.push(`/employer/jobs/${job.id}`)}
+              >
+                <Eye className="h-4 w-4 mr-2" />
+                View Details
+              </Button>
+            )}
             {job.status === 'active' && (
               <>
                 <Button
@@ -175,8 +199,16 @@ export default function EmployerJobsPage() {
           </Button>
         </div>
 
-        <Tabs defaultValue="active" className="w-full">
+        <Tabs defaultValue={draftJobs.length > 0 ? 'draft' : 'active'} className="w-full">
           <TabsList className="mb-6">
+            {draftJobs.length > 0 && (
+              <TabsTrigger value="draft" className="relative">
+                Pending Payment
+                <span className="ml-1.5 bg-amber-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                  {draftJobs.length}
+                </span>
+              </TabsTrigger>
+            )}
             <TabsTrigger value="active">
               Active ({activeJobs.length})
             </TabsTrigger>
@@ -187,6 +219,20 @@ export default function EmployerJobsPage() {
               Cancelled ({cancelledJobs.length})
             </TabsTrigger>
           </TabsList>
+
+          {draftJobs.length > 0 && (
+            <TabsContent value="draft">
+              <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                These jobs are not visible to workers until you complete the escrow payment.
+              </div>
+              <div className="grid md:grid-cols-2 gap-6">
+                {draftJobs.map((job) => (
+                  <JobCard key={job.id} job={job} />
+                ))}
+              </div>
+            </TabsContent>
+          )}
 
           <TabsContent value="active">
             {activeJobs.length === 0 ? (

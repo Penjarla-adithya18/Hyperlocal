@@ -13,6 +13,7 @@ import { mockDb, mockUserOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp } from 'lucide-react'
+import { VoiceInput } from '@/components/ui/voice-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
 export default function WorkerJobsPage() {
@@ -162,13 +163,19 @@ export default function WorkerJobsPage() {
         <Card className="mb-6">
           <CardContent className="pt-6">
             <div className="flex flex-col md:flex-row gap-4">
-              <div className="flex-1 relative">
-                <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Search jobs by title, skills, or description..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="pl-10"
+              <div className="flex-1 relative flex items-center gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search jobs by title, skills, or description..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="pl-10"
+                  />
+                </div>
+                <VoiceInput
+                  onResult={(transcript) => setSearchQuery(transcript)}
+                  lang="en-IN"
                 />
               </div>
               <Select value={categoryFilter} onValueChange={setCategoryFilter}>

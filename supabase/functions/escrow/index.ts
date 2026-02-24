@@ -64,7 +64,21 @@ Deno.serve(async (req: Request) => {
       const body = await req.json()
       const payload: Record<string, unknown> = {}
       if (body.status !== undefined) payload.status = body.status
-      if (body.status === 'released') payload.released_at = new Date().toISOString()
+      if (body.status === 'released') {
+        payload.released_at = new Date().toISOString()
+        // Deduct 10% platform commission — store net payout
+        const { data: txRow } = await supabase
+          .from('escrow_transactions')
+          .select('amount')
+          .eq('id', id)
+          .maybeSingle()
+        if (txRow) {
+          const gross = Number(txRow.amount || 0)
+          const commission = Math.round(gross * 0.10)
+          payload.amount = gross - commission // net payout to worker
+          payload.commission = commission
+        }
+      }
       if (body.status === 'refunded') payload.refunded_at = new Date().toISOString()
 
       const { data, error } = await supabase

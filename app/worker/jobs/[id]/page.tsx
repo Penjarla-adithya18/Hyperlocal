@@ -10,11 +10,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockUserOps } from '@/lib/api'
-import { Job, User, Application } from '@/lib/types'
+import { mockDb, mockUserOps, mockWorkerProfileOps } from '@/lib/api'
+import { Job, User, Application, WorkerProfile } from '@/lib/types'
+import { calculateMatchScore, explainJobMatch } from '@/lib/aiMatching'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
-  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2 
+  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
@@ -26,6 +27,9 @@ export default function JobDetailsPage() {
   const [job, setJob] = useState<Job | null>(null)
   const [employer, setEmployer] = useState<User | null>(null)
   const [application, setApplication] = useState<Application | null>(null)
+  const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null)
+  const [matchScore, setMatchScore] = useState<number | null>(null)
+  const [matchExplanation, setMatchExplanation] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [showApplicationForm, setShowApplicationForm] = useState(false)
@@ -44,10 +48,19 @@ export default function JobDetailsPage() {
         setEmployer(employerData)
 
         if (user) {
-          const workerApplications = await mockDb.getApplicationsByWorker(user.id)
+          const [workerApplications, profile] = await Promise.all([
+            mockDb.getApplicationsByWorker(user.id),
+            mockWorkerProfileOps.findByUserId(user.id).catch(() => null),
+          ])
           const existingApplication = workerApplications
             .find(app => app.jobId === jobData.id)
           setApplication(existingApplication || null)
+          if (profile) {
+            setWorkerProfile(profile)
+            const score = calculateMatchScore(profile, jobData)
+            setMatchScore(score)
+            setMatchExplanation(explainJobMatch(profile, jobData, score))
+          }
         }
       }
     } catch (error) {
@@ -239,6 +252,37 @@ export default function JobDetailsPage() {
           </div>
 
           <div className="space-y-6">
+            {matchScore !== null && (
+              <Card className={`border-2 ${matchScore >= 70 ? 'border-green-300 bg-green-50/50' : matchScore >= 40 ? 'border-blue-200 bg-blue-50/50' : 'border-border'}`}>
+                <CardHeader className="pb-2">
+                  <CardTitle className="flex items-center gap-2 text-base">
+                    <Sparkles className="w-5 h-5 text-primary" /> AI Match Analysis
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="flex-1 bg-muted rounded-full h-3 overflow-hidden">
+                      <div
+                        className={`h-3 rounded-full transition-all ${matchScore >= 70 ? 'bg-green-500' : matchScore >= 40 ? 'bg-blue-500' : 'bg-amber-500'}`}
+                        style={{ width: `${matchScore}%` }}
+                      />
+                    </div>
+                    <span className={`text-lg font-bold ${matchScore >= 70 ? 'text-green-700' : matchScore >= 40 ? 'text-blue-700' : 'text-amber-600'}`}>
+                      {matchScore}%
+                    </span>
+                  </div>
+                  <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    {matchScore >= 70 ? '🌟 Strong Match' : matchScore >= 40 ? '👍 Good Match' : '📋 Possible Match'}
+                  </p>
+                  {matchExplanation && (
+                    <p className="text-sm text-muted-foreground leading-relaxed border-l-2 border-primary/30 pl-3">
+                      {matchExplanation}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
+            )}
+
             {employer && (
               <Card>
                 <CardHeader>

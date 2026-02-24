@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { resetPassword, logout } from '@/lib/auth'
@@ -31,10 +31,11 @@ export default function SettingsPage() {
   const [otpSent, setOtpSent] = useState(false)
   const [phoneLoading, setPhoneLoading] = useState(false)
 
-  if (!user) {
-    router.replace('/login')
-    return null
-  }
+  useEffect(() => {
+    if (!user) router.replace('/login')
+  }, [user, router])
+
+  if (!user) return null
 
   const NavComponent =
     user.role === 'worker'
@@ -47,7 +48,7 @@ export default function SettingsPage() {
   const trustColors: Record<string, string> = {
     basic: 'bg-gray-100 text-gray-700',
     active: 'bg-blue-100 text-blue-700',
-    trusted: 'bg-green-100 text-green/700',
+    trusted: 'bg-green-100 text-green-700',
   }
 
   // ── Change Password ──────────────────────────────────────────
@@ -57,8 +58,8 @@ export default function SettingsPage() {
       toast({ title: 'Passwords do not match', variant: 'destructive' })
       return
     }
-    if (pwForm.newPw.length < 6) {
-      toast({ title: 'Password must be at least 6 characters', variant: 'destructive' })
+    if (pwForm.newPw.length < 8) {
+      toast({ title: 'Password must be at least 8 characters', variant: 'destructive' })
       return
     }
     setPwLoading(true)
@@ -209,7 +210,7 @@ export default function SettingsPage() {
                   value={pwForm.newPw}
                   onChange={(e) => setPwForm((p) => ({ ...p, newPw: e.target.value }))}
                   required
-                  minLength={6}
+                  minLength={8}
                 />
               </div>
               <div>

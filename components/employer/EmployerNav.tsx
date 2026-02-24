@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Briefcase, Home, PlusCircle, Users, MessageSquare, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
+import { NotificationBell } from '@/components/ui/notification-bell';
 
 export function EmployerNav() {
   const pathname = usePathname();
@@ -59,6 +60,7 @@ export function EmployerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
+            <NotificationBell />
             <Link href="/settings">
               <Button variant="ghost" size="icon">
                 <Settings className="w-5 h-5" />

@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
   LayoutDashboard, Users, AlertTriangle, 
-  LogOut, Menu, X 
+  LogOut, Menu, X, IndianRupee 
 } from 'lucide-react'
 import { useState } from 'react'
 
@@ -23,6 +23,7 @@ export default function AdminNav() {
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Users', icon: Users, path: '/admin/users' },
     { label: 'Reports', icon: AlertTriangle, path: '/admin/reports' },
+    { label: 'Escrow', icon: IndianRupee, path: '/admin/escrow' },
   ]
 
   return (

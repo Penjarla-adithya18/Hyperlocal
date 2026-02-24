@@ -69,22 +69,21 @@ Deno.serve(async (req: Request) => {
         throw error
       }
 
-      await supabase.rpc('increment_application_count', { job_id: body.jobId }).catch(() => {
-        supabase
+      const { error: incrementError } = await supabase.rpc('increment_application_count', { job_id: body.jobId })
+      if (incrementError) {
+        const { data: job, error: jobReadError } = await supabase
           .from('jobs')
           .select('application_count')
           .eq('id', body.jobId)
-          .single()
-          .then(({ data: job }: { data: Record<string, unknown> | null }) => {
-            if (job) {
-              return supabase
-                .from('jobs')
-                .update({ application_count: ((job.application_count as number) || 0) + 1 })
-                .eq('id', body.jobId)
-            }
-            return Promise.resolve()
-          })
-      })
+          .maybeSingle()
+
+        if (!jobReadError && job) {
+          await supabase
+            .from('jobs')
+            .update({ application_count: Number(job.application_count || 0) + 1 })
+            .eq('id', body.jobId)
+        }
+      }
 
       return jsonResponse({ data: mapApplication(data) })
     }
