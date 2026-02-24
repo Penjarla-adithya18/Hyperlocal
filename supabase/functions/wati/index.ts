@@ -101,7 +101,7 @@ Deno.serve(async (req: Request) => {
       const otp = generateOTP()
       const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString()
 
-      // Try DB first; fall back to in-memory if table doesn't exist yet
+      // Try DB first; also always store in-memory as fallback
       const { error } = await supabase
         .from('otp_verifications')
         .upsert(
@@ -110,9 +110,11 @@ Deno.serve(async (req: Request) => {
         )
 
       if (error) {
-        console.warn('[WATI] DB upsert failed, using in-memory store:', error.message)
-        otpMemStore.set(phone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 })
+        console.warn('[WATI] DB upsert failed, using in-memory only:', error.message)
       }
+
+      // Always keep in-memory copy as reliable fallback
+      otpMemStore.set(phone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 })
 
       const message = TEMPLATES.otp([otp])
       await sendWhatsAppMessage(phone, message)
@@ -154,7 +156,25 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ success: true, message: 'OTP verified successfully' })
       }
 
-      if (!record) return jsonResponse({ success: false, message: 'OTP not found or expired' })
+      if (!record) {
+        // DB had no record — check in-memory fallback (covers RLS-blocked writes and missing table)
+        const mem = otpMemStore.get(phone)
+        if (!mem) return jsonResponse({ success: false, message: 'OTP not found or expired. Please request a new one.' })
+        if (Date.now() > mem.expiresAt) {
+          otpMemStore.delete(phone)
+          return jsonResponse({ success: false, message: 'OTP expired. Please request a new one.' })
+        }
+        if (mem.attempts >= 5) {
+          otpMemStore.delete(phone)
+          return jsonResponse({ success: false, message: 'Too many attempts. Request a new OTP.' })
+        }
+        if (mem.otp !== otp_code) {
+          otpMemStore.set(phone, { ...mem, attempts: mem.attempts + 1 })
+          return jsonResponse({ success: false, message: 'Invalid OTP. Please try again.' })
+        }
+        otpMemStore.delete(phone)
+        return jsonResponse({ success: true, message: 'OTP verified successfully' })
+      }
 
       if (new Date(record.expires_at) < new Date()) {
         await supabase.from('otp_verifications').delete().eq('phone_number', phone)
