@@ -10,6 +10,9 @@ const WATI_API_URL  = Deno.env.get('WATI_API_URL')  ?? ''  // e.g. https://live-
 const WATI_API_KEY  = Deno.env.get('WATI_API_KEY')  ?? ''  // Bearer token from WATI dashboard
 const OTP_TTL_MS    = 5 * 60 * 1000                        // 5 minutes
 
+// In-memory fallback store — used when otp_verifications table is unavailable
+const otpMemStore = new Map<string, { otp: string; expiresAt: number; attempts: number }>()
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function generateOTP(): string {
@@ -98,7 +101,7 @@ Deno.serve(async (req: Request) => {
       const otp = generateOTP()
       const expiresAt = new Date(Date.now() + OTP_TTL_MS).toISOString()
 
-      // Upsert into otp_verifications table
+      // Try DB first; fall back to in-memory if table doesn't exist yet
       const { error } = await supabase
         .from('otp_verifications')
         .upsert(
@@ -106,7 +109,10 @@ Deno.serve(async (req: Request) => {
           { onConflict: 'phone_number' }
         )
 
-      if (error) throw error
+      if (error) {
+        console.warn('[WATI] DB upsert failed, using in-memory store:', error.message)
+        otpMemStore.set(phone, { otp, expiresAt: Date.now() + OTP_TTL_MS, attempts: 0 })
+      }
 
       const message = TEMPLATES.otp([otp])
       await sendWhatsAppMessage(phone, message)
@@ -120,13 +126,34 @@ Deno.serve(async (req: Request) => {
       const otp_code = (body as { otp_code?: string }).otp_code
       if (!otp_code) return errorResponse('otp_code is required', 400)
 
-      const { data: record, error } = await supabase
+      // Try DB first
+      const { data: record, error: dbError } = await supabase
         .from('otp_verifications')
         .select('*')
         .eq('phone_number', phone)
         .maybeSingle()
 
-      if (error) throw error
+      // If DB table missing, fall back to in-memory store
+      if (dbError) {
+        console.warn('[WATI] DB lookup failed, using in-memory store:', dbError.message)
+        const mem = otpMemStore.get(phone)
+        if (!mem) return jsonResponse({ success: false, message: 'OTP not found or expired' })
+        if (Date.now() > mem.expiresAt) {
+          otpMemStore.delete(phone)
+          return jsonResponse({ success: false, message: 'OTP expired. Please request a new one.' })
+        }
+        if (mem.attempts >= 5) {
+          otpMemStore.delete(phone)
+          return jsonResponse({ success: false, message: 'Too many attempts. Request a new OTP.' })
+        }
+        if (mem.otp !== otp_code) {
+          otpMemStore.set(phone, { ...mem, attempts: mem.attempts + 1 })
+          return jsonResponse({ success: false, message: 'Invalid OTP. Please try again.' })
+        }
+        otpMemStore.delete(phone)
+        return jsonResponse({ success: true, message: 'OTP verified successfully' })
+      }
+
       if (!record) return jsonResponse({ success: false, message: 'OTP not found or expired' })
 
       if (new Date(record.expires_at) < new Date()) {
