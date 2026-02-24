@@ -10,14 +10,18 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockUserOps, mockWorkerProfileOps } from '@/lib/api'
+import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
 import { calculateMatchScore, explainJobMatch } from '@/lib/aiMatching'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
-  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle
+  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from '@/components/ui/dialog'
+import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 
 export default function JobDetailsPage() {
   const router = useRouter()
@@ -34,6 +38,11 @@ export default function JobDetailsPage() {
   const [applying, setApplying] = useState(false)
   const [showApplicationForm, setShowApplicationForm] = useState(false)
   const [coverLetter, setCoverLetter] = useState('')
+  // Report job state
+  const [reportOpen, setReportOpen] = useState(false)
+  const [reportReason, setReportReason] = useState('fake_job')
+  const [reportDesc, setReportDesc] = useState('')
+  const [submittingReport, setSubmittingReport] = useState(false)
 
   useEffect(() => {
     loadJobDetails()
@@ -100,6 +109,28 @@ export default function JobDetailsPage() {
       })
     } finally {
       setApplying(false)
+    }
+  }
+
+  const handleReportJob = async () => {
+    if (!user || !job) return
+    setSubmittingReport(true)
+    try {
+      await mockReportOps.create({
+        reporterId: user.id,
+        reportedJobId: job.id,
+        type: 'fake_job',
+        reason: reportReason,
+        description: reportDesc || reportReason,
+        status: 'pending',
+      })
+      toast({ title: 'Report submitted', description: 'Our team will review this job listing.' })
+      setReportOpen(false)
+      setReportDesc('')
+    } catch {
+      toast({ title: 'Failed to submit report', variant: 'destructive' })
+    } finally {
+      setSubmittingReport(false)
     }
   }
 
@@ -374,7 +405,7 @@ export default function JobDetailsPage() {
               </Card>
             ) : (
               <Card>
-                <CardContent className="pt-6">
+                <CardContent className="pt-6 space-y-3">
                   <Button
                     className="w-full"
                     size="lg"
@@ -384,16 +415,82 @@ export default function JobDetailsPage() {
                     Apply Now
                   </Button>
                   {job.status !== 'active' && (
-                    <p className="text-sm text-center text-muted-foreground mt-2">
+                    <p className="text-sm text-center text-muted-foreground">
                       This job is no longer active
                     </p>
                   )}
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="w-full text-muted-foreground hover:text-destructive"
+                    onClick={() => setReportOpen(true)}
+                  >
+                    <Flag className="h-4 w-4 mr-2" />
+                    Report this job
+                  </Button>
                 </CardContent>
               </Card>
             )}
           </div>
         </div>
       </main>
+
+      {/* Report Job Dialog */}
+      <Dialog open={reportOpen} onOpenChange={setReportOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Flag className="h-5 w-5 text-destructive" />
+              Report this Job
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div>
+              <Label className="text-sm font-medium mb-3 block">Reason</Label>
+              <RadioGroup value={reportReason} onValueChange={setReportReason} className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="fake_job" id="rj-fake" />
+                  <Label htmlFor="rj-fake">Fake or scam job listing</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="payment_issue" id="rj-pay" />
+                  <Label htmlFor="rj-pay">Payment issue or non-payment history</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="misleading" id="rj-mislead" />
+                  <Label htmlFor="rj-mislead">Misleading job description</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="illegal" id="rj-illegal" />
+                  <Label htmlFor="rj-illegal">Illegal or unsafe work</Label>
+                </div>
+                <div className="flex items-center gap-2">
+                  <RadioGroupItem value="spam" id="rj-spam" />
+                  <Label htmlFor="rj-spam">Spam or duplicate posting</Label>
+                </div>
+              </RadioGroup>
+            </div>
+            <div>
+              <Label htmlFor="report-job-desc" className="text-sm font-medium mb-1 block">
+                Additional details <span className="text-muted-foreground">(optional)</span>
+              </Label>
+              <Textarea
+                id="report-job-desc"
+                placeholder="Describe the issue..."
+                rows={3}
+                value={reportDesc}
+                onChange={e => setReportDesc(e.target.value)}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setReportOpen(false)}>Cancel</Button>
+            <Button variant="destructive" onClick={handleReportJob} disabled={submittingReport}>
+              {submittingReport ? 'Submitting...' : 'Submit Report'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

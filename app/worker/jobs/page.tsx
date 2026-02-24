@@ -12,7 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Navigation, ChevronLeft, ChevronRight } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -27,6 +27,25 @@ export default function WorkerJobsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [locationFilter, setLocationFilter] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 12
+  const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null)
+
+  // Try to get worker's current GPS location for distance display
+  useEffect(() => {
+    navigator.geolocation?.getCurrentPosition(
+      pos => setWorkerCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      () => {} // silently fail
+    )
+  }, [])
+
+  function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+    const R = 6371
+    const dLat = (lat2 - lat1) * Math.PI / 180
+    const dLng = (lng2 - lng1) * Math.PI / 180
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * Math.sin(dLng / 2) ** 2
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  }
 
   useEffect(() => {
     if (user) {
@@ -37,7 +56,8 @@ export default function WorkerJobsPage() {
   const loadJobs = async () => {
     try {
       const allJobs = await mockDb.getAllJobs()
-      const activeJobs = allJobs.filter(j => j.status === 'active')
+      // Only show jobs where escrow/payment is locked — hide draft/unpaid listings
+      const activeJobs = allJobs.filter(j => j.status === 'active' && j.paymentStatus !== 'pending')
       setJobs(activeJobs)
       const employerIds = [...new Set(activeJobs.map((job) => job.employerId))]
       if (employerIds.length > 0) {
@@ -74,9 +94,17 @@ export default function WorkerJobsPage() {
     return matchesSearch && matchesCategory && matchesLocation
   })
 
+  // Reset to page 1 when filters change
+  useEffect(() => { setCurrentPage(1) }, [searchQuery, categoryFilter, locationFilter])
+  const totalPages = Math.ceil(filteredJobs.length / PAGE_SIZE)
+  const paginatedJobs = filteredJobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
     const employer = employersById[job.employerId]
     const hasApplied = applications.some(app => app.jobId === job.id)
+    const distKm = workerCoords && job.latitude && job.longitude
+      ? haversineKm(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+      : null
 
     return (
       <Card className="hover:border-primary transition-colors">
@@ -111,6 +139,12 @@ export default function WorkerJobsPage() {
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 text-muted-foreground" />
               <span>{job.location}</span>
+              {distKm !== null && (
+                <span className="inline-flex items-center gap-0.5 text-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 px-1.5 py-0.5 rounded-full">
+                  <Navigation className="h-3 w-3" />
+                  {distKm < 1 ? `${Math.round(distKm * 1000)}m` : `${distKm.toFixed(1)} km`}
+                </span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
@@ -251,12 +285,35 @@ export default function WorkerJobsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredJobs.map((job) => {
-                  const match = matchedJobs.find(m => m.job.id === job.id)
-                  return <JobCard key={job.id} job={job} matchScore={match?.score} />
-                })}
-              </div>
+              <>
+                <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {paginatedJobs.map((job) => {
+                    const match = matchedJobs.find(m => m.job.id === job.id)
+                    return <JobCard key={job.id} job={job} matchScore={match?.score} />
+                  })}
+                </div>
+                {totalPages > 1 && (
+                  <div className="flex items-center justify-center gap-3 mt-8">
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                    >
+                      <ChevronLeft className="h-4 w-4 mr-1" /> Previous
+                    </Button>
+                    <span className="text-sm text-muted-foreground">
+                      Page {currentPage} of {totalPages} &middot; {filteredJobs.length} jobs
+                    </span>
+                    <Button
+                      variant="outline" size="sm"
+                      onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                      disabled={currentPage === totalPages}
+                    >
+                      Next <ChevronRight className="h-4 w-4 ml-1" />
+                    </Button>
+                  </div>
+                )}
+              </>
             )}
           </TabsContent>
         </Tabs>

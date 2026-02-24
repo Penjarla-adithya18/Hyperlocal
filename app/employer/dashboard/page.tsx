@@ -20,6 +20,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
 
 export default function EmployerDashboardPage() {
@@ -73,12 +74,32 @@ export default function EmployerDashboardPage() {
     return (
       <div className="min-h-screen bg-background">
         <EmployerNav />
-        <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-accent border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading your dashboard...</p>
+        <div className="container mx-auto px-4 py-8 space-y-8">
+          <div className="flex items-start justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
             </div>
+            <Skeleton className="h-10 w-36" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-6">
+                <Skeleton className="h-4 w-24 mb-3" />
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-20" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Card key={i} className="p-6 space-y-4">
+                <Skeleton className="h-6 w-32" />
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <Skeleton key={j} className="h-16 w-full rounded-lg" />
+                ))}
+              </Card>
+            ))}
           </div>
         </div>
       </div>

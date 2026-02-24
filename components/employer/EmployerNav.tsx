@@ -98,6 +98,7 @@ export function EmployerNav() {
               </Link>
             );
           })}
+          <NotificationBell />
         </div>
       </div>
     </nav>

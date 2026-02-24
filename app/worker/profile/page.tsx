@@ -10,10 +10,10 @@ import { Textarea } from '@/components/ui/textarea';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
-import { User, Loader2, X, Plus, Star, Sparkles } from 'lucide-react';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp } from 'lucide-react';
 import { mockWorkerProfileOps, mockUserOps } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
-import { extractSkills, JOB_CATEGORIES } from '@/lib/aiMatching';
+import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { VoiceInput } from '@/components/ui/voice-input';
 import { useToast } from '@/hooks/use-toast';
 
@@ -23,6 +23,7 @@ export default function WorkerProfilePage() {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [extractingSkills, setExtractingSkills] = useState(false);
   const [profile, setProfile] = useState<WorkerProfile | null>(null);
   const [formData, setFormData] = useState({
     skills: [] as string[],
@@ -67,7 +68,7 @@ export default function WorkerProfilePage() {
     }
   };
 
-  const handleExtractSkills = () => {
+  const handleExtractSkills = async () => {
     if (!formData.experience) {
       toast({
         title: 'No Experience Provided',
@@ -77,14 +78,24 @@ export default function WorkerProfilePage() {
       return;
     }
 
-    const extracted = extractSkills(formData.experience);
-    const newSkills = [...new Set([...formData.skills, ...extracted])];
-    setFormData({ ...formData, skills: newSkills });
-
-    toast({
-      title: 'Skills Extracted!',
-      description: `Found ${extracted.length} skills from your experience`,
-    });
+    setExtractingSkills(true);
+    try {
+      const extracted = await extractSkillsWithAI(formData.experience);
+      const newSkills = [...new Set([...formData.skills, ...extracted])];
+      setFormData({ ...formData, skills: newSkills });
+      toast({
+        title: 'Skills Extracted!',
+        description: `AI found ${extracted.length} skill${extracted.length !== 1 ? 's' : ''} from your experience`,
+      });
+    } catch {
+      // fallback
+      const extracted = extractSkills(formData.experience);
+      const newSkills = [...new Set([...formData.skills, ...extracted])];
+      setFormData({ ...formData, skills: newSkills });
+      toast({ title: 'Skills Extracted!', description: `Found ${extracted.length} skills` });
+    } finally {
+      setExtractingSkills(false);
+    }
   };
 
   const addSkill = () => {
@@ -230,8 +241,30 @@ export default function WorkerProfilePage() {
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
+              <div className="space-y-2">              {/* Trust Score Banner */}
+              {user && (
+                <div className={`flex items-center gap-3 p-3 rounded-lg border ${
+                  user.trustLevel === 'trusted' ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' :
+                  user.trustLevel === 'active' ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800' :
+                  'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
+                }`}>
+                  <Shield className={`h-5 w-5 shrink-0 ${
+                    user.trustLevel === 'trusted' ? 'text-green-600' :
+                    user.trustLevel === 'active' ? 'text-blue-600' : 'text-amber-600'
+                  }`} />
+                  <div className="flex-1">
+                    <p className="text-sm font-semibold capitalize">
+                      {user.trustLevel === 'trusted' ? '✅ Trusted Worker' :
+                       user.trustLevel === 'active' ? '👍 Active Worker' : '🌱 New Worker'}
+                    </p>
+                    <p className="text-xs text-muted-foreground">Trust Score: {user.trustScore.toFixed(1)} / 5.0</p>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                    <span className="text-sm font-bold">{user.trustScore.toFixed(1)}</span>
+                  </div>
+                </div>
+              )}                <Label htmlFor="location">Location</Label>
                 <Input
                   id="location"
                   placeholder="e.g., Vijayawada, Andhra Pradesh"
@@ -315,10 +348,13 @@ export default function WorkerProfilePage() {
                   variant="outline"
                   size="sm"
                   onClick={handleExtractSkills}
-                  disabled={!formData.experience}
+                  disabled={!formData.experience || extractingSkills}
                 >
-                  <Sparkles className="w-4 h-4 mr-2" />
-                  Extract Skills with AI
+                  {extractingSkills ? (
+                    <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Extracting...</>
+                  ) : (
+                    <><Sparkles className="w-4 h-4 mr-2" />Extract Skills with AI</>
+                  )}
                 </Button>
               </div>
 

@@ -4,6 +4,7 @@ import { Analytics } from '@vercel/analytics/next'
 import { AuthProvider } from '@/contexts/AuthContext'
 import { I18nProvider } from '@/contexts/I18nContext'
 import { Toaster } from '@/components/ui/toaster'
+import { ErrorBoundary } from '@/components/ui/error-boundary'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -40,12 +41,14 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="font-sans antialiased">
-        <AuthProvider>
-          <I18nProvider>
-            {children}
-            <Toaster />
-          </I18nProvider>
-        </AuthProvider>
+        <ErrorBoundary>
+          <AuthProvider>
+            <I18nProvider>
+              {children}
+              <Toaster />
+            </I18nProvider>
+          </AuthProvider>
+        </ErrorBoundary>
         <Analytics />
       </body>
     </html>

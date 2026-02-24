@@ -13,7 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { mockDb } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Briefcase, MapPin, Clock, IndianRupee, X, Plus, Calendar } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, X, Plus, Calendar, AlertTriangle } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { LocationInput } from '@/components/ui/location-input'
 
@@ -93,6 +93,21 @@ export default function PostJobPage() {
     setLoading(true)
 
     try {
+      // Posting limits: basic trust level employers can only post up to 3 jobs
+      if (user.trustLevel === 'basic') {
+        const allJobs = await mockDb.getAllJobs()
+        const myActiveJobs = allJobs.filter(j => j.employerId === user.id && (j.status === 'active' || j.status === 'draft'))
+        if (myActiveJobs.length >= 3) {
+          toast({
+            title: 'Posting Limit Reached',
+            description: 'New accounts can post up to 3 jobs. Complete existing jobs to unlock more postings.',
+            variant: 'destructive',
+          })
+          setLoading(false)
+          return
+        }
+      }
+
       const newJob = await mockDb.createJob({
         ...formData,
         employerId: user.id,

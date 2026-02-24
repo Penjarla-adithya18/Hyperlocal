@@ -19,10 +19,12 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
+  Shield,
 } from 'lucide-react';
 import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
@@ -89,11 +91,26 @@ export default function WorkerDashboardPage() {
       <div className="min-h-screen bg-background">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading your dashboard...</p>
-            </div>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="p-6">
+                <Skeleton className="h-4 w-24 mb-3" />
+                <Skeleton className="h-8 w-16 mb-2" />
+                <Skeleton className="h-3 w-32" />
+              </Card>
+            ))}
+          </div>
+          <Skeleton className="h-40 w-full rounded-xl mb-6" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {[1, 2, 3].map(i => (
+              <Card key={i} className="p-4">
+                <Skeleton className="h-5 w-3/4 mb-2" />
+                <Skeleton className="h-4 w-1/2 mb-4" />
+                <Skeleton className="h-3 w-full mb-1" />
+                <Skeleton className="h-3 w-full mb-3" />
+                <Skeleton className="h-9 w-full" />
+              </Card>
+            ))}
           </div>
         </div>
       </div>
@@ -202,12 +219,16 @@ export default function WorkerDashboardPage() {
 
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
             {recommendedJobs.length === 0 ? (
-              <Card className="p-8 col-span-full text-center">
-                <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">No Jobs Available</h3>
-                <p className="text-sm text-muted-foreground">
-                  Check back later for new opportunities
+              <Card className="p-8 col-span-full text-center border-dashed">
+                <Sparkles className="w-12 h-12 text-primary/40 mx-auto mb-4" />
+                <h3 className="font-semibold mb-2">No Recommended Jobs Yet</h3>
+                <p className="text-sm text-muted-foreground mb-4">
+                  Complete your profile with skills and experience to get AI-powered job recommendations
                 </p>
+                <Button onClick={() => router.push('/worker/profile')}>
+                  <ArrowRight className="w-4 h-4 mr-2" />
+                  Complete Profile
+                </Button>
               </Card>
             ) : (
               recommendedJobs.map(({ job, matchScore }) => (

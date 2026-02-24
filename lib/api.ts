@@ -426,6 +426,24 @@ export const mockRatingOps = {
   },
 }
 
+// ─── WATI WhatsApp Notifications ──────────────────────────────────────────
+
+/**
+ * Send a WhatsApp/WATI notification for key platform events.
+ * Silently fails — never blocks the main action.
+ */
+export async function sendWATIAlert(
+  action: 'application_accepted' | 'payment_released' | 'job_matched' | 'job_completed',
+  phoneNumber: string,
+  vars?: Record<string, string>
+): Promise<void> {
+  try {
+    await call('wati', 'POST', {}, { action, phoneNumber, ...vars })
+  } catch {
+    // Fire-and-forget: never block the UI for notification failures
+  }
+}
+
 
 // ─── mockDb facade (drop-in replacement for the old mockDb export) ─────────
 

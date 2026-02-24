@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/api'
 import { User } from '@/lib/types'
-import { Search, Star, Ban, CheckCircle } from 'lucide-react'
+import { Search, Star, Ban, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 
@@ -36,12 +36,12 @@ export default function AdminUsersPage() {
   }
 
   const handleBanUser = async (userId: string) => {
-    if (confirm('Are you sure you want to ban this user?')) {
-      const updated = await mockDb.updateUser(userId, { isVerified: false })
+    if (confirm('Are you sure you want to suspend this user? They will be unable to use the platform.')) {
+      const updated = await mockDb.updateUser(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
       if (updated) {
         toast({
-          title: 'User Banned',
-          description: 'User has been banned from the platform'
+          title: 'Account Suspended',
+          description: 'User has been suspended from the platform'
         })
         loadUsers()
       }
@@ -52,8 +52,8 @@ export default function AdminUsersPage() {
     const updated = await mockDb.updateUser(userId, { isVerified: true })
     if (updated) {
       toast({
-        title: 'User Verified',
-        description: 'User has been verified'
+        title: 'Account Restored',
+        description: 'User account has been restored'
       })
       loadUsers()
     }
@@ -109,6 +109,9 @@ export default function AdminUsersPage() {
               <Badge variant={user.role === 'worker' ? 'default' : 'outline'}>
                 {user.role}
               </Badge>
+              <Badge variant={user.isVerified ? 'default' : 'destructive'} className="capitalize">
+                {user.isVerified ? user.trustLevel : 'Suspended'}
+              </Badge>
             </div>
 
             <div className="flex gap-2 mt-4">
@@ -116,10 +119,11 @@ export default function AdminUsersPage() {
                 <Button
                   size="sm"
                   variant="outline"
+                  className="text-green-600 border-green-300 hover:bg-green-50"
                   onClick={() => handleVerifyUser(user.id)}
                 >
-                  <CheckCircle className="h-4 w-4 mr-2" />
-                  Verify
+                  <ShieldCheck className="h-4 w-4 mr-2" />
+                  Restore Account
                 </Button>
               ) : (
                 <Button
@@ -127,8 +131,8 @@ export default function AdminUsersPage() {
                   variant="destructive"
                   onClick={() => handleBanUser(user.id)}
                 >
-                  <Ban className="h-4 w-4 mr-2" />
-                  Ban
+                  <ShieldOff className="h-4 w-4 mr-2" />
+                  Suspend
                 </Button>
               )}
             </div>

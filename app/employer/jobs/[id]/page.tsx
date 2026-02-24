@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps } from '@/lib/api'
+import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, sendWATIAlert } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Job, Application, EscrowTransaction } from '@/lib/types'
 import {
@@ -31,6 +31,7 @@ export default function EmployerJobDetailPage() {
   const [job, setJob] = useState<Job | null>(null)
   const [escrow, setEscrow] = useState<EscrowTransaction | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
+  const [workersById, setWorkersById] = useState<Record<string, import('@/lib/types').User>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [disputeOpen, setDisputeOpen] = useState(false)
@@ -52,6 +53,13 @@ export default function EmployerJobDetailPage() {
       setJob(jobData)
       setApplications(allApps)
       setEscrow(allEscrow?.find((e) => e.jobId === jobId) ?? null)
+      // Load worker details for trust badges
+      if (allApps.length > 0) {
+        const workers = await Promise.all(allApps.map(a => mockUserOps.findById(a.workerId).catch(() => null)))
+        const wMap: Record<string, import('@/lib/types').User> = {}
+        for (const w of workers) { if (w) wMap[w.id] = w }
+        setWorkersById(wMap)
+      }
     } catch (err) { console.error(err) }
     finally { setLoading(false) }
   }
@@ -83,6 +91,15 @@ export default function EmployerJobDetailPage() {
         mockDb.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
       ])
       toast({ title: 'Payment Released', description: 'Net payout sent to worker.' })
+      // Send WhatsApp notification to worker
+      const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
+      if (acceptedApp) {
+        const worker = await mockUserOps.findById(acceptedApp.workerId).catch(() => null)
+        if (worker) {
+          const amount = job?.payAmount ?? job?.pay ?? 0
+          sendWATIAlert('payment_released', worker.phoneNumber, { jobTitle: job?.title ?? '', amount: String(amount) })
+        }
+      }
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to release payment', variant: 'destructive' }) }
     finally { setActionLoading(false) }
@@ -199,20 +216,31 @@ export default function EmployerJobDetailPage() {
                   </div>
                 ) : (
                   <div className="space-y-3">
-                    {applications.map((app) => (
-                      <div key={app.id} className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/50">
-                        <div className="flex items-center gap-3">
-                          <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center"><Briefcase className="w-4 h-4 text-primary" /></div>
-                          <div>
-                            <p className="text-sm font-medium">Worker Application</p>
-                            <p className="text-xs text-muted-foreground">Match: <span className="text-primary font-semibold">{app.matchScore}%</span> · <Badge variant="outline" className="text-xs ml-1">{app.status}</Badge></p>
+                    {applications.map((app) => {
+                      const worker = workersById[app.workerId]
+                      const trustColor = worker?.trustLevel === 'trusted' ? 'text-green-600' : worker?.trustLevel === 'active' ? 'text-blue-600' : 'text-amber-600'
+                      const trustLabel = worker?.trustLevel === 'trusted' ? '✅ Trusted' : worker?.trustLevel === 'active' ? '👍 Active' : '🌱 New'
+                      return (
+                        <div key={app.id} className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/50">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
+                              {worker?.fullName?.charAt(0) || 'W'}
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium">{worker?.fullName || 'Worker'}</p>
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <p className="text-xs text-muted-foreground">Match: <span className="text-primary font-semibold">{app.matchScore}%</span></p>
+                                <Badge variant="outline" className="text-xs">{app.status}</Badge>
+                                {worker && <span className={`text-xs font-medium ${trustColor}`}>{trustLabel} · ⭐ {worker.trustScore.toFixed(1)}</span>}
+                              </div>
+                            </div>
                           </div>
+                          <Button size="sm" variant="outline" onClick={() => router.push('/employer/chat')}>
+                            <MessageSquare className="w-4 h-4 mr-1" /> Chat
+                          </Button>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => router.push('/employer/chat')}>
-                          <MessageSquare className="w-4 h-4 mr-1" /> Chat
-                        </Button>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </div>
                 )}
               </CardContent>

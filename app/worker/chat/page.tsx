@@ -11,8 +11,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps } from '@/lib/api'
 import { supabase } from '@/lib/supabase/client'
 import { filterChatMessage } from '@/lib/chatFilter'
-import { ChatConversation, ChatMessage, User } from '@/lib/types'
-import { Send, Search, MessageCircle, Flag } from 'lucide-react'
+import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
+import { Send, Search, MessageCircle, Flag, AlertCircle } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -34,6 +34,7 @@ export default function WorkerChatPage() {
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [usersById, setUsersById] = useState<Record<string, User>>({})
+  const [jobsById, setJobsById] = useState<Record<string, Job>>({})
   const [newMessage, setNewMessage] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [reportDialogOpen, setReportDialogOpen] = useState(false)
@@ -104,6 +105,16 @@ export default function WorkerChatPage() {
     }
     if (userConvs.length > 0 && !selectedConversation) {
       setSelectedConversation(userConvs[0])
+    }
+    // Load jobs for all conversations (to check completion status)
+    const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
+    if (jobIds.length > 0) {
+      const allJobs = await mockDb.getAllJobs()
+      const jMap: Record<string, Job> = {}
+      for (const j of allJobs) {
+        if (jobIds.includes(j.id)) jMap[j.id] = j
+      }
+      setJobsById(jMap)
     }
   }
 
@@ -326,17 +337,24 @@ export default function WorkerChatPage() {
                   </div>
                 </ScrollArea>
                 <CardContent className="border-t pt-4">
-                  <div className="flex gap-2">
-                    <Input
-                      placeholder="Type a message..."
-                      value={newMessage}
-                      onChange={(e) => setNewMessage(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                    />
-                    <Button onClick={handleSendMessage}>
-                      <Send className="h-4 w-4" />
-                    </Button>
-                  </div>
+                  {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
+                    <div className="flex items-center gap-2 p-3 bg-muted rounded-lg text-sm text-muted-foreground">
+                      <AlertCircle className="h-4 w-4 shrink-0" />
+                      This conversation is closed — job has been completed.
+                    </div>
+                  ) : (
+                    <div className="flex gap-2">
+                      <Input
+                        placeholder="Type a message..."
+                        value={newMessage}
+                        onChange={(e) => setNewMessage(e.target.value)}
+                        onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
+                      />
+                      <Button onClick={handleSendMessage}>
+                        <Send className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </CardContent>
               </>
             ) : (
