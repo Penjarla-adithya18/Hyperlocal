@@ -108,6 +108,7 @@ export function WorkerNav() {
               </Link>
             );
           })}
+          <NotificationBell />
         </div>
       </div>
     </nav>

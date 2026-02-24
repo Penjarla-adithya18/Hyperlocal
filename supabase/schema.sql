@@ -234,29 +234,37 @@ alter table notifications enable row level security;
 -- These policies are for any direct client queries.
 
 -- ratings: users can see ratings addressed to them; insert via edge fn only
-create policy if not exists "ratings_select"
-  on ratings for select
-  using (
-    to_user_id = auth.uid()::text
-    or from_user_id = auth.uid()::text
-  );
-
-create policy if not exists "ratings_insert"
-  on ratings for insert
-  with check (from_user_id = auth.uid()::text);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'ratings_select' AND tablename = 'ratings') THEN
+    CREATE POLICY "ratings_select" ON ratings FOR SELECT
+      USING (to_user_id = auth.uid() OR from_user_id = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'ratings_insert' AND tablename = 'ratings') THEN
+    CREATE POLICY "ratings_insert" ON ratings FOR INSERT
+      WITH CHECK (from_user_id = auth.uid());
+  END IF;
+END $$;
 
 -- notifications: users can only see their own notifications
-create policy if not exists "notifications_select"
-  on notifications for select
-  using (user_id = auth.uid()::text);
-
-create policy if not exists "notifications_update"
-  on notifications for update
-  using (user_id = auth.uid()::text);
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'notifications_select' AND tablename = 'notifications') THEN
+    CREATE POLICY "notifications_select" ON notifications FOR SELECT
+      USING (user_id = auth.uid());
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'notifications_update' AND tablename = 'notifications') THEN
+    CREATE POLICY "notifications_update" ON notifications FOR UPDATE
+      USING (user_id = auth.uid());
+  END IF;
+END $$;
 
 -- application_id unique constraint on ratings
-alter table ratings
-  add constraint if not exists ratings_application_unique unique (application_id, from_user_id);
+DO $$ BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'ratings_application_unique'
+  ) THEN
+    ALTER TABLE ratings ADD CONSTRAINT ratings_application_unique UNIQUE (application_id, from_user_id);
+  END IF;
+END $$;
 
 -- ─── Scheduled Jobs (pg_cron) ────────────────────────────────────────────────
 -- Enable pg_cron in Supabase dashboard: Extensions → pg_cron → Enable
