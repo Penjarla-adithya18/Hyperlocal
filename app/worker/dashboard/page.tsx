@@ -25,10 +25,12 @@ import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useI18n } from '@/contexts/I18nContext';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recommendedJobs, setRecommendedJobs] = useState<Array<{ job: Job; matchScore: number }>>([]);
@@ -126,8 +128,8 @@ export default function WorkerDashboardPage() {
       <div className="container mx-auto px-4 py-8 space-y-8">
         {/* Welcome Section */}
         <div>
-          <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.fullName}!</h1>
-          <p className="text-muted-foreground">Here's what's happening with your job search</p>
+          <h1 className="text-3xl font-bold mb-2">{t('worker.dash.welcome', { name: user?.fullName ?? '' })}</h1>
+          <p className="text-muted-foreground">{t('worker.dash.subtitle')}</p>
         </div>
 
         {/* Profile Completion Alert */}
@@ -138,20 +140,20 @@ export default function WorkerDashboardPage() {
                 <AlertCircle className="w-5 h-5 text-accent" />
               </div>
               <div className="flex-1">
-                <h3 className="font-semibold mb-1">Complete Your Profile</h3>
+                <h3 className="font-semibold mb-1">{t('worker.dash.completeProfile')}</h3>
                 <p className="text-sm text-muted-foreground mb-3">
-                  Complete your profile to get better AI-powered job recommendations
+                  {t('worker.dash.completeProfileDesc')}
                 </p>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">Profile Completeness</span>
+                    <span className="text-muted-foreground">{t('worker.dash.profilePct')}</span>
                     <span className="font-semibold">{profileCompleteness}%</span>
                   </div>
                   <Progress value={profileCompleteness} className="h-2" />
                 </div>
                 <Link href="/worker/profile">
                   <Button size="sm" className="mt-4">
-                    Complete Profile
+                    {t('worker.dash.completeBtn')}
                     <ArrowRight className="w-4 h-4 ml-2" />
                   </Button>
                 </Link>
@@ -167,7 +169,7 @@ export default function WorkerDashboardPage() {
               <Briefcase className="w-8 h-8 text-primary" />
             </div>
             <div className="text-2xl font-bold">{applications.length}</div>
-            <div className="text-sm text-muted-foreground">Applications</div>
+            <div className="text-sm text-muted-foreground">{t('worker.dash.applications')}</div>
           </Card>
 
           <Card className="p-6">
@@ -175,7 +177,7 @@ export default function WorkerDashboardPage() {
               <Star className="w-8 h-8 text-accent" />
             </div>
             <div className="text-2xl font-bold">{trustScore?.score || 50}</div>
-            <div className="text-sm text-muted-foreground">Trust Score</div>
+            <div className="text-sm text-muted-foreground">{t('worker.dash.trustScore')}</div>
           </Card>
 
           <Card className="p-6">
@@ -183,7 +185,7 @@ export default function WorkerDashboardPage() {
               <TrendingUp className="w-8 h-8 text-primary" />
             </div>
             <div className="text-2xl font-bold">{trustScore?.averageRating.toFixed(1) || 'N/A'}</div>
-            <div className="text-sm text-muted-foreground">Average Rating</div>
+            <div className="text-sm text-muted-foreground">{t('worker.dash.avgRating')}</div>
           </Card>
 
           <Card className="p-6">
@@ -193,7 +195,7 @@ export default function WorkerDashboardPage() {
             <div className="text-2xl font-bold">
               {applications.filter((a) => a.status === 'completed').length}
             </div>
-            <div className="text-sm text-muted-foreground">Completed Jobs</div>
+            <div className="text-sm text-muted-foreground">{t('worker.dash.completedJobs')}</div>
           </Card>
         </div>
 
@@ -203,17 +205,17 @@ export default function WorkerDashboardPage() {
             <div>
               <h2 className="text-2xl font-bold flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-primary" />
-                {profileCompleteness === 100 ? 'AI-Powered Recommendations' : 'Recommended Jobs'}
+                {profileCompleteness === 100 ? t('worker.dash.aiRecs') : t('worker.dash.recs')}
               </h2>
               <p className="text-sm text-muted-foreground mt-1">
                 {profileCompleteness === 100
-                  ? 'Jobs matched to your skills and preferences'
-                  : 'Complete your profile for personalized matches'}
+                  ? t('worker.dash.matchedDesc')
+                  : t('worker.dash.completeForMatches')}
               </p>
             </div>
             <Link href="/worker/jobs">
               <Button variant="outline" size="sm">
-                View All Jobs
+                {t('worker.dash.viewAllJobs')}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
@@ -223,13 +225,13 @@ export default function WorkerDashboardPage() {
             {recommendedJobs.length === 0 ? (
               <Card className="p-8 col-span-full text-center border-dashed">
                 <Sparkles className="w-12 h-12 text-primary/40 mx-auto mb-4" />
-                <h3 className="font-semibold mb-2">No Recommended Jobs Yet</h3>
+                <h3 className="font-semibold mb-2">{t('worker.dash.noRecsTitle')}</h3>
                 <p className="text-sm text-muted-foreground mb-4">
-                  Complete your profile with skills and experience to get AI-powered job recommendations
+                  {t('worker.dash.noRecsDesc')}
                 </p>
                 <Button onClick={() => router.push('/worker/profile')}>
                   <ArrowRight className="w-4 h-4 mr-2" />
-                  Complete Profile
+                  {t('worker.dash.completeBtn')}
                 </Button>
               </Card>
             ) : (
@@ -245,7 +247,7 @@ export default function WorkerDashboardPage() {
                     </div>
                     {matchScore > 0 && (
                       <Badge variant="secondary" className="bg-primary/10 text-primary">
-                        {matchScore}% Match
+                        {t('worker.dash.match', { score: String(matchScore) })}
                       </Badge>
                     )}
                   </div>
@@ -265,7 +267,7 @@ export default function WorkerDashboardPage() {
                     </div>
                     <Link href={`/worker/jobs/${job.id}`}>
                       <Button size="sm">
-                        View Details
+                        {t('common.viewDetails')}
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
                     </Link>
@@ -280,10 +282,10 @@ export default function WorkerDashboardPage() {
         {applications.length > 0 && (
           <div>
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-bold">Recent Applications</h2>
+              <h2 className="text-2xl font-bold">{t('worker.dash.recentApps')}</h2>
               <Link href="/worker/applications">
                 <Button variant="outline" size="sm">
-                  View All
+                  {t('worker.dash.viewAll')}
                   <ArrowRight className="w-4 h-4 ml-2" />
                 </Button>
               </Link>
@@ -294,9 +296,9 @@ export default function WorkerDashboardPage() {
                 <Card key={app.id} className="p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1">Application #{app.id.slice(-8)}</h3>
+                      <h3 className="font-semibold mb-1">{t('worker.dash.appNo', { id: app.id.slice(-8) })}</h3>
                       <p className="text-sm text-muted-foreground">
-                        Applied {new Date(app.createdAt).toLocaleDateString()}
+                        {t('worker.dash.appliedOn', { date: new Date(app.createdAt).toLocaleDateString() })}
                       </p>
                     </div>
                     <Badge
@@ -308,7 +310,7 @@ export default function WorkerDashboardPage() {
                           : 'secondary'
                       }
                     >
-                      {app.status}
+                      {t(`status.${app.status}`) || app.status}
                     </Badge>
                   </div>
                 </Card>

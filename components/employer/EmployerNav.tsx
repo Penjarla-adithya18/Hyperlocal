@@ -4,21 +4,24 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, Users, MessageSquare, Settings, LogOut } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, Settings, LogOut, Globe } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useI18n, LOCALE_LABELS, Locale } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 
 export function EmployerNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
+  const { locale, setLocale, t } = useI18n();
 
   const navItems = [
-    { href: '/employer/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/employer/jobs/post', label: 'Post Job', icon: PlusCircle },
-    { href: '/employer/jobs', label: 'My Jobs', icon: Briefcase },
-    { href: '/employer/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
-    { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home },
+    { href: '/employer/jobs/post', label: t('nav.employer.postJob'), icon: PlusCircle },
+    { href: '/employer/jobs', label: t('nav.employer.myJobs'), icon: Briefcase },
+    { href: '/employer/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0 },
+    { href: '/settings', label: t('nav.settings'), icon: Settings },
   ];
 
   return (
@@ -59,6 +62,21 @@ export function EmployerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="sm" className="gap-1">
+                  <Globe className="w-4 h-4" />
+                  <span className="hidden sm:inline">{LOCALE_LABELS[locale]}</span>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {(Object.keys(LOCALE_LABELS) as Locale[]).map((l) => (
+                  <DropdownMenuItem key={l} onClick={() => setLocale(l)} className={l === locale ? 'font-semibold text-primary' : ''}>
+                    {LOCALE_LABELS[l]}
+                  </DropdownMenuItem>
+                ))}
+              </DropdownMenuContent>
+            </DropdownMenu>
             <NotificationBell />
             <Link href="/settings">
               <Button variant="ghost" size="icon">
@@ -67,7 +85,7 @@ export function EmployerNav() {
             </Link>
             <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">{t('nav.logout')}</span>
             </Button>
           </div>
         </div>

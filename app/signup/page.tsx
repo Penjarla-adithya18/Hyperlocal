@@ -12,12 +12,14 @@ import { Briefcase, User, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendOTP, verifyOTP, registerUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
+import { useI18n } from '@/contexts/I18nContext';
 
 function SignupPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { login } = useAuth();
   const { toast } = useToast();
+  const { t } = useI18n();
   const [role, setRole] = useState<'worker' | 'employer'>(
     (searchParams.get('role') as 'worker' | 'employer') || 'worker'
   );
@@ -205,7 +207,7 @@ function SignupPageContent() {
           className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-primary mb-6 transition-colors"
         >
           <ArrowLeft className="w-4 h-4" />
-          Back to Home
+          {t('auth.backHome')}
         </Link>
 
         <Card className="p-8 border-2">
@@ -222,11 +224,11 @@ function SignupPageContent() {
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="worker" className="flex items-center gap-2">
                 <User className="w-4 h-4" />
-                Worker
+                {t('auth.signup.workerTab')}
               </TabsTrigger>
               <TabsTrigger value="employer" className="flex items-center gap-2">
                 <Briefcase className="w-4 h-4" />
-                Employer
+                {t('auth.signup.employerTab')}
               </TabsTrigger>
             </TabsList>
           </Tabs>
@@ -235,7 +237,7 @@ function SignupPageContent() {
             // Step 1: Phone Verification
             <div className="space-y-6">
               <div className="text-center mb-6">
-                <h1 className="text-2xl font-bold mb-2">Create Your Account</h1>
+                <h1 className="text-2xl font-bold mb-2">{t('auth.signup.title')}</h1>
                 <p className="text-sm text-muted-foreground">
                   {role === 'worker'
                     ? 'Find local jobs that match your skills'
@@ -245,7 +247,7 @@ function SignupPageContent() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="phoneNumber">Phone Number</Label>
+                  <Label htmlFor="phoneNumber">{t('auth.phoneLabel')}</Label>
                   <Input
                     id="phoneNumber"
                     type="tel"
@@ -264,10 +266,10 @@ function SignupPageContent() {
                     {loading ? (
                       <>
                         <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                        Generating OTP...
+                        {t('auth.signup.sending')}
                       </>
                     ) : (
-                      'Get OTP'
+                      t('auth.signup.sendOtp')
                     )}
                   </Button>
                 ) : (
@@ -283,7 +285,7 @@ function SignupPageContent() {
                       </div>
                     )}
                     <div className="space-y-2">
-                      <Label htmlFor="otp">Enter OTP</Label>
+                      <Label htmlFor="otp">{t('auth.signup.enterOtp')}</Label>
                       <Input
                         id="otp"
                         type="text"
@@ -300,10 +302,10 @@ function SignupPageContent() {
                       {loading ? (
                         <>
                           <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                          Verifying...
+                          {t('auth.signup.verifying')}
                         </>
                       ) : (
-                        'Verify OTP'
+                        t('auth.signup.verifyOtp')
                       )}
                     </Button>
 
@@ -332,11 +334,11 @@ function SignupPageContent() {
 
               <div className="space-y-4">
                 <div className="space-y-2">
-                  <Label htmlFor="fullName">Full Name *</Label>
+                  <Label htmlFor="fullName">{t('auth.signup.fullName')} *</Label>
                   <Input
                     id="fullName"
                     type="text"
-                    placeholder="Enter your full name"
+                    placeholder={t('auth.signup.fullNamePh')}
                     value={formData.fullName}
                     onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
                     required
@@ -346,7 +348,7 @@ function SignupPageContent() {
                 {role === 'employer' && (
                   <>
                     <div className="space-y-2">
-                      <Label htmlFor="businessName">Business / Shop Name *</Label>
+                      <Label htmlFor="businessName">{t('auth.signup.businessName')} *</Label>
                       <Input
                         id="businessName"
                         type="text"
@@ -358,7 +360,7 @@ function SignupPageContent() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="organizationName">Organization Name (Optional)</Label>
+                      <Label htmlFor="organizationName">{t('auth.signup.orgName')}</Label>
                       <Input
                         id="organizationName"
                         type="text"
@@ -371,7 +373,7 @@ function SignupPageContent() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="password">Password *</Label>
+                  <Label htmlFor="password">{t('auth.passwordLabel')} *</Label>
                   <Input
                     id="password"
                     type="password"
@@ -383,7 +385,7 @@ function SignupPageContent() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="confirmPassword">Confirm Password *</Label>
+                  <Label htmlFor="confirmPassword">{t('auth.signup.confirmPassword')} *</Label>
                   <Input
                     id="confirmPassword"
                     type="password"
@@ -399,10 +401,10 @@ function SignupPageContent() {
                 {loading ? (
                   <>
                     <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    Creating Account...
+                    {t('auth.signup.creating')}
                   </>
                 ) : (
-                  'Create Account'
+                  t('auth.signup.createBtn')
                 )}
               </Button>
 
@@ -413,16 +415,16 @@ function SignupPageContent() {
                 onClick={() => setStep(1)}
                 className="w-full"
               >
-                Back
+                {t('common.back')}
               </Button>
             </form>
           )}
 
           {/* Login Link */}
           <div className="mt-6 text-center text-sm">
-            <span className="text-muted-foreground">Already have an account? </span>
+            <span className="text-muted-foreground">{t('auth.signup.hasAccount')} </span>
             <Link href="/login" className="text-primary font-medium hover:underline">
-              Log In
+              {t('auth.signup.loginLink')}
             </Link>
           </div>
         </Card>

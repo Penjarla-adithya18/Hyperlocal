@@ -14,15 +14,15 @@ import { NotificationBell } from '@/components/ui/notification-bell';
 export function WorkerNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { locale, setLocale } = useI18n();
+  const { locale, setLocale, t } = useI18n();
 
   const navItems = [
-    { href: '/worker/dashboard', label: 'Dashboard', icon: Home },
-    { href: '/worker/jobs', label: 'Find Jobs', icon: Search },
-    { href: '/worker/applications', label: 'My Applications', icon: Briefcase },
-    { href: '/worker/chat', label: 'Messages', icon: MessageSquare, badge: 0 },
-    { href: '/worker/profile', label: 'Profile', icon: User },
-    { href: '/settings', label: 'Settings', icon: Settings },
+    { href: '/worker/dashboard', label: t('nav.dashboard'), icon: Home },
+    { href: '/worker/jobs', label: t('nav.worker.findJobs'), icon: Search },
+    { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase },
+    { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0 },
+    { href: '/worker/profile', label: t('nav.profile'), icon: User },
+    { href: '/settings', label: t('nav.settings'), icon: Settings },
   ];
 
   return (
@@ -81,7 +81,7 @@ export function WorkerNav() {
             <NotificationBell />
             <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="w-4 h-4" />
-              <span className="hidden sm:inline">Logout</span>
+              <span className="hidden sm:inline">{t('nav.logout')}</span>
             </Button>
           </div>
         </div>

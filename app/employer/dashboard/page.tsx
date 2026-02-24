@@ -22,10 +22,12 @@ import {
 import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
+import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
   const router = useRouter();
   const { user } = useAuth();
+  const { t } = useI18n();
   const [employerProfile, setEmployerProfile] = useState<EmployerProfile | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
@@ -114,13 +116,13 @@ export default function EmployerDashboardPage() {
         {/* Welcome Section */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">Welcome, {employerProfile?.businessName || user?.fullName}!</h1>
-            <p className="text-muted-foreground">Manage your job postings and find the right talent</p>
+            <h1 className="text-3xl font-bold mb-2">{t('employer.dash.welcome', { name: employerProfile?.businessName || user?.fullName || '' })}</h1>
+            <p className="text-muted-foreground">{t('employer.dash.subtitle')}</p>
           </div>
           <Link href="/employer/jobs/post">
             <Button size="lg" className="bg-accent hover:bg-accent/90 gap-2">
               <PlusCircle className="w-5 h-5" />
-              Post a Job
+              {t('employer.dash.postJob')}
             </Button>
           </Link>
         </div>
@@ -132,7 +134,7 @@ export default function EmployerDashboardPage() {
               <Briefcase className="w-8 h-8 text-accent" />
             </div>
             <div className="text-2xl font-bold">{activeJobs}</div>
-            <div className="text-sm text-muted-foreground">Active Jobs</div>
+            <div className="text-sm text-muted-foreground">{t('employer.dash.activeJobs')}</div>
           </Card>
 
           <Card className="p-6">
@@ -140,7 +142,7 @@ export default function EmployerDashboardPage() {
               <Users className="w-8 h-8 text-primary" />
             </div>
             <div className="text-2xl font-bold">{totalApplications}</div>
-            <div className="text-sm text-muted-foreground">Total Applications</div>
+            <div className="text-sm text-muted-foreground">{t('employer.dash.totalApps')}</div>
           </Card>
 
           <Card className="p-6">
@@ -148,7 +150,7 @@ export default function EmployerDashboardPage() {
               <Clock className="w-8 h-8 text-accent" />
             </div>
             <div className="text-2xl font-bold">{pendingApplications}</div>
-            <div className="text-sm text-muted-foreground">Pending Review</div>
+            <div className="text-sm text-muted-foreground">{t('employer.dash.pendingApps')}</div>
           </Card>
 
           <Card className="p-6">
@@ -156,13 +158,13 @@ export default function EmployerDashboardPage() {
               <Star className="w-8 h-8 text-primary" />
             </div>
             <div className="text-2xl font-bold">{trustScore?.score || 50}</div>
-            <div className="text-sm text-muted-foreground">Trust Score</div>
+            <div className="text-sm text-muted-foreground">{t('worker.dash.trustScore')}</div>
           </Card>
         </div>
 
         {/* Quick Actions */}
         <Card className="p-6">
-          <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
+          <h2 className="text-xl font-semibold mb-4">{t('employer.dash.quickActions')}</h2>
           <div className="grid md:grid-cols-3 gap-4">
             <Link href="/employer/jobs/post">
               <Button variant="outline" className="w-full justify-start gap-3 h-auto py-4">
@@ -170,8 +172,8 @@ export default function EmployerDashboardPage() {
                   <PlusCircle className="w-5 h-5 text-accent" />
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold">Post a New Job</div>
-                  <div className="text-xs text-muted-foreground">Find skilled workers quickly</div>
+                  <div className="font-semibold">{t('employer.dash.postJob')}</div>
+                  <div className="text-xs text-muted-foreground">{t('employer.dash.subtitle')}</div>
                 </div>
               </Button>
             </Link>
@@ -182,8 +184,8 @@ export default function EmployerDashboardPage() {
                   <Users className="w-5 h-5 text-primary" />
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold">Review Applicants</div>
-                  <div className="text-xs text-muted-foreground">{pendingApplications} pending review</div>
+                  <div className="font-semibold">{t('employer.dash.pendingApps')}</div>
+                  <div className="text-xs text-muted-foreground">{t('employer.dash.applicants', { count: pendingApplications })}</div>
                 </div>
               </Button>
             </Link>
@@ -194,7 +196,7 @@ export default function EmployerDashboardPage() {
                   <TrendingUp className="w-5 h-5 text-accent" />
                 </div>
                 <div className="text-left">
-                  <div className="font-semibold">View Messages</div>
+                  <div className="font-semibold">{t('nav.messages')}</div>
                   <div className="text-xs text-muted-foreground">Chat with applicants</div>
                 </div>
               </Button>
@@ -205,10 +207,10 @@ export default function EmployerDashboardPage() {
         {/* Recent Jobs */}
         <div>
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold">Your Job Postings</h2>
+            <h2 className="text-2xl font-bold">{t('employer.dash.recentJobs')}</h2>
             <Link href="/employer/jobs">
               <Button variant="outline" size="sm">
-                View All
+                {t('employer.dash.viewAllJobs')}
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
             </Link>
@@ -219,9 +221,9 @@ export default function EmployerDashboardPage() {
               <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                 <Briefcase className="w-8 h-8 text-accent" />
               </div>
-              <h3 className="text-xl font-semibold mb-2">No Jobs Posted Yet</h3>
+              <h3 className="text-xl font-semibold mb-2">{t('employer.dash.noJobs')}</h3>
               <p className="text-muted-foreground mb-6">
-                Start by posting your first job to connect with local workers
+                {t('employer.dash.postFirst')}
               </p>
               <Link href="/employer/jobs/post">
                 <Button className="bg-accent hover:bg-accent/90">
@@ -249,7 +251,7 @@ export default function EmployerDashboardPage() {
                       }
                       className={job.status === 'active' ? 'bg-accent' : ''}
                     >
-                      {job.status}
+                      {t(`job.status.${job.status}`) || job.status}
                     </Badge>
                   </div>
 
@@ -257,7 +259,7 @@ export default function EmployerDashboardPage() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Users className="w-4 h-4" />
-                        {job.applicationCount} applicants
+                        {t('employer.dash.applicants', { count: job.applicationCount })}
                       </div>
                       <div className="flex items-center gap-1">
                         <Eye className="w-4 h-4" />
@@ -268,24 +270,24 @@ export default function EmployerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-accent">â‚¹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-accent">₹{job.pay.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         {job.paymentStatus === 'locked' ? (
                           <>
                             <CheckCircle2 className="w-3 h-3 text-green-500" />
-                            Escrow Secured
+                            {t('payment.escrowSecured')}
                           </>
                         ) : (
                           <>
                             <Clock className="w-3 h-3" />
-                            Pending Escrow
+                            {t('job.status.draft')}
                           </>
                         )}
                       </div>
                     </div>
                     <Link href={`/employer/jobs/${job.id}`}>
                       <Button size="sm" variant="outline">
-                        View Details
+                        {t('common.viewDetails')}
                         <ArrowRight className="w-4 h-4 ml-2" />
                       </Button>
                     </Link>
