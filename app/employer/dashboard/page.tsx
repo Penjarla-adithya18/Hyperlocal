@@ -32,6 +32,7 @@ export default function EmployerDashboardPage() {
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [jobs, setJobs] = useState<Job[]>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [appCountByJob, setAppCountByJob] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -57,10 +58,16 @@ export default function EmployerDashboardPage() {
       setTrustScore(trust);
       setJobs(employerJobs);
 
-      // Get all applications for employer's jobs
+      // Get all applications for employer's jobs and build per-job count map
       const jobIds = employerJobs.map((j) => j.id);
       const allApps = await Promise.all(jobIds.map((id) => mockApplicationOps.findByJobId(id)));
-      setApplications(allApps.flat());
+      const flatApps = allApps.flat();
+      setApplications(flatApps);
+      const countMap: Record<string, number> = {};
+      for (const app of flatApps) {
+        countMap[app.jobId] = (countMap[app.jobId] || 0) + 1;
+      }
+      setAppCountByJob(countMap);
     } catch (error) {
       console.error('Failed to load dashboard data:', error);
     } finally {
@@ -259,11 +266,11 @@ export default function EmployerDashboardPage() {
                     <div className="flex items-center gap-4 text-sm text-muted-foreground">
                       <div className="flex items-center gap-1">
                         <Users className="w-4 h-4" />
-                        {t('employer.dash.applicants', { count: job.applicationCount })}
+                        {t('employer.dash.applicants', { count: appCountByJob[job.id] ?? 0 })}
                       </div>
                       <div className="flex items-center gap-1">
                         <Eye className="w-4 h-4" />
-                        {job.views} views
+                        {(job.views ?? 0)} views
                       </div>
                     </div>
                   </div>

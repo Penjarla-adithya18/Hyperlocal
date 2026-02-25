@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { resetPassword, logout, sendOTP, verifyOTP } from '@/lib/auth'
-import { mockUserOps } from '@/lib/api'
+import { loginUser, mockUserOps } from '@/lib/api'
 import WorkerNav from '@/components/worker/WorkerNav'
 import EmployerNav from '@/components/employer/EmployerNav'
 import AdminNav from '@/components/admin/AdminNav'
@@ -16,11 +16,13 @@ import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
 import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound } from 'lucide-react'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function SettingsPage() {
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
+  const { t } = useI18n()
 
   // Change password form
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' })
@@ -67,6 +69,14 @@ export default function SettingsPage() {
     try {
       const result = await resetPassword(pwForm.current, pwForm.newPw)
       if (result.success) {
+        // Re-login immediately so the new token replaces the old one
+        // This prevents the old token from being invalidated causing data loss
+        try {
+          const loginResult = await loginUser(user!.phoneNumber, pwForm.newPw)
+          if (loginResult.success && loginResult.user) {
+            login(loginResult.user)
+          }
+        } catch { /* best-effort */ }
         toast({ title: 'Password updated successfully' })
         setPwForm({ current: '', newPw: '', confirm: '' })
       } else {
@@ -134,8 +144,8 @@ export default function SettingsPage() {
 
       <main className="container mx-auto px-4 py-8 max-w-2xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-1">Settings</h1>
-          <p className="text-muted-foreground">Manage your account preferences</p>
+          <h1 className="text-3xl font-bold text-foreground mb-1">{t('settings.title')}</h1>
+          <p className="text-muted-foreground">{t('settings.subtitle')}</p>
         </div>
 
         {/* ── Trust Score Card ─────────────────────────────── */}
@@ -173,13 +183,13 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Lock className="h-5 w-5 text-primary" />
-              Change Password
+              {t('settings.changePw')}
             </CardTitle>
           </CardHeader>
           <CardContent>
             <form onSubmit={handleChangePassword} className="space-y-4">
               <div>
-                <Label htmlFor="current-pw">Current Password</Label>
+                <Label htmlFor="current-pw">{t('settings.currentPw')}</Label>
                 <Input
                   id="current-pw"
                   type="password"
@@ -189,7 +199,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="new-pw">New Password</Label>
+                <Label htmlFor="new-pw">{t('settings.newPw')}</Label>
                 <Input
                   id="new-pw"
                   type="password"
@@ -200,7 +210,7 @@ export default function SettingsPage() {
                 />
               </div>
               <div>
-                <Label htmlFor="confirm-pw">Confirm New Password</Label>
+                <Label htmlFor="confirm-pw">{t('settings.confirmPw')}</Label>
                 <Input
                   id="confirm-pw"
                   type="password"
@@ -210,7 +220,7 @@ export default function SettingsPage() {
                 />
               </div>
               <Button type="submit" disabled={pwLoading}>
-                {pwLoading ? 'Updating…' : 'Update Password'}
+                {pwLoading ? t('settings.updatingPw') || 'Updating…' : t('settings.updatePw')}
               </Button>
             </form>
           </CardContent>
@@ -304,7 +314,7 @@ export default function SettingsPage() {
               </div>
               <Button variant="destructive" onClick={handleLogout}>
                 <LogOut className="h-4 w-4 mr-2" />
-                Sign Out
+                {t('settings.signOut')}
               </Button>
             </div>
           </CardContent>

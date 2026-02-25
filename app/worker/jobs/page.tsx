@@ -30,6 +30,7 @@ export default function WorkerJobsPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const PAGE_SIZE = 12
   const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [reportedJobIds, setReportedJobIds] = useState<Set<string>>(new Set())
 
   // Try to get worker's current GPS location for distance display
   useEffect(() => {
@@ -37,7 +38,12 @@ export default function WorkerJobsPage() {
       pos => setWorkerCoords({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
       () => {} // silently fail
     )
-  }, [])
+    // Load reported job IDs from localStorage
+    if (user) {
+      const stored = localStorage.getItem(`reported_jobs_${user.id}`)
+      if (stored) setReportedJobIds(new Set(JSON.parse(stored)))
+    }
+  }, [user])
 
   function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
     const R = 6371
@@ -84,6 +90,9 @@ export default function WorkerJobsPage() {
   }
 
   const filteredJobs = jobs.filter(job => {
+    // Hide jobs the user has reported
+    if (reportedJobIds.has(job.id)) return false
+
     const matchesSearch = job.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          job.description.toLowerCase().includes(searchQuery.toLowerCase()) ||
                          job.requiredSkills.some(skill => skill.toLowerCase().includes(searchQuery.toLowerCase()))

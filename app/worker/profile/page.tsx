@@ -11,18 +11,20 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
-import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2 } from 'lucide-react';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera } from 'lucide-react';
 import { mockWorkerProfileOps, mockUserOps, mockDb } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { VoiceInput } from '@/components/ui/voice-input';
 import { useToast } from '@/hooks/use-toast';
+import { useI18n } from '@/contexts/I18nContext';
 
 export default function WorkerProfilePage() {
   const router = useRouter();
   const { user, updateUser, logout } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
   const { toast } = useToast();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [extractingSkills, setExtractingSkills] = useState(false);
@@ -35,6 +37,7 @@ export default function WorkerProfilePage() {
     categories: [] as string[],
     location: '',
     bio: '',
+    profileImage: '',
   });
 
   useEffect(() => {
@@ -61,6 +64,7 @@ export default function WorkerProfilePage() {
           categories: workerProfile.categories || [],
           location: workerProfile.location || '',
           bio: workerProfile.bio || '',
+          profileImage: workerProfile.profilePictureUrl || '',
         });
       }
     } catch (error) {
@@ -98,6 +102,34 @@ export default function WorkerProfilePage() {
     } finally {
       setExtractingSkills(false);
     }
+  };
+
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.size > 2 * 1024 * 1024) {
+      toast({ title: 'Image too large', description: 'Use an image under 2MB', variant: 'destructive' });
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const src = ev.target?.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 200;
+        canvas.height = 200;
+        const ctx = canvas.getContext('2d')!;
+        // Cover-crop to square
+        const size = Math.min(img.width, img.height);
+        const sx = (img.width - size) / 2;
+        const sy = (img.height - size) / 2;
+        ctx.drawImage(img, sx, sy, size, size, 0, 0, 200, 200);
+        setFormData(prev => ({ ...prev, profileImage: canvas.toDataURL('image/jpeg', 0.85) }));
+      };
+      img.src = src;
+    };
+    reader.readAsDataURL(file);
   };
 
   const addSkill = () => {
@@ -165,6 +197,7 @@ export default function WorkerProfilePage() {
         categories: formData.categories,
         location: formData.location,
         bio: formData.bio,
+        profilePictureUrl: formData.profileImage || undefined,
       };
 
       if (profile) {
@@ -173,12 +206,13 @@ export default function WorkerProfilePage() {
         await mockWorkerProfileOps.create(profileData);
       }
 
-      // Update user profile completion status
+      // Update user profile completion status (bio is optional — not counted)
       const isComplete =
         formData.skills.length > 0 &&
         formData.availability &&
         formData.categories.length > 0 &&
-        formData.experience;
+        formData.experience &&
+        formData.location;
 
       await mockUserOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
@@ -219,24 +253,23 @@ export default function WorkerProfilePage() {
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold mb-2">Your Profile</h1>
+          <h1 className="text-3xl font-bold mb-2">{t('profile.title')}</h1>
           <p className="text-muted-foreground">
-            Complete your profile to get better AI-powered job recommendations
+            {t('profile.subtitle')}
           </p>
-          {/* Live Profile Completeness */}
+          {/* Live Profile Completeness (bio excluded — optional field) */}
           {(() => {
             const pct = Math.round(
-              (formData.skills.length > 0 ? 20 : 0) +
-              (formData.categories.length > 0 ? 20 : 0) +
-              (formData.availability ? 15 : 0) +
+              (formData.skills.length > 0 ? 25 : 0) +
+              (formData.categories.length > 0 ? 25 : 0) +
+              (formData.availability ? 20 : 0) +
               (formData.experience ? 20 : 0) +
-              (formData.location ? 15 : 0) +
-              (formData.bio ? 10 : 0)
+              (formData.location ? 10 : 0)
             );
             return (
               <div className="mt-4 p-4 rounded-lg border bg-card">
                 <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">Profile Completeness</span>
+                  <span className="text-sm font-medium">{t('profile.completeness')}</span>
                   <span className="text-sm font-bold text-primary">{pct}%</span>
                 </div>
                 <Progress value={pct} className="h-2" />
@@ -258,12 +291,41 @@ export default function WorkerProfilePage() {
                 <User className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <h2 className="text-xl font-semibold">Personal Information</h2>
-                <p className="text-sm text-muted-foreground">Basic details about you</p>
+                <h2 className="text-xl font-semibold">{t('profile.personalInfo')}</h2>
+                <p className="text-sm text-muted-foreground">{t('profile.personalInfoDesc')}</p>
               </div>
             </div>
 
             <div className="space-y-4">
+              {/* Profile Photo */}
+              <div className="flex items-center gap-4">
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-border flex-shrink-0">
+                  {formData.profileImage ? (
+                    <img src={formData.profileImage} className="w-full h-full object-cover" alt="Profile" />
+                  ) : (
+                    <User className="w-9 h-9 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    id="profile-image-input"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <label htmlFor="profile-image-input">
+                    <Button type="button" variant="outline" size="sm" asChild>
+                      <span className="cursor-pointer flex items-center gap-1">
+                        <Camera className="w-4 h-4" />
+                        {formData.profileImage ? t('common.change') || 'Change Photo' : t('common.upload') || 'Upload Photo'}
+                      </span>
+                    </Button>
+                  </label>
+                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG · max 2 MB · shown at 200×200 px</p>
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Full Name</Label>
@@ -414,12 +476,16 @@ export default function WorkerProfilePage() {
                 {formData.skills.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {formData.skills.map((skill) => (
-                      <Badge key={skill} variant="secondary" className="gap-1">
+                      <Badge key={skill} variant="secondary" className="gap-1 pr-1">
                         {skill}
-                        <X
-                          className="w-3 h-3 cursor-pointer hover:text-destructive"
-                          onClick={() => removeSkill(skill)}
-                        />
+                        <button
+                          type="button"
+                          className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 focus:outline-none cursor-pointer"
+                          onClick={(e) => { e.stopPropagation(); removeSkill(skill); }}
+                          aria-label={`Remove ${skill}`}
+                        >
+                          <X className="w-3 h-3 hover:text-destructive" />
+                        </button>
                       </Badge>
                     ))}
                   </div>
@@ -460,10 +526,10 @@ export default function WorkerProfilePage() {
               {saving ? (
                 <>
                   <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                  Saving...
+                  {t('common.loading')}
                 </>
               ) : (
-                'Save Profile'
+                t('profile.saveProfile')
               )}
             </Button>
             <Button
@@ -471,7 +537,7 @@ export default function WorkerProfilePage() {
               variant="outline"
               onClick={() => router.push('/worker/dashboard')}
             >
-              Cancel
+              {t('common.cancel')}
             </Button>
           </div>
 
@@ -481,14 +547,14 @@ export default function WorkerProfilePage() {
               <Trash2 className="w-5 h-5 text-destructive" />
               <h2 className="text-xl font-semibold text-destructive">Danger Zone</h2>
             </div>
-            <p className="text-sm text-muted-foreground mb-4">Permanently delete your account and all associated data. This action cannot be undone.</p>
+            <p className="text-sm text-muted-foreground mb-4">{t('profile.deleteDesc')}</p>
             <Button
               type="button"
               variant="destructive"
               onClick={handleDeleteAccount}
               disabled={deletingAccount}
             >
-              {deletingAccount ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Deleting...</> : 'Delete My Account'}
+              {deletingAccount ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('common.loading')}</> : t('profile.deleteAccount')}
             </Button>
           </Card>
         </form>

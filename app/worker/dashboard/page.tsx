@@ -35,6 +35,7 @@ export default function WorkerDashboardPage() {
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recommendedJobs, setRecommendedJobs] = useState<Array<{ job: Job; matchScore: number }>>([]);
   const [applications, setApplications] = useState<Application[]>([]);
+  const [jobsById, setJobsById] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -61,6 +62,11 @@ export default function WorkerDashboardPage() {
       setTrustScore(trust);
       setApplications(apps || []);
 
+      // Build jobsById map for recent apps section
+      const byId: Record<string, Job> = {};
+      for (const j of allJobs) byId[j.id] = j;
+      setJobsById(byId);
+
       // Get job recommendations
       if (profile && profile.profileCompleted) {
         const recommended = getRecommendedJobs(profile, allJobs, 5);
@@ -79,14 +85,14 @@ export default function WorkerDashboardPage() {
     }
   };
 
+  // Profile completeness — bio excluded (optional field)
   const profileCompleteness = workerProfile
     ? Math.round(
-        (workerProfile.skills.length > 0 ? 20 : 0) +
-        (workerProfile.categories.length > 0 ? 20 : 0) +
-        (workerProfile.availability ? 15 : 0) +
+        (workerProfile.skills.length > 0 ? 25 : 0) +
+        (workerProfile.categories.length > 0 ? 25 : 0) +
+        (workerProfile.availability ? 20 : 0) +
         (workerProfile.experience ? 20 : 0) +
-        (workerProfile.location ? 15 : 0) +
-        (workerProfile.bio ? 10 : 0)
+        (workerProfile.location ? 10 : 0)
       )
     : 0;
 
@@ -262,7 +268,7 @@ export default function WorkerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-primary">â‚¹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-primary">₹{job.pay.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">{job.timing}</div>
                     </div>
                     <Link href={`/worker/jobs/${job.id}`}>
@@ -292,29 +298,41 @@ export default function WorkerDashboardPage() {
             </div>
 
             <div className="grid gap-4">
-              {applications.slice(0, 3).map((app) => (
+              {applications.slice(0, 3).map((app) => {
+                const job = jobsById[app.jobId];
+                return (
                 <Card key={app.id} className="p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
-                      <h3 className="font-semibold mb-1">{t('worker.dash.appNo', { id: app.id.slice(-8) })}</h3>
+                      <h3 className="font-semibold mb-1">
+                        {job ? job.title : t('worker.dash.appNo', { id: app.id.slice(-8) })}
+                      </h3>
                       <p className="text-sm text-muted-foreground">
                         {t('worker.dash.appliedOn', { date: new Date(app.createdAt).toLocaleDateString() })}
                       </p>
                     </div>
-                    <Badge
-                      variant={
-                        app.status === 'accepted'
-                          ? 'default'
-                          : app.status === 'rejected'
-                          ? 'destructive'
-                          : 'secondary'
-                      }
-                    >
-                      {t(`status.${app.status}`) || app.status}
-                    </Badge>
+                    <div className="flex items-center gap-2">
+                      <Badge
+                        variant={
+                          app.status === 'accepted'
+                            ? 'default'
+                            : app.status === 'rejected'
+                            ? 'destructive'
+                            : 'secondary'
+                        }
+                      >
+                        {t(`status.${app.status}`) || app.status}
+                      </Badge>
+                      <Link href={`/worker/jobs/${app.jobId}`}>
+                        <Button size="sm" variant="outline">
+                          {t('common.viewDetails')}
+                        </Button>
+                      </Link>
+                    </div>
                   </div>
                 </Card>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}

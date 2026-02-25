@@ -22,12 +22,14 @@ import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function JobDetailsPage() {
   const router = useRouter()
   const params = useParams()
   const { user } = useAuth()
   const { toast } = useToast()
+  const { t } = useI18n()
   const [job, setJob] = useState<Job | null>(null)
   const [employer, setEmployer] = useState<User | null>(null)
   const [application, setApplication] = useState<Application | null>(null)
@@ -43,6 +45,19 @@ export default function JobDetailsPage() {
   const [reportReason, setReportReason] = useState('fake_job')
   const [reportDesc, setReportDesc] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
+  const [isReported, setIsReported] = useState(false)
+
+  // Load reported state from localStorage
+  useEffect(() => {
+    if (user && params.id) {
+      const key = `reported_jobs_${user.id}`
+      const stored = localStorage.getItem(key)
+      if (stored) {
+        const ids: string[] = JSON.parse(stored)
+        setIsReported(ids.includes(params.id as string))
+      }
+    }
+  }, [user, params.id])
 
   useEffect(() => {
     loadJobDetails()
@@ -153,6 +168,16 @@ export default function JobDetailsPage() {
       toast({ title: 'Report submitted', description: 'Our team will review this job listing.' })
       setReportOpen(false)
       setReportDesc('')
+      setIsReported(true)
+      // Persist reported state so the job stays marked even after navigation
+      if (user && job) {
+        const key = `reported_jobs_${user.id}`
+        const stored = localStorage.getItem(key)
+        const ids: string[] = stored ? JSON.parse(stored) : []
+        if (!ids.includes(job.id)) {
+          localStorage.setItem(key, JSON.stringify([...ids, job.id]))
+        }
+      }
     } catch {
       toast({ title: 'Failed to submit report', variant: 'destructive' })
     } finally {
@@ -448,11 +473,12 @@ export default function JobDetailsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    className="w-full text-muted-foreground hover:text-destructive"
-                    onClick={() => setReportOpen(true)}
+                    className={`w-full ${isReported ? 'text-orange-500 cursor-default' : 'text-muted-foreground hover:text-destructive'}`}
+                    onClick={() => !isReported && setReportOpen(true)}
+                    disabled={isReported}
                   >
                     <Flag className="h-4 w-4 mr-2" />
-                    Report this job
+                    {isReported ? '✓ Job Reported' : 'Report this job'}
                   </Button>
                 </CardContent>
               </Card>

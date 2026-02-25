@@ -548,7 +548,8 @@ export const mockDb = {
   },
 
   async deleteAccount(userId: string): Promise<void> {
-    await call<{ success: boolean }>('users', 'DELETE', { id: userId })
+    // Use POST with action to avoid 405 from edge functions that don't support DELETE
+    await call<{ success: boolean }>('users', 'POST', {}, { action: 'delete', id: userId })
   },
 
   async getAllReports(): Promise<Report[]> {

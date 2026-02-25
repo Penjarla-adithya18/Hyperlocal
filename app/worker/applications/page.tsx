@@ -21,11 +21,13 @@ import {
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { useToast } from '@/hooks/use-toast'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function WorkerApplicationsPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
+  const { t } = useI18n()
   const [applications, setApplications] = useState<Application[]>([])
   const [jobsById, setJobsById] = useState<Record<string, Job>>({})
   const [employersById, setEmployersById] = useState<Record<string, User>>({})
@@ -131,7 +133,7 @@ export default function WorkerApplicationsPage() {
                 </div>
               )}
               <p className="text-xs text-muted-foreground">
-                Applied {new Date(application.createdAt).toLocaleDateString()}
+                {t('apps.appliedOn')} {new Date(application.createdAt).toLocaleDateString()}
               </p>
             </div>
             <Badge variant={
@@ -140,7 +142,7 @@ export default function WorkerApplicationsPage() {
               application.status === 'rejected' ? 'destructive' :
               'secondary'
             }>
-              {application.status}
+              {t(`status.${application.status}`) || application.status}
             </Badge>
           </div>
         </CardHeader>
@@ -180,18 +182,18 @@ export default function WorkerApplicationsPage() {
               onClick={() => router.push(`/worker/jobs/${job.id}`)}
             >
               <Eye className="h-4 w-4 mr-2" />
-              View Job
+              {t('apps.viewJob')}
             </Button>
             {canRate && (
               <Button variant="secondary" onClick={() => openRatingDialog(application)}>
                 <Star className="h-4 w-4 mr-2 fill-yellow-400 text-yellow-400" />
-                Rate Employer
+                {t('apps.rateEmployer')}
               </Button>
             )}
             {isRated && (
               <div className="flex items-center gap-1 text-sm text-green-600 px-3">
                 <CheckCircle2 className="h-4 w-4" />
-                Rated
+                {t('apps.rated')}
               </div>
             )}
           </div>
@@ -231,16 +233,16 @@ export default function WorkerApplicationsPage() {
       
       <main className="container mx-auto px-4 py-8">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">My Applications</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">{t('apps.title')}</h1>
           <p className="text-muted-foreground">Track your applications and rate employers after accepting a job</p>
         </div>
 
         <Tabs defaultValue="pending" className="w-full">
           <TabsList className="mb-6">
-            <TabsTrigger value="pending">Pending ({pendingApps.length})</TabsTrigger>
-            <TabsTrigger value="accepted">Accepted ({acceptedApps.length})</TabsTrigger>
-            <TabsTrigger value="completed">Completed ({completedApps.length})</TabsTrigger>
-            <TabsTrigger value="rejected">Rejected ({rejectedApps.length})</TabsTrigger>
+            <TabsTrigger value="pending">{t('status.pending')} ({pendingApps.length})</TabsTrigger>
+            <TabsTrigger value="accepted">{t('status.accepted')} ({acceptedApps.length})</TabsTrigger>
+            <TabsTrigger value="completed">{t('status.completed')} ({completedApps.length})</TabsTrigger>
+            <TabsTrigger value="rejected">{t('status.rejected')} ({rejectedApps.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="pending">
