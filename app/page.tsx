@@ -102,33 +102,80 @@ export default function LandingPage() {
         </div>
       </section>
 
-      <section className="py-20 lg:py-32" id="features">
+      <section className="relative py-20 lg:py-28" id="features">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(56,189,248,0.14),transparent_35%),radial-gradient(circle_at_86%_75%,rgba(16,185,129,0.14),transparent_35%)] dark:bg-[radial-gradient(circle_at_15%_20%,rgba(56,189,248,0.12),transparent_35%),radial-gradient(circle_at_86%_75%,rgba(16,185,129,0.1),transparent_35%)]" />
+
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-16 text-center">
-            <h2 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white md:text-4xl">Why Choose HyperLocal Jobs?</h2>
-            <p className="text-lg text-gray-600 dark:text-gray-400">Built for local communities with trust, safety, and convenience at the core</p>
+          <div className="mb-12 text-center lg:mb-14">
+            <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-4 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600 dark:border-blue-800 dark:bg-slate-800 dark:text-blue-300">
+              Core Benefits
+            </span>
+            <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-900 dark:text-white sm:text-5xl">
+              Why Choose{' '}
+              <span className="bg-gradient-to-r from-blue-500 to-emerald-500 bg-clip-text text-transparent">HyperLocal Jobs?</span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300 sm:text-lg">
+              Built for local communities with trust, safety, and convenience at the core.
+            </p>
           </div>
 
-          <div className="grid gap-8 md:grid-cols-2 lg:grid-cols-3">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {[
-              { icon: LineChart, title: 'AI-Powered Matching', desc: 'Get personalized job recommendations based on your skills, experience, and availability.', tone: 'blue' },
-              { icon: ShieldCheck, title: 'Secure Escrow', desc: 'Payments held securely until job completion. No fraud, no payment worries.', tone: 'green' },
-              { icon: MessageCircle, title: 'Instant Chat', desc: 'Communicate securely without sharing personal contact information.', tone: 'blue' },
-              { icon: Star, title: 'Trust Score System', desc: 'Build your reputation through ratings and successful job completions.', tone: 'green' },
-              { icon: MapPin, title: 'Hyperlocal Focus', desc: 'Find opportunities right in your neighborhood or nearby areas.', tone: 'blue' },
-              { icon: Clock3, title: 'Flexible Work', desc: 'Part-time, full-time, gig work - choose what fits your schedule.', tone: 'green' },
+              {
+                icon: LineChart,
+                title: 'AI-Powered Matching',
+                desc: 'Get personalized job recommendations based on your skills, experience, and availability.',
+                stripe: 'from-blue-500 to-cyan-500',
+                tone: 'text-blue-500 dark:text-blue-300',
+              },
+              {
+                icon: ShieldCheck,
+                title: 'Secure Escrow',
+                desc: 'Payments held securely until job completion. No fraud, no payment worries.',
+                stripe: 'from-emerald-500 to-teal-500',
+                tone: 'text-emerald-500 dark:text-emerald-300',
+              },
+              {
+                icon: MessageCircle,
+                title: 'Instant Chat',
+                desc: 'Communicate securely without sharing personal contact information.',
+                stripe: 'from-violet-500 to-indigo-500',
+                tone: 'text-violet-500 dark:text-violet-300',
+              },
+              {
+                icon: Star,
+                title: 'Trust Score System',
+                desc: 'Build your reputation through ratings and successful job completions.',
+                stripe: 'from-amber-500 to-orange-500',
+                tone: 'text-amber-500 dark:text-amber-300',
+              },
+              {
+                icon: MapPin,
+                title: 'Hyperlocal Focus',
+                desc: 'Find opportunities right in your neighborhood or nearby areas.',
+                stripe: 'from-orange-500 to-rose-500',
+                tone: 'text-orange-500 dark:text-orange-300',
+              },
+              {
+                icon: Clock3,
+                title: 'Flexible Work',
+                desc: 'Part-time, full-time, gig work - choose what fits your schedule.',
+                stripe: 'from-cyan-500 to-sky-500',
+                tone: 'text-cyan-500 dark:text-cyan-300',
+              },
             ].map((feature) => (
               <div
                 key={feature.title}
-                className="rounded-2xl border border-gray-100 bg-white p-8 shadow-sm transition-shadow hover:shadow-md dark:border-gray-700 dark:bg-slate-800"
+                className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
               >
-                <div
-                  className={`mb-6 flex h-14 w-14 items-center justify-center rounded-full ${feature.tone === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30' : 'bg-green-100 dark:bg-green-900/30'}`}
-                >
-                  <feature.icon className={`h-7 w-7 ${feature.tone === 'blue' ? 'text-blue-500 dark:text-blue-300' : 'text-emerald-500 dark:text-green-300'}`} />
+                <div className={`h-1.5 w-full bg-gradient-to-r ${feature.stripe}`} />
+                <div className="p-7">
+                  <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700/70 ${feature.tone}`}>
+                    <feature.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">{feature.title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{feature.desc}</p>
                 </div>
-                <h3 className="mb-3 text-xl font-bold text-gray-900 dark:text-white">{feature.title}</h3>
-                <p className="leading-relaxed text-gray-600 dark:text-gray-400">{feature.desc}</p>
               </div>
             ))}
           </div>
@@ -269,18 +316,18 @@ export default function LandingPage() {
               <h4 className="mb-4 font-bold text-gray-900 dark:text-white">For Employers</h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
                 <li><Link className="transition-colors hover:text-emerald-500" href="/signup?role=employer">Post Jobs</Link></li>
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Pricing</Link></li>
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Guidelines</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/pricing">Pricing</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/guidelines">Guidelines</Link></li>
               </ul>
             </div>
 
             <div>
               <h4 className="mb-4 font-bold text-gray-900 dark:text-white">Support</h4>
               <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Help Center</Link></li>
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Contact Us</Link></li>
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Terms of Service</Link></li>
-                <li><Link className="transition-colors hover:text-emerald-500" href="#">Privacy Policy</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/help-center">Help Center</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/contact">Contact Us</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/terms">Terms of Service</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/privacy">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>
