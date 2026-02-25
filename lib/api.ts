@@ -60,7 +60,8 @@ async function call<T>(
   fn: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
   params: Record<string, string> = {},
-  body?: unknown
+  body?: unknown,
+  isAuthOp = false  // Only clear session on auth operations
 ): Promise<T> {
   const { url, key } = getEnv()
   const token = getSessionToken()
@@ -78,9 +79,9 @@ async function call<T>(
   })
 
   if (!res.ok) {
-    if (res.status === 401) {
-      // Token is invalid/expired — clear it silently
-      // Don't clear currentUser yet; let the next getCurrentUser() call detect it
+    if (res.status === 401 && isAuthOp) {
+      // Only clear session on auth operations that get 401 (login, register, logout)
+      // Don't clear on background operations (notifications, data fetches)
       setSessionToken(null)
     }
     const text = await res.text()
@@ -106,7 +107,7 @@ export async function registerUser(data: {
   businessName?: string
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
-  const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data })
+  const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data }, true)
   if (res.success && res.token && res.expiresAt) setSessionToken(res.token, res.expiresAt)
   else setSessionToken(null)
   return { success: res.success, user: res.user, message: res.message }
@@ -116,7 +117,7 @@ export async function loginUser(
   phoneNumber: string,
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
-  const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password })
+  const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password }, true)
   if (res.success && res.token && res.expiresAt) setSessionToken(res.token, res.expiresAt)
   else setSessionToken(null)
   return { success: res.success, user: res.user, message: res.message }
