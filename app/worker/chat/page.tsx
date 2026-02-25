@@ -24,10 +24,12 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function WorkerChatPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { locale } = useI18n()
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -177,8 +179,12 @@ export default function WorkerChatPage() {
     }
 
     const recognition = new SpeechRecognitionAPI()
-    // Accept Hindi, Telugu and English speech
-    recognition.lang = 'hi-IN'
+    const localeToSpeechLang: Record<string, string> = {
+      en: 'en-IN',
+      hi: 'hi-IN',
+      te: 'te-IN',
+    }
+    recognition.lang = localeToSpeechLang[locale] ?? 'en-IN'
     recognition.continuous = false
     recognition.interimResults = false
     recognition.maxAlternatives = 1
@@ -378,7 +384,7 @@ export default function WorkerChatPage() {
                         variant="outline"
                         size="icon"
                         onClick={toggleVoiceInput}
-                        title={voiceListening ? 'Stop recording' : 'Voice input (Hindi/Telugu/English)'}
+                        title={voiceListening ? 'Stop recording' : 'Voice input (default app language)'}
                         className={voiceListening ? 'border-red-400 text-red-500 animate-pulse' : ''}
                       >
                         {voiceListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}

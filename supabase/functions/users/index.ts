@@ -74,6 +74,20 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ data: data ? mapUser(data) : null })
     }
 
+    if (method === 'DELETE' && id) {
+      const isSelf = auth.user.id === id
+      const isAdmin = auth.user.role === 'admin'
+      if (!isSelf && !isAdmin) return errorResponse('Forbidden', 403)
+
+      const { error } = await supabase
+        .from('users')
+        .delete()
+        .eq('id', id)
+
+      if (error) throw error
+      return jsonResponse({ success: true })
+    }
+
     return errorResponse('Method not allowed', 405)
   } catch (err) {
     console.error('users function error:', err)

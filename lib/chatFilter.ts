@@ -54,13 +54,42 @@ const KEYWORD_PATTERNS = [
   /\binsta\b/i,
 ]
 
+const FOUL_LANGUAGE_PATTERNS = [
+  /\bfuck\b/i,
+  /\bfucking\b/i,
+  /\bshit\b/i,
+  /\bbitch\b/i,
+  /\bmadarchod\b/i,
+  /\bmc\b/i,
+  /\bbhenchod\b/i,
+  /\bbc\b/i,
+  /\blanja\b/i,
+  /\bdengey\b/i,
+  /\bchodu\b/i,
+  /\bsale\b/i,
+]
+
+function hasDenseDigitSequence(message: string): boolean {
+  const onlyDigits = message.replace(/\D/g, '')
+  if (onlyDigits.length >= 8) return true
+  return /(?:\d\D*){8,}/.test(message)
+}
+
 export interface FilterResult {
   blocked: boolean
   reason?: string
-  category?: 'phone' | 'contact' | 'fraud' | 'social'
+  category?: 'phone' | 'contact' | 'fraud' | 'social' | 'abuse'
 }
 
 export function filterChatMessage(message: string): FilterResult {
+  if (hasDenseDigitSequence(message)) {
+    return {
+      blocked: true,
+      reason: 'Messages containing long number sequences are blocked. Please use in-app chat without sharing contact numbers.',
+      category: 'phone',
+    }
+  }
+
   for (const pattern of PHONE_PATTERNS) {
     if (pattern.test(message)) {
       return {
@@ -103,6 +132,16 @@ export function filterChatMessage(message: string): FilterResult {
         blocked: true,
         reason: 'This message appears to share personal contact information. All communication must stay within the app.',
         category: 'contact',
+      }
+    }
+  }
+
+  for (const pattern of FOUL_LANGUAGE_PATTERNS) {
+    if (pattern.test(message)) {
+      return {
+        blocked: true,
+        reason: 'Abusive or foul language is not allowed in chat. Please keep communication respectful.',
+        category: 'abuse',
       }
     }
   }

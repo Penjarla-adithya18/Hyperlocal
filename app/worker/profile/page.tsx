@@ -321,7 +321,7 @@ export default function WorkerProfilePage() {
                       </span>
                     </Button>
                   </label>
-                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG ï¿½ max 2 MB ï¿½ shown at 200ï¿½200 px</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG - max 2 MB - shown at 200×200 px</p>
                 </div>
               </div>
 
@@ -349,10 +349,10 @@ export default function WorkerProfilePage() {
                   }`} />
                   <div className="flex-1">
                     <p className="text-sm font-semibold capitalize">
-                      {user.trustLevel === 'trusted' ? '? Trusted Worker' :
-                       user.trustLevel === 'active' ? '?? Active Worker' : '?? New Worker'}
+                      {user.trustLevel === 'trusted' ? 'Trusted Worker' :
+                       user.trustLevel === 'active' ? 'Active Worker' : 'New Worker'}
                     </p>
-                    <p className="text-xs text-muted-foreground">Trust Score: {user.trustScore.toFixed(1)} / 5.0</p>
+                    <p className="text-xs text-muted-foreground">Trust Score: {user.trustScore.toFixed(1)} / 100</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />

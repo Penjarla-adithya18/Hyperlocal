@@ -127,10 +127,10 @@ function SignupPageContent() {
       return;
     }
 
-    if (formData.password.length < 6) {
+    if (formData.password.length < 8) {
       toast({
         title: 'Weak Password',
-        description: 'Password must be at least 6 characters long',
+        description: 'Password must be at least 8 characters long',
         variant: 'destructive',
       });
       return;
@@ -201,8 +201,8 @@ function SignupPageContent() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(120deg,#d8eee6_0%,#dbe9f8_45%,#d3e3f6_100%)] p-4 dark:bg-[linear-gradient(120deg,#0f172a_0%,#10253a_50%,#0f2f2a_100%)] md:p-6">
-      <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-[#eef5fb]/95 shadow-2xl md:flex-row dark:border-slate-700 dark:bg-slate-900/90">
-        <section className="relative flex w-full flex-col items-center justify-start bg-[#e8f4ea] p-7 pt-24 text-slate-900 md:w-1/2 md:items-start md:p-10 md:pt-24 lg:w-5/12 lg:p-12 lg:pt-24 dark:bg-slate-900 dark:text-slate-100">
+      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-[#eef5fb]/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-[#e8f4ea] p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
               H
@@ -239,7 +239,7 @@ function SignupPageContent() {
           </div>
         </section>
 
-        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-16 dark:bg-slate-950">
+        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
           <Link href="/" className="absolute left-6 top-6 inline-flex items-center text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:left-8 md:top-8">
             ← Back to Home
           </Link>
@@ -443,9 +443,10 @@ function SignupPageContent() {
                     <input
                       id="password"
                       type="password"
-                      placeholder="Password (minimum 6 characters)"
+                      placeholder="Password (minimum 8 characters)"
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      minLength={8}
                       className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />

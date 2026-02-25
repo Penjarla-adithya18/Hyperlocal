@@ -1,26 +1,27 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Loader2, Phone, Lock, Store, LogIn } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { loginUser, getUserPassword } from '@/lib/auth';
+import { loginUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
-
-const useSupabaseBackend =
-  typeof globalThis !== 'undefined' &&
-  (globalThis as any)?.process?.env?.NEXT_PUBLIC_USE_SUPABASE === 'true';
 
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
   const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     phoneNumber: '',
     password: '',
   });
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -48,18 +49,6 @@ export default function LoginPage() {
       const result = await loginUser(formData.phoneNumber, formData.password);
 
       if (result.success && result.user) {
-        // Verify password (mock auth)
-        const storedPassword = getUserPassword(formData.phoneNumber);
-        if (!useSupabaseBackend && storedPassword !== formData.password) {
-          toast({
-            title: 'Login Failed',
-            description: 'Invalid phone number or password',
-            variant: 'destructive',
-          });
-          setLoading(false);
-          return;
-        }
-
         login(result.user);
         toast({
           title: 'Login Successful',
@@ -82,9 +71,10 @@ export default function LoginPage() {
         });
       }
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Something went wrong. Please try again.';
       toast({
         title: 'Error',
-        description: 'Something went wrong. Please try again.',
+        description: message,
         variant: 'destructive',
       });
     } finally {
@@ -92,10 +82,14 @@ export default function LoginPage() {
     }
   };
 
+  if (!mounted) {
+    return <div className="min-h-screen bg-background" />;
+  }
+
   return (
     <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(120deg,#d8eee6_0%,#dbe9f8_45%,#d3e3f6_100%)] p-4 dark:bg-[linear-gradient(120deg,#0f172a_0%,#10253a_50%,#0f2f2a_100%)] md:p-6">
-      <div className="flex h-[88vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-[#eef5fb]/95 shadow-2xl md:flex-row dark:border-slate-700 dark:bg-slate-900/90">
-        <section className="relative flex w-full flex-col items-center justify-start bg-[#e8f4ea] p-7 pt-24 text-slate-900 md:w-1/2 md:items-start md:p-10 md:pt-24 lg:w-5/12 lg:p-12 lg:pt-24 dark:bg-slate-900 dark:text-slate-100">
+      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-[#eef5fb]/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-[#e8f4ea] p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
               H
@@ -133,7 +127,7 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-16 dark:bg-slate-950">
+        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
           <Link href="/" className="absolute left-6 top-6 inline-flex items-center text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:left-8 md:top-8">
             ← Back to Home
           </Link>
@@ -231,13 +225,24 @@ export default function LoginPage() {
             <div className="mt-8 border-t border-gray-100 pt-6 text-xs text-gray-400 dark:border-slate-800 dark:text-slate-500">
               <h3 className="mb-2 font-bold uppercase tracking-widest text-gray-300 dark:text-slate-600">Demo Access</h3>
               <div className="flex flex-wrap gap-4">
-                <span className="cursor-pointer transition-colors hover:text-emerald-500" title="Use 9876543210">
+                <button
+                  type="button"
+                  className="cursor-pointer transition-colors hover:text-emerald-500"
+                  title="Use 9876543210 / Password@123"
+                  onClick={() => setFormData({ phoneNumber: '9876543210', password: 'Password@123' })}
+                >
                   Worker: 9876543210
-                </span>
-                <span className="cursor-pointer transition-colors hover:text-emerald-500" title="Use 9876543212">
+                </button>
+                <button
+                  type="button"
+                  className="cursor-pointer transition-colors hover:text-emerald-500"
+                  title="Use 9876543212 / Password@123"
+                  onClick={() => setFormData({ phoneNumber: '9876543212', password: 'Password@123' })}
+                >
                   Employer: 9876543212
-                </span>
+                </button>
               </div>
+              <p className="mt-2 text-[11px] text-muted-foreground">Demo password: Password@123</p>
             </div>
           </div>
         </section>
