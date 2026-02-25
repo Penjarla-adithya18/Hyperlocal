@@ -1,9 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, Phone, Lock, Store, LogIn } from 'lucide-react';
+import { Loader2, Phone, Lock, Store, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loginUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -12,16 +12,12 @@ export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuth();
   const { toast } = useToast();
-  const [mounted, setMounted] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     phoneNumber: '',
     password: '',
   });
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -81,10 +77,6 @@ export default function LoginPage() {
       setLoading(false);
     }
   };
-
-  if (!mounted) {
-    return <div className="min-h-screen bg-background" />;
-  }
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(120deg,#d8eee6_0%,#dbe9f8_45%,#d3e3f6_100%)] p-4 dark:bg-[linear-gradient(120deg,#0f172a_0%,#10253a_50%,#0f2f2a_100%)] md:p-6">
@@ -171,7 +163,7 @@ export default function LoginPage() {
                     </div>
                     <input
                       id="password"
-                      type="password"
+                      type={showPassword ? 'text' : 'password'}
                       name="password"
                       placeholder="Password"
                       value={formData.password}
@@ -179,6 +171,14 @@ export default function LoginPage() {
                       className="relative block w-full appearance-none border-0 border-b-2 border-gray-200 bg-transparent px-3 py-4 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:z-10 focus:border-emerald-500 focus:outline-none focus:ring-0 sm:text-lg dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />
+                    <button
+                      type="button"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                      onClick={() => setShowPassword((prev) => !prev)}
+                      className="absolute inset-y-0 right-0 flex items-center pr-1 text-gray-400 transition-colors hover:text-emerald-500"
+                    >
+                      {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                    </button>
                   </div>
                 </div>
               </div>
