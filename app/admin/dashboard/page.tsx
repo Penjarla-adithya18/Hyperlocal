@@ -8,10 +8,12 @@ import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/api'
 import { Users, Briefcase, TrendingUp, AlertTriangle, IndianRupee, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const [loading, setLoading] = useState(true)
   const [stats, setStats] = useState({
     totalUsers: 0,
     totalWorkers: 0,
@@ -32,25 +34,51 @@ export default function AdminDashboardPage() {
       router.push('/login')
       return
     }
+
+    let cancelled = false
+    async function loadStats() {
+      try {
+        const data = await mockDb.getAdminStats()
+        if (cancelled) return
+        setStats({
+          totalUsers: data.totalUsers ?? 0,
+          totalWorkers: data.totalWorkers ?? 0,
+          totalEmployers: data.totalEmployers ?? 0,
+          totalJobs: data.totalJobs ?? 0,
+          activeJobs: data.activeJobs ?? 0,
+          completedJobs: data.completedJobs ?? 0,
+          totalApplications: data.totalApplications ?? 0,
+          pendingApplications: data.pendingApplications ?? 0,
+          totalReports: data.totalReports ?? 0,
+          unhandledReports: data.unhandledReports ?? 0,
+          totalEscrow: data.totalEscrow ?? 0,
+          heldEscrow: data.heldEscrow ?? 0,
+        })
+      } catch (err) {
+        console.error('Failed to load admin stats:', err)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
     loadStats()
+    return () => { cancelled = true }
   }, [user, router])
 
-  const loadStats = async () => {
-    const data = await mockDb.getAdminStats()
-    setStats({
-      totalUsers: data.totalUsers ?? 0,
-      totalWorkers: data.totalWorkers ?? 0,
-      totalEmployers: data.totalEmployers ?? 0,
-      totalJobs: data.totalJobs ?? 0,
-      activeJobs: data.activeJobs ?? 0,
-      completedJobs: data.completedJobs ?? 0,
-      totalApplications: data.totalApplications ?? 0,
-      pendingApplications: data.pendingApplications ?? 0,
-      totalReports: data.totalReports ?? 0,
-      unhandledReports: data.unhandledReports ?? 0,
-      totalEscrow: data.totalEscrow ?? 0,
-      heldEscrow: data.heldEscrow ?? 0,
-    })
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <AdminNav />
+        <div className="container mx-auto px-4 py-8">
+          <Skeleton className="h-8 w-48 mb-2" />
+          <Skeleton className="h-4 w-64 mb-6" />
+          <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
+            {Array.from({ length: 8 }).map((_, i) => (
+              <Card key={i} className="p-6"><Skeleton className="h-4 w-20 mb-2" /><Skeleton className="h-8 w-16" /></Card>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
   }
 
   return (

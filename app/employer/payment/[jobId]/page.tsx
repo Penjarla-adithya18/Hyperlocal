@@ -9,7 +9,8 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import { mockDb } from '@/lib/api'
+import { mockJobOps } from '@/lib/api'
+import { useAuth } from '@/contexts/AuthContext'
 import { Job } from '@/lib/types'
 import {
   Shield,
@@ -29,6 +30,7 @@ const PLATFORM_FEE_RATE = 0.02 // 2% gateway fee (≠ commission which is 10% on
 export default function PaymentPage() {
   const params = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const jobId = params.jobId as string
 
   const [job, setJob] = useState<Job | null>(null)
@@ -46,13 +48,27 @@ export default function PaymentPage() {
   const [cardCvv, setCardCvv] = useState('')
 
   useEffect(() => {
+    // Auth guard: redirect unauthenticated users
+    if (!user || user.role !== 'employer') {
+      router.push('/login')
+      return
+    }
+
+    let cancelled = false
     async function load() {
-      const data = await mockDb.getJobById(jobId)
-      setJob(data)
-      setLoading(false)
+      try {
+        const data = await mockJobOps.findById(jobId)
+        if (!cancelled) {
+          setJob(data)
+          setLoading(false)
+        }
+      } catch {
+        if (!cancelled) setLoading(false)
+      }
     }
     load()
-  }, [jobId])
+    return () => { cancelled = true }
+  }, [jobId, user, router])
 
   if (loading) {
     return (
@@ -70,7 +86,7 @@ export default function PaymentPage() {
     )
   }
 
-  const amount = job.payAmount ?? job.pay ?? 0
+  const amount = job.payAmount ?? 0
   const platformFee = Math.round(amount * PLATFORM_FEE_RATE)
   const total = amount + platformFee
 
@@ -102,7 +118,7 @@ export default function PaymentPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
+    <div className="min-h-screen bg-linear-to-br from-slate-50 to-slate-100">
       {/* Top bar */}
       <div className="bg-white border-b border-slate-200 py-3 px-6 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-3">
@@ -143,7 +159,7 @@ export default function PaymentPage() {
             </CardHeader>
             <CardContent className="space-y-3">
               <div className="flex items-start gap-3">
-                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
                   <Building2 className="w-5 h-5 text-primary" />
                 </div>
                 <div>
@@ -180,7 +196,7 @@ export default function PaymentPage() {
           </Card>
 
           <div className="flex items-center gap-2 text-xs text-slate-500 px-1">
-            <Shield className="w-4 h-4 text-green-600 flex-shrink-0" />
+            <Shield className="w-4 h-4 text-green-600 shrink-0" />
             <span>Payments protected by HyperLocal Escrow. 100% refund guarantee if job is not completed.</span>
           </div>
         </div>

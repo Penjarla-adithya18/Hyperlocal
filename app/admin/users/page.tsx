@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import { Card, CardContent } from '@/components/ui/card'
@@ -9,11 +9,22 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/api'
+import { mockUserOps } from '@/lib/api'
 import { User } from '@/lib/types'
-import { Search, Star, Ban, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
+import { Search, Star, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+
+/** Helper: check if a user matches the search query */
+function matchesSearch(user: User, query: string): boolean {
+  if (!query) return true
+  const q = query.toLowerCase()
+  return (
+    user.fullName.toLowerCase().includes(q) ||
+    (user.email || '').toLowerCase().includes(q) ||
+    (user.phone || user.phoneNumber || '').includes(query) // phone is exact, not lowercased
+  )
+}
 
 export default function AdminUsersPage() {
   const router = useRouter()
@@ -27,46 +38,45 @@ export default function AdminUsersPage() {
       router.push('/login')
       return
     }
-    loadUsers()
-  }, [currentUser, router])
 
-  const loadUsers = async () => {
-    const allUsers = await mockDb.getAllUsers()
-    setUsers(allUsers.filter(u => u.role !== 'admin'))
-  }
-
-  const handleBanUser = async (userId: string) => {
-    if (confirm('Are you sure you want to suspend this user? They will be unable to use the platform.')) {
-      const updated = await mockDb.updateUser(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
-      if (updated) {
-        toast({
-          title: 'Account Suspended',
-          description: 'User has been suspended from the platform'
-        })
-        loadUsers()
+    let cancelled = false
+    async function loadUsers() {
+      try {
+        const allUsers = await mockUserOps.getAll()
+        if (!cancelled) setUsers(allUsers.filter((u) => u.role !== 'admin'))
+      } catch (err) {
+        console.error('Failed to load users:', err)
       }
     }
-  }
+    loadUsers()
+    return () => { cancelled = true }
+  }, [currentUser, router])
 
-  const handleVerifyUser = async (userId: string) => {
-    const updated = await mockDb.updateUser(userId, { isVerified: true })
+  const handleBanUser = useCallback(async (userId: string) => {
+    if (!confirm('Are you sure you want to suspend this user? They will be unable to use the platform.')) return
+    const updated = await mockUserOps.update(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
     if (updated) {
-      toast({
-        title: 'Account Restored',
-        description: 'User account has been restored'
-      })
-      loadUsers()
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
+      toast({ title: 'Account Suspended', description: 'User has been suspended from the platform' })
     }
-  }
+  }, [toast])
 
-  const workers = users.filter(u => u.role === 'worker')
-  const employers = users.filter(u => u.role === 'employer')
+  const handleVerifyUser = useCallback(async (userId: string) => {
+    // BUG FIX: Restore trustScore to 50 (base score) when un-suspending, not 0
+    const updated = await mockUserOps.update(userId, { isVerified: true, trustLevel: 'active' as const, trustScore: 50 })
+    if (updated) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
+      toast({ title: 'Account Restored', description: 'User account has been restored' })
+    }
+  }, [toast])
 
-  const filteredUsers = users.filter(u => 
-    u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (u.phone || u.phoneNumber || '').includes(searchQuery)
-  )
+  // ── Memoized derived lists (single source of truth for all tabs) ──
+  const workers = useMemo(() => users.filter((u) => u.role === 'worker'), [users])
+  const employers = useMemo(() => users.filter((u) => u.role === 'employer'), [users])
+
+  const filteredUsers = useMemo(() => users.filter((u) => matchesSearch(u, searchQuery)), [users, searchQuery])
+  const filteredWorkers = useMemo(() => workers.filter((u) => matchesSearch(u, searchQuery)), [workers, searchQuery])
+  const filteredEmployers = useMemo(() => employers.filter((u) => matchesSearch(u, searchQuery)), [employers, searchQuery])
 
   const UserCard = ({ user }: { user: User }) => (
     <Card className="hover:border-primary transition-colors">
@@ -183,11 +193,7 @@ export default function AdminUsersPage() {
 
           <TabsContent value="workers">
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {workers.filter(u => 
-                u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (u.phone || u.phoneNumber || '').includes(searchQuery)
-              ).map((user) => (
+              {filteredWorkers.map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}
             </div>
@@ -195,11 +201,7 @@ export default function AdminUsersPage() {
 
           <TabsContent value="employers">
             <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {employers.filter(u => 
-                u.fullName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (u.email || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (u.phone || u.phoneNumber || '').includes(searchQuery)
-              ).map((user) => (
+              {filteredEmployers.map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}
             </div>

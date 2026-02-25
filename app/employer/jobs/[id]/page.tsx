@@ -41,28 +41,41 @@ export default function EmployerJobDetailPage() {
   const [ratingFeedback, setRatingFeedback] = useState('')
   const [ratingDone, setRatingDone] = useState(false)
 
-  useEffect(() => { loadData() }, [jobId])
+  useEffect(() => {
+    if (!jobId) return
+    let cancelled = false
 
-  const loadData = async () => {
-    try {
-      const [jobData, allApps, allEscrow] = await Promise.all([
-        mockDb.getJobById(jobId),
-        mockApplicationOps.findByJobId(jobId),
-        mockEscrowOps.getAll(),
-      ])
-      setJob(jobData)
-      setApplications(allApps)
-      setEscrow(allEscrow?.find((e) => e.jobId === jobId) ?? null)
-      // Load worker details for trust badges
-      if (allApps.length > 0) {
-        const workers = await Promise.all(allApps.map(a => mockUserOps.findById(a.workerId).catch(() => null)))
-        const wMap: Record<string, import('@/lib/types').User> = {}
-        for (const w of workers) { if (w) wMap[w.id] = w }
-        setWorkersById(wMap)
-      }
-    } catch (err) { console.error(err) }
-    finally { setLoading(false) }
-  }
+    async function loadData() {
+      try {
+        // Fetch job, its applications, and its escrow in parallel
+        // FIX: Use findByJobId instead of fetching ALL escrow transactions
+        const [jobData, allApps, escrowData] = await Promise.all([
+          mockDb.getJobById(jobId),
+          mockApplicationOps.findByJobId(jobId),
+          mockEscrowOps.findByJobId(jobId),
+        ])
+        if (cancelled) return
+
+        setJob(jobData)
+        setApplications(allApps)
+        setEscrow(escrowData)
+
+        // Load worker details for trust badges
+        if (allApps.length > 0) {
+          const workerIds = [...new Set(allApps.map((a) => a.workerId))]
+          const workers = await Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null)))
+          if (cancelled) return
+          const wMap: Record<string, import('@/lib/types').User> = {}
+          for (const w of workers) { if (w) wMap[w.id] = w }
+          setWorkersById(wMap)
+        }
+      } catch (err) { console.error(err) }
+      finally { if (!cancelled) setLoading(false) }
+    }
+
+    loadData()
+    return () => { cancelled = true }
+  }, [jobId])
 
   const handleSubmitRating = async () => {
     // Find the accepted application to get workerId
@@ -338,12 +351,12 @@ export default function EmployerJobDetailPage() {
 
                 {(escrow?.status === 'released' || job.paymentStatus === 'released') && (
                   <div className="bg-green-100 border border-green-200 rounded-lg p-3 text-sm text-green-800 flex items-center gap-2">
-                    <CheckCircle2 className="w-4 h-4 flex-shrink-0" /> Payment released successfully
+                    <CheckCircle2 className="w-4 h-4 shrink-0" /> Payment released successfully
                   </div>
                 )}
                 {(escrow?.status === 'refunded' || job.paymentStatus === 'refunded') && (
                   <div className="bg-orange-100 border border-orange-200 rounded-lg p-3 text-sm text-orange-800 flex items-center gap-2">
-                    <RefreshCcw className="w-4 h-4 flex-shrink-0" /> Refund in process (3–5 days)
+                    <RefreshCcw className="w-4 h-4 shrink-0" /> Refund in process (3–5 days)
                   </div>
                 )}
               </CardContent>

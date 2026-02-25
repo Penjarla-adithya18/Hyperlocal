@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { EmployerNav } from '@/components/employer/EmployerNav';
@@ -41,43 +41,48 @@ export default function EmployerDashboardPage() {
       return;
     }
 
+    let cancelled = false;
+
+    async function loadDashboardData() {
+      try {
+        const [profile, trust, employerJobs] = await Promise.all([
+          mockEmployerProfileOps.findByUserId(user!.id),
+          mockTrustScoreOps.findByUserId(user!.id),
+          mockJobOps.findByEmployerId(user!.id),
+        ]);
+        if (cancelled) return;
+
+        setEmployerProfile(profile);
+        setTrustScore(trust);
+        setJobs(employerJobs);
+
+        // Fetch applications per job in parallel (N+1 � acceptable since no bulk endpoint exists)
+        const jobIds = employerJobs.map((j) => j.id);
+        const allApps = await Promise.all(jobIds.map((id) => mockApplicationOps.findByJobId(id)));
+        if (cancelled) return;
+        const flatApps = allApps.flat();
+        setApplications(flatApps);
+
+        const countMap: Record<string, number> = {};
+        for (const app of flatApps) {
+          countMap[app.jobId] = (countMap[app.jobId] || 0) + 1;
+        }
+        setAppCountByJob(countMap);
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
     loadDashboardData();
+    return () => { cancelled = true; };
   }, [user, router]);
 
-  const loadDashboardData = async () => {
-    if (!user) return;
-
-    try {
-      const [profile, trust, employerJobs] = await Promise.all([
-        mockEmployerProfileOps.findByUserId(user.id),
-        mockTrustScoreOps.findByUserId(user.id),
-        mockJobOps.findByEmployerId(user.id),
-      ]);
-
-      setEmployerProfile(profile);
-      setTrustScore(trust);
-      setJobs(employerJobs);
-
-      // Get all applications for employer's jobs and build per-job count map
-      const jobIds = employerJobs.map((j) => j.id);
-      const allApps = await Promise.all(jobIds.map((id) => mockApplicationOps.findByJobId(id)));
-      const flatApps = allApps.flat();
-      setApplications(flatApps);
-      const countMap: Record<string, number> = {};
-      for (const app of flatApps) {
-        countMap[app.jobId] = (countMap[app.jobId] || 0) + 1;
-      }
-      setAppCountByJob(countMap);
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const activeJobs = jobs.filter((j) => j.status === 'active').length;
+  // Memoized derived stats
+  const activeJobs = useMemo(() => jobs.filter((j) => j.status === 'active').length, [jobs]);
   const totalApplications = applications.length;
-  const pendingApplications = applications.filter((a) => a.status === 'pending').length;
+  const pendingApplications = useMemo(() => applications.filter((a) => a.status === 'pending').length, [applications]);
 
   if (loading) {
     return (
@@ -116,7 +121,7 @@ export default function EmployerDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
       <EmployerNav />
 
       <div className="container mx-auto px-4 py-8 space-y-8">
@@ -277,7 +282,7 @@ export default function EmployerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-accent">₹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-accent">?{job.pay.toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         {job.paymentStatus === 'locked' ? (
                           <>
@@ -307,9 +312,9 @@ export default function EmployerDashboardPage() {
 
         {/* Trust Score Info */}
         {trustScore && (
-          <Card className="p-6 bg-gradient-to-br from-primary/5 to-accent/5">
+          <Card className="p-6 bg-linear-to-br from-primary/5 to-accent/5">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                 <Star className="w-6 h-6 text-primary" />
               </div>
               <div className="flex-1">

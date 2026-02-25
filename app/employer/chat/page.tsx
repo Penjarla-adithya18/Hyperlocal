@@ -23,7 +23,7 @@ import {
 import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
-import { filterChatMessage } from '@/lib/chatFilter'
+import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
 
 export default function EmployerChatPage() {
   const { user } = useAuth()
@@ -304,7 +304,7 @@ export default function EmployerChatPage() {
                                   : 'bg-muted'
                               }`}
                             >
-                              <p className="text-sm">{message.message}</p>
+                              <p className="text-sm">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
                               <p className={`text-xs mt-1 ${
                                 isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
                               }`}>

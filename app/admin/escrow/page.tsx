@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -15,60 +15,94 @@ import { EscrowTransaction, Job } from '@/lib/types'
 import { Search, Lock, Unlock, RefreshCcw, IndianRupee, AlertCircle, TrendingUp } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 
+/** Render escrow status badge */
+function statusBadge(status: string) {
+  if (status === 'held') return <Badge className="bg-green-600"><Lock className="w-3 h-3 mr-1" /> Held</Badge>
+  if (status === 'released') return <Badge variant="outline" className="border-blue-500 text-blue-700"><Unlock className="w-3 h-3 mr-1" /> Released</Badge>
+  if (status === 'refunded') return <Badge variant="outline" className="border-orange-500 text-orange-700"><RefreshCcw className="w-3 h-3 mr-1" /> Refunded</Badge>
+  if (status === 'pending') return <Badge variant="outline" className="border-amber-500 text-amber-600"><AlertCircle className="w-3 h-3 mr-1" /> Pending</Badge>
+  return <Badge variant="secondary">{status}</Badge>
+}
+
 export default function AdminEscrowPage() {
   const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
   const [transactions, setTransactions] = useState<EscrowTransaction[]>([])
   const [jobs, setJobs] = useState<Record<string, Job>>({})
-  const [filteredTxns, setFilteredTxns] = useState<EscrowTransaction[]>([])
   const [statusFilter, setStatusFilter] = useState<string>('all')
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     if (!user || user.role !== 'admin') { router.push('/login'); return }
+
+    let cancelled = false
+    async function loadData() {
+      try {
+        const txns = await mockEscrowOps.getAll()
+        if (cancelled) return
+        setTransactions(txns)
+
+        // Batch-fetch unique job titles (de-duped)
+        const uniqueJobIds = [...new Set(txns.map((t) => t.jobId))]
+        const jobResults = await Promise.all(uniqueJobIds.map((id) => mockJobOps.findById(id).catch(() => null)))
+        if (cancelled) return
+        const jobMap: Record<string, Job> = {}
+        for (const j of jobResults) { if (j) jobMap[j.id] = j }
+        setJobs(jobMap)
+      } catch {
+        toast({ title: 'Error', description: 'Failed to load escrow data', variant: 'destructive' })
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
     loadData()
+    return () => { cancelled = true }
   }, [user, router])
 
-  useEffect(() => {
-    let results = [...transactions]
-    if (statusFilter !== 'all') results = results.filter(t => t.status === statusFilter)
+  // ── Derived state via useMemo (replaces the derived-state-in-effect anti-pattern) ──
+  const filteredTxns = useMemo(() => {
+    let results = transactions
+    if (statusFilter !== 'all') results = results.filter((t) => t.status === statusFilter)
     if (search.trim()) {
       const q = search.toLowerCase()
-      results = results.filter(t => t.jobId.toLowerCase().includes(q) || t.id.toLowerCase().includes(q))
+      results = results.filter((t) => t.jobId.toLowerCase().includes(q) || t.id.toLowerCase().includes(q))
     }
-    setFilteredTxns(results)
+    return results
   }, [transactions, statusFilter, search])
 
-  const loadData = async () => {
+  const { totalHeld, totalReleased, totalRefunded } = useMemo(() => {
+    let held = 0, released = 0, refunded = 0
+    for (const t of transactions) {
+      if (t.status === 'held' || t.status === 'pending') held += t.amount
+      else if (t.status === 'released') released += t.amount
+      else if (t.status === 'refunded') refunded += t.amount
+    }
+    return { totalHeld: held, totalReleased: released, totalRefunded: refunded }
+  }, [transactions])
+
+  // Memoize per-status counts to avoid re-filtering in JSX
+  const heldCount = useMemo(() => transactions.filter((t) => t.status === 'held').length, [transactions])
+  const releasedCount = useMemo(() => transactions.filter((t) => t.status === 'released').length, [transactions])
+  const refundedCount = useMemo(() => transactions.filter((t) => t.status === 'refunded').length, [transactions])
+
+  /** Reload data from server */
+  const handleRefresh = async () => {
     setLoading(true)
     try {
       const txns = await mockEscrowOps.getAll()
       setTransactions(txns)
-      // Load job titles
+      const uniqueJobIds = [...new Set(txns.map((t) => t.jobId))]
+      const jobResults = await Promise.all(uniqueJobIds.map((id) => mockJobOps.findById(id).catch(() => null)))
       const jobMap: Record<string, Job> = {}
-      await Promise.all(txns.map(async (t) => {
-        if (!jobMap[t.jobId]) {
-          const job = await mockJobOps.findById(t.jobId).catch(() => null)
-          if (job) jobMap[t.jobId] = job
-        }
-      }))
+      for (const j of jobResults) { if (j) jobMap[j.id] = j }
       setJobs(jobMap)
-    } catch { toast({ title: 'Error', description: 'Failed to load escrow data', variant: 'destructive' }) }
-    finally { setLoading(false) }
-  }
-
-  const totalHeld = transactions.filter(t => t.status === 'held' || t.status === 'pending').reduce((sum, t) => sum + t.amount, 0)
-  const totalReleased = transactions.filter(t => t.status === 'released').reduce((sum, t) => sum + t.amount, 0)
-  const totalRefunded = transactions.filter(t => t.status === 'refunded').reduce((sum, t) => sum + t.amount, 0)
-
-  const statusBadge = (status: string) => {
-    if (status === 'held') return <Badge className="bg-green-600"><Lock className="w-3 h-3 mr-1" /> Held</Badge>
-    if (status === 'released') return <Badge variant="outline" className="border-blue-500 text-blue-700"><Unlock className="w-3 h-3 mr-1" /> Released</Badge>
-    if (status === 'refunded') return <Badge variant="outline" className="border-orange-500 text-orange-700"><RefreshCcw className="w-3 h-3 mr-1" /> Refunded</Badge>
-    if (status === 'pending') return <Badge variant="outline" className="border-amber-500 text-amber-600"><AlertCircle className="w-3 h-3 mr-1" /> Pending</Badge>
-    return <Badge variant="secondary">{status}</Badge>
+    } catch {
+      toast({ title: 'Error', description: 'Failed to refresh escrow data', variant: 'destructive' })
+    } finally {
+      setLoading(false)
+    }
   }
 
   return (
@@ -84,15 +118,15 @@ export default function AdminEscrowPage() {
         <div className="grid sm:grid-cols-3 gap-4">
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><Lock className="w-4 h-4 text-green-600" /> Held</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-bold text-green-700">₹{totalHeld.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{transactions.filter(t => t.status === 'held').length} transactions</p></CardContent>
+            <CardContent><p className="text-2xl font-bold text-green-700">₹{totalHeld.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{heldCount} transactions</p></CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><TrendingUp className="w-4 h-4 text-blue-600" /> Released</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-bold text-blue-700">₹{totalReleased.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{transactions.filter(t => t.status === 'released').length} payouts</p></CardContent>
+            <CardContent><p className="text-2xl font-bold text-blue-700">₹{totalReleased.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{releasedCount} payouts</p></CardContent>
           </Card>
           <Card>
             <CardHeader className="pb-2"><CardTitle className="text-sm flex items-center gap-2"><RefreshCcw className="w-4 h-4 text-orange-500" /> Refunded</CardTitle></CardHeader>
-            <CardContent><p className="text-2xl font-bold text-orange-600">₹{totalRefunded.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{transactions.filter(t => t.status === 'refunded').length} refunds</p></CardContent>
+            <CardContent><p className="text-2xl font-bold text-orange-600">₹{totalRefunded.toLocaleString()}</p><p className="text-xs text-muted-foreground mt-1">{refundedCount} refunds</p></CardContent>
           </Card>
         </div>
 
@@ -115,7 +149,7 @@ export default function AdminEscrowPage() {
                   <SelectItem value="refunded">Refunded</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="outline" onClick={loadData}>Refresh</Button>
+              <Button variant="outline" onClick={handleRefresh}>Refresh</Button>
             </div>
 
             {loading ? (

@@ -254,9 +254,10 @@ export const mockJobOps = {
 // ─── Applications ──────────────────────────────────────────────────────────
 
 export const mockApplicationOps = {
+  /** Fetch a single application by ID (server-filtered, not client-side scan) */
   findById: async (id: string): Promise<Application | null> => {
-    const res = await call<R<Application[]>>('applications', 'GET', {})
-    return res.data.find((a) => a.id === id) ?? null
+    const res = await call<R<Application | null>>('applications', 'GET', { id })
+    return res.data
   },
   findByJobId: async (jobId: string): Promise<Application[]> => {
     const res = await call<R<Application[]>>('applications', 'GET', { jobId })
@@ -313,9 +314,9 @@ export const mockNotificationOps = {
     const res = await call<R<Notification>>('notifications', 'POST', {}, notification)
     return res.data
   },
-  findByUserId: async (_userId: string): Promise<Notification[]> => {
-    // Edge function reads userId from JWT — the _userId param is ignored
-    const res = await call<R<Notification[]>>('notifications', 'GET')
+  findByUserId: async (userId: string): Promise<Notification[]> => {
+    // JWT identifies the user; userId param is forwarded for admin use-cases
+    const res = await call<R<Notification[]>>('notifications', 'GET', { userId })
     return res.data || []
   },
   markAsRead: async (id: string): Promise<boolean> => {
@@ -365,9 +366,11 @@ export const mockChatOps = {
     })
     return res.data
   },
+  /** Find conversation by applicationId — sends param to server for direct lookup
+   *  instead of fetching all conversations and filtering client-side. */
   findSessionByApplicationId: async (applicationId: string) => {
-    const res = await call<R<ChatConversation[]>>('chat', 'GET', { type: 'conversations' })
-    return res.data.find((c) => c.applicationId === applicationId) ?? null
+    const res = await call<R<ChatConversation[]>>('chat', 'GET', { type: 'conversations', applicationId })
+    return res.data?.[0] ?? null
   },
 }
 
@@ -382,13 +385,19 @@ export const mockEscrowOps = {
     const res = await call<R<EscrowTransaction[]>>('escrow')
     return res.data
   },
+  /** Fetch escrow by jobId — avoids fetching all and filtering client-side. */
+  findByJobId: async (jobId: string): Promise<EscrowTransaction | null> => {
+    const res = await call<R<EscrowTransaction[]>>('escrow', 'GET', { jobId })
+    return res.data?.[0] ?? null
+  },
   update: async (id: string, updates: Partial<EscrowTransaction>): Promise<EscrowTransaction | null> => {
     const res = await call<R<EscrowTransaction | null>>('escrow', 'PATCH', { id }, updates)
     return res.data
   },
-  findByUser: async (userId: string, _role: 'worker' | 'employer'): Promise<EscrowTransaction[]> => {
-    // The edge function auto-filters by the logged-in user; fetch all and return
-    const res = await call<R<EscrowTransaction[]>>('escrow')
+  /** Fetch escrow transactions for a specific user. Passes userId + role so the
+   *  edge function can filter appropriately instead of returning everything. */
+  findByUser: async (userId: string, role: 'worker' | 'employer'): Promise<EscrowTransaction[]> => {
+    const res = await call<R<EscrowTransaction[]>>('escrow', 'GET', { userId, role })
     return res.data || []
   },
 }
@@ -566,15 +575,11 @@ export const mockDb = {
     return mockReportOps.update(reportId, updates)
   },
 
-  createEscrowTransaction(transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): EscrowTransaction {
-    // For immediate sync usage, return a temp local object and fire-and-forget
-    const tmp: EscrowTransaction = {
-      ...transaction,
-      id: `escrow-${Date.now()}`,
-      createdAt: new Date().toISOString(),
-    }
-    call<R<EscrowTransaction>>('escrow', 'POST', {}, transaction).catch(console.error)
-    return tmp
+  /** Create escrow transaction — now properly async.
+   *  Previously fire-and-forgot the API call, which could silently fail. */
+  async createEscrowTransaction(transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): Promise<EscrowTransaction> {
+    const res = await call<R<EscrowTransaction>>('escrow', 'POST', {}, transaction)
+    return res.data
   },
 
   getEscrowTransactionById(_id: string): EscrowTransaction | null {

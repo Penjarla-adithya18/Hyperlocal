@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { WorkerNav } from '@/components/worker/WorkerNav';
@@ -24,19 +24,22 @@ import {
 import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { generateJobMatchSummary, SupportedLocale } from '@/lib/gemini';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useI18n } from '@/contexts/I18nContext';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
   const { user } = useAuth();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recommendedJobs, setRecommendedJobs] = useState<Array<{ job: Job; matchScore: number }>>([]);
   const [applications, setApplications] = useState<Application[]>([]);
   const [jobsById, setJobsById] = useState<Record<string, Job>>({});
   const [loading, setLoading] = useState(true);
+  // AI-generated match summary for the top recommended job
+  const [topMatchSummary, setTopMatchSummary] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user || user.role !== 'worker') {
@@ -44,57 +47,75 @@ export default function WorkerDashboardPage() {
       return;
     }
 
+    let cancelled = false;
+
+    async function loadDashboardData() {
+      try {
+        // Parallel fetch of all dashboard data
+        const [profile, trust, apps, allJobs] = await Promise.all([
+          mockWorkerProfileOps.findByUserId(user!.id),
+          mockTrustScoreOps.findByUserId(user!.id),
+          mockApplicationOps.findByWorkerId(user!.id),
+          mockJobOps.getAll({ status: 'active' }),
+        ]);
+
+        if (cancelled) return;
+
+        setWorkerProfile(profile);
+        setTrustScore(trust);
+        setApplications(apps || []);
+
+        // Build jobsById map for recent apps section (allJobs is already fetched for recommendations)
+        const byId: Record<string, Job> = {};
+        for (const j of allJobs) byId[j.id] = j;
+        setJobsById(byId);
+
+        // Get job recommendations based on profile completeness
+        const recs = (profile && profile.profileCompleted)
+          ? getRecommendedJobs(profile, allJobs, 5)
+          : getBasicRecommendations(profile?.categories ?? [], allJobs, 5).map((job) => ({ job, matchScore: 0 }))
+        setRecommendedJobs(recs);
+
+        // Auto-generate locale-aware AI match summary for the top recommendation
+        if (recs.length > 0 && profile?.skills?.length) {
+          const top = recs[0];
+          const sumKey = `ai_sum_${top.job.id}_${locale}`
+          const cachedSum = sessionStorage.getItem(sumKey)
+          if (cachedSum) {
+            if (!cancelled) setTopMatchSummary(cachedSum);
+          } else {
+            generateJobMatchSummary(top.job.title, profile.skills, top.job.requiredSkills, locale as SupportedLocale)
+              .then((s) => {
+                if (!cancelled) {
+                  setTopMatchSummary(s);
+                  sessionStorage.setItem(sumKey, s);
+                }
+              })
+              .catch(() => {});
+          }
+        }
+      } catch (error) {
+        console.error('Failed to load dashboard data:', error);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
     loadDashboardData();
+    return () => { cancelled = true; };
   }, [user, router]);
 
-  const loadDashboardData = async () => {
-    if (!user) return;
-
-    try {
-      const [profile, trust, apps, allJobs] = await Promise.all([
-        mockWorkerProfileOps.findByUserId(user.id),
-        mockTrustScoreOps.findByUserId(user.id),
-        mockApplicationOps.findByWorkerId(user.id),
-        mockJobOps.getAll({ status: 'active' }),
-      ]);
-
-      setWorkerProfile(profile);
-      setTrustScore(trust);
-      setApplications(apps || []);
-
-      // Build jobsById map for recent apps section
-      const byId: Record<string, Job> = {};
-      for (const j of allJobs) byId[j.id] = j;
-      setJobsById(byId);
-
-      // Get job recommendations
-      if (profile && profile.profileCompleted) {
-        const recommended = getRecommendedJobs(profile, allJobs, 5);
-        setRecommendedJobs(recommended);
-      } else if (profile) {
-        const basic = getBasicRecommendations(profile.categories, allJobs, 5);
-        setRecommendedJobs(basic.map((job) => ({ job, matchScore: 0 })));
-      } else {
-        const basic = getBasicRecommendations([], allJobs, 5);
-        setRecommendedJobs(basic.map((job) => ({ job, matchScore: 0 })));
-      }
-    } catch (error) {
-      console.error('Failed to load dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Profile completeness — bio excluded (optional field)
-  const profileCompleteness = workerProfile
-    ? Math.round(
-        (workerProfile.skills.length > 0 ? 25 : 0) +
-        (workerProfile.categories.length > 0 ? 25 : 0) +
-        (workerProfile.availability ? 20 : 0) +
-        (workerProfile.experience ? 20 : 0) +
-        (workerProfile.location ? 10 : 0)
-      )
-    : 0;
+  // -- Profile completeness (memoized) --
+  const profileCompleteness = useMemo(() => {
+    if (!workerProfile) return 0;
+    return Math.round(
+      (workerProfile.skills.length > 0 ? 25 : 0) +
+      (workerProfile.categories.length > 0 ? 25 : 0) +
+      (workerProfile.availability ? 20 : 0) +
+      (workerProfile.experience ? 20 : 0) +
+      (workerProfile.location ? 10 : 0)
+    );
+  }, [workerProfile]);
 
   if (loading) {
     return (
@@ -128,7 +149,7 @@ export default function WorkerDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
       <WorkerNav />
 
       <div className="container mx-auto px-4 py-8 space-y-8">
@@ -142,7 +163,7 @@ export default function WorkerDashboardPage() {
         {profileCompleteness < 100 && (
           <Card className="p-6 bg-accent/10 border-accent/20">
             <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center shrink-0">
                 <AlertCircle className="w-5 h-5 text-accent" />
               </div>
               <div className="flex-1">
@@ -241,7 +262,7 @@ export default function WorkerDashboardPage() {
                 </Button>
               </Card>
             ) : (
-              recommendedJobs.map(({ job, matchScore }) => (
+              recommendedJobs.map(({ job, matchScore }, index) => (
                 <Card key={job.id} className="p-6 hover:shadow-lg transition-all hover:border-primary/50">
                   <div className="flex items-start justify-between mb-4">
                     <div>
@@ -264,12 +285,18 @@ export default function WorkerDashboardPage() {
                       <Badge variant="outline">{job.category}</Badge>
                     </div>
                     <p className="text-sm text-muted-foreground line-clamp-2">{job.description}</p>
+                    {index === 0 && topMatchSummary && (
+                      <p className="text-xs text-primary/70 mt-2 italic flex items-center gap-1">
+                        <Sparkles className="w-3 h-3" />
+                        {topMatchSummary}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-primary">₹{job.pay.toLocaleString()}</div>
-                      <div className="text-xs text-muted-foreground">{job.timing}</div>
+                    <div className="text-xl font-bold text-primary">₹{job.payAmount?.toLocaleString() ?? '—'}</div>
+                    <div className="text-xs text-muted-foreground">{job.payType === 'hourly' ? 'Hourly' : 'Fixed'} · {job.duration}</div>
                     </div>
                     <Link href={`/worker/jobs/${job.id}`}>
                       <Button size="sm">

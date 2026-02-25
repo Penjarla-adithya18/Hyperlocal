@@ -81,7 +81,7 @@ export default function PaymentSuccessPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-green-50 to-emerald-50 flex items-start justify-center pt-12 pb-16 px-4">
+    <div className="min-h-screen bg-linear-to-br from-green-50 to-emerald-50 flex items-start justify-center pt-12 pb-16 px-4">
       <div className="max-w-md w-full space-y-4">
         {/* Success header */}
         <div className="text-center space-y-2">

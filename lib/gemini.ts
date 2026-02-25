@@ -1,14 +1,16 @@
 /**
- * Gemini AI integration with round-robin key rotation.
- * Handles translation, user input processing, and language detection.
+ * Gemini AI integration with:
+ *  - Round-robin API key rotation (multiple keys = parallel quota)
+ *  - Model tiering: flash-8b (lite/cheap) for simple tasks, flash (standard) for complex ones
+ *  - Local-first detection: regex checks before API calls to avoid wasting tokens
+ *  - TTL in-memory cache: prevents repeated calls for identical inputs
  *
- * Keys are loaded from NEXT_PUBLIC_GEMINI_API_KEYS (comma-separated).
- * Set this in .env.local for local dev and as a Supabase secret for edge functions.
+ * Keys: set NEXT_PUBLIC_GEMINI_API_KEYS (comma-separated) in .env.local
  */
 
-const GEMINI_KEYS: string[] = (
-  process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? ''
-)
+// ── API keys (round-robin rotation across multiple keys) ─────────────────────
+
+const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',')
   .map((k) => k.trim())
   .filter(Boolean)
@@ -17,54 +19,116 @@ let _keyIndex = 0
 
 function getNextKey(): string {
   if (GEMINI_KEYS.length === 0) {
-    throw new Error(
-      'No Gemini API keys configured. Set NEXT_PUBLIC_GEMINI_API_KEYS in your .env.local file.'
-    )
+    throw new Error('No Gemini API keys configured. Set NEXT_PUBLIC_GEMINI_API_KEYS in .env.local')
   }
   const key = GEMINI_KEYS[_keyIndex % GEMINI_KEYS.length]
   _keyIndex++
   return key
 }
 
-const GEMINI_API_URL =
-  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+// ── Model endpoints ───────────────────────────────────────────────────────────
+// LITE  (gemini-1.5-flash-8b): ~4x cheaper — used for language detection,
+//        simple translations, short prompts (< 200 token output)
+// FLASH (gemini-1.5-flash):     standard — used for intent extraction, summaries,
+//        longer explanations
+const ENDPOINT = {
+  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent',
+  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+} as const
 
-async function callGemini(prompt: string): Promise<string> {
+type ModelTier = keyof typeof ENDPOINT
+
+// ── TTL in-memory cache ───────────────────────────────────────────────────────
+// Prevents duplicate API calls for identical prompts within the session.
+// 30-minute TTL for translations/summaries; 5-minute TTL for intent extraction.
+
+interface CacheEntry { value: string; expiresAt: number }
+const _cache = new Map<string, CacheEntry>()
+
+function getCached(key: string): string | null {
+  const entry = _cache.get(key)
+  if (!entry) return null
+  if (Date.now() > entry.expiresAt) { _cache.delete(key); return null }
+  return entry.value
+}
+
+function setCached(key: string, value: string, ttlMs: number) {
+  _cache.set(key, { value, expiresAt: Date.now() + ttlMs })
+}
+
+const TTL = {
+  TRANSLATION: 30 * 60 * 1000,   // 30 min — translations are stable
+  SUMMARY:     30 * 60 * 1000,   // 30 min — match summaries are stable
+  INTENT:       5 * 60 * 1000,   // 5 min  — user intent can change quickly
+}
+
+// ── Core fetch helper ─────────────────────────────────────────────────────────
+
+async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Promise<string> {
+  const url = ENDPOINT[tier]
   const key = getNextKey()
-  const res = await fetch(`${GEMINI_API_URL}?key=${key}`, {
+
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+  })
+
+  const res = await fetch(`${url}?key=${key}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.2,
-        maxOutputTokens: 1024,
-      },
-    }),
+    body,
   })
 
   if (!res.ok) {
-    // If this key is rate-limited, try the next key once
+    // On rate-limit (429), retry once with the next key
     if (res.status === 429) {
-      const fallbackKey = getNextKey()
-      const retry = await fetch(`${GEMINI_API_URL}?key=${fallbackKey}`, {
+      const retryKey = getNextKey()
+      const retry = await fetch(`${url}?key=${retryKey}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 },
-        }),
+        body,
       })
-      if (!retry.ok) throw new Error(`Gemini API error: ${retry.status}`)
-      const data = await retry.json()
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+      if (!retry.ok) throw new Error(`Gemini ${tier} error: ${retry.status}`)
+      const d = await retry.json()
+      return d.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
-    throw new Error(`Gemini API error: ${res.status}`)
+    throw new Error(`Gemini ${tier} error: ${res.status}`)
   }
 
   const data = await res.json()
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
 }
+
+// ── Local-first language detection (NO API cost) ──────────────────────────────
+// Unicode block ranges:
+//   Devanagari (Hindi): U+0900–U+097F
+//   Telugu:             U+0C00–U+0C7F
+
+const DEVANAGARI_RE = /[\u0900-\u097F]/
+const TELUGU_RE     = /[\u0C00-\u0C7F]/
+const LATIN_ONLY_RE = /^[\x00-\x7F\s\d.,!?'"()\-_:;@#]+$/
+
+/**
+ * Returns true when the text contains only ASCII/Latin characters.
+ * Use this to skip API calls for English inputs entirely.
+ */
+export function isLikelyEnglish(text: string): boolean {
+  return LATIN_ONLY_RE.test(text.trim())
+}
+
+/**
+ * Cheap local language detection based on Unicode script ranges.
+ * Falls back to Gemini only when script is ambiguous (e.g. romanized Hindi).
+ */
+export function detectLanguageLocal(text: string): SupportedLocale | null {
+  if (!text?.trim()) return 'en'
+  if (DEVANAGARI_RE.test(text)) return 'hi'
+  if (TELUGU_RE.test(text)) return 'te'
+  if (LATIN_ONLY_RE.test(text)) return 'en'
+  return null // ambiguous — caller should use API detection
+}
+
+// ── Public types & constants ──────────────────────────────────────────────────
 
 export type SupportedLocale = 'en' | 'hi' | 'te'
 
@@ -74,152 +138,174 @@ const LANG_NAMES: Record<SupportedLocale, string> = {
   te: 'Telugu',
 }
 
+// ── detectLanguage ────────────────────────────────────────────────────────────
 /**
- * Translate text to the target language.
- * Returns the original text if translation fails.
+ * Detect the language of a text snippet.
+ * Strategy:
+ *  1. Local Unicode check (free, instant)
+ *  2. API call with LITE model only for ambiguous romanized text
+ */
+export async function detectLanguage(text: string): Promise<SupportedLocale> {
+  if (!text?.trim() || text.trim().length < 3) return 'en'
+
+  // Free local check first
+  const local = detectLanguageLocal(text)
+  if (local !== null) return local
+
+  // Ambiguous (romanized Hindi/Telugu) — use lite model, short TTL not needed (it's a 1-token output)
+  const cacheKey = `lang:${text.slice(0, 80)}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached as SupportedLocale
+
+  const prompt = `Reply with ONLY one code: en, hi, or te
+en=English  hi=Hindi  te=Telugu
+Text: "${text.trim().slice(0, 200)}"`
+
+  try {
+    const result = (await _callModel(prompt, 'lite', 16)).trim().toLowerCase()
+    const detected: SupportedLocale = result.startsWith('hi') ? 'hi' : result.startsWith('te') ? 'te' : 'en'
+    setCached(cacheKey, detected, TTL.TRANSLATION)
+    return detected
+  } catch {
+    return 'en'
+  }
+}
+
+// ── translateText ─────────────────────────────────────────────────────────────
+/**
+ * Translate text to the target language via Gemini LITE model.
+ * Skips API call if text is already in the target script.
  */
 export async function translateText(
   text: string,
   targetLang: SupportedLocale
 ): Promise<string> {
   if (!text?.trim()) return text
-  if (targetLang === 'en') {
-    // Only translate if text is not already in English
-    const detected = await detectLanguage(text)
-    if (detected === 'en') return text
-  }
+
+  // Skip if already in target language
+  const localLang = detectLanguageLocal(text)
+  if (localLang === targetLang) return text
+  if (targetLang === 'en' && localLang === 'en') return text
+
+  const cacheKey = `trans:${targetLang}:${text.slice(0, 120)}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached
 
   const langName = LANG_NAMES[targetLang]
-  const prompt = `Translate the following text to ${langName}. 
-Return ONLY the translated text, no explanations, no quotes, no formatting.
-If the text is already in ${langName}, return it unchanged.
-
-Text to translate:
-${text}`
+  const prompt = `Translate to ${langName}. Return ONLY the translated text, no explanations.
+If already in ${langName}, return unchanged.
+Text: ${text}`
 
   try {
-    const result = await callGemini(prompt)
-    return result.trim() || text
+    const result = (await _callModel(prompt, 'lite', 512)).trim()
+    const translated = result || text
+    setCached(cacheKey, translated, TTL.TRANSLATION)
+    return translated
   } catch {
-    console.error('Translation failed, returning original')
     return text
   }
 }
 
+// ── processUserInput ──────────────────────────────────────────────────────────
+
 export interface ProcessedInput {
-  /** Normalized English version of the input */
   normalizedInput: string
-  /** Detected language of the original input */
   detectedLanguage: SupportedLocale
-  /** Intent extracted from the input */
   intent: string
-  /** Structured data extracted (e.g. job title, location, skills) */
   data: Record<string, string>
-  /** Response to show the user in their language */
   response: string
 }
 
 /**
- * Process user input (e.g. job search query or chat message),
- * extracting intent/entities and generating a localized response.
+ * Parse a user search query or message — extract intent, job title, location etc.
+ *
+ * Token saving rules:
+ *  - If text is plain English → skip API, return structured result locally
+ *  - Cache result for 5 min (same query won't hit API twice in a session)
+ *  - Uses FLASH model (needs reasoning for intent extraction)
  */
 export async function processUserInput(
   input: string,
   userLang: SupportedLocale = 'en'
 ): Promise<ProcessedInput> {
+  const trimmed = input.trim()
+
+  // LOCAL FAST PATH: plain English → extract job title directly without API
+  if (isLikelyEnglish(trimmed)) {
+    return {
+      normalizedInput: trimmed,
+      detectedLanguage: 'en',
+      intent: 'search_job',
+      data: { jobTitle: trimmed, location: '', skills: '', salary: '' },
+      response: '',
+    }
+  }
+
+  // Check cache (keyed by input + lang)
+  const cacheKey = `intent:${userLang}:${trimmed.slice(0, 120)}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) as ProcessedInput } catch { /* ignore */ }
+  }
+
   const langName = LANG_NAMES[userLang]
+  const prompt = `You are an AI for HyperLocal, an Indian blue-collar job app.
+User message (possibly in ${langName}): "${trimmed}"
 
-  const prompt = `You are an AI assistant for HyperLocal, a blue-collar job marketplace in India.
-The user typed the following message (possibly in ${langName}):
-
-"${input}"
-
-Respond with a JSON object (no markdown, no code blocks) with these fields:
-{
-  "normalizedInput": "<English translation of the input>",
-  "detectedLanguage": "<one of: en, hi, te>",
-  "intent": "<one of: search_job, apply_job, check_application, ask_question, greeting, complaint, other>",
-  "data": {
-    "jobTitle": "<extracted job title if any, else empty string>",
-    "location": "<extracted location if any, else empty string>",
-    "skills": "<extracted skills comma-separated if any, else empty string>",
-    "salary": "<extracted salary expectation if any, else empty string>"
-  },
-  "response": "<helpful response to the user IN ${langName}>"
-}`
+Return ONLY a JSON object (no markdown):
+{"normalizedInput":"<English>","detectedLanguage":"<en|hi|te>","intent":"<search_job|apply_job|check_application|ask_question|greeting|other>","data":{"jobTitle":"","location":"","skills":"","salary":""},"response":"<reply IN ${langName}>"}`
 
   try {
-    const raw = await callGemini(prompt)
-    // Strip any accidental markdown code blocks
-    const cleaned = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```$/i, '')
-      .trim()
+    const raw = await _callModel(prompt, 'flash', 512)
+    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
     const parsed = JSON.parse(cleaned) as ProcessedInput
+    setCached(cacheKey, JSON.stringify(parsed), TTL.INTENT)
     return parsed
   } catch {
-    // Fallback — return a minimal processed input
     return {
-      normalizedInput: input,
+      normalizedInput: trimmed,
       detectedLanguage: userLang,
       intent: 'other',
       data: {},
       response:
-        userLang === 'hi'
-          ? 'क्षमा करें, कुछ समझ नहीं आया। कृपया फिर से प्रयास करें।'
-          : userLang === 'te'
-          ? 'క్షమించండి, అర్థం కాలేదు. దయచేసి మళ్ళీ ప్రయత్నించండి.'
-          : "Sorry, I couldn't understand that. Please try again.",
+        userLang === 'hi' ? 'क्षमा करें, कुछ समझ नहीं आया।'
+        : userLang === 'te' ? 'క్షమించండి, అర్థం కాలేదు.'
+        : "Sorry, I couldn't understand that.",
     }
   }
 }
 
+// ── translateDynamic ──────────────────────────────────────────────────────────
 /**
- * Detect the language of a given text snippet.
- * Returns 'en' as fallback.
+ * Translate a dynamic field (job description, notification text) for display.
+ * Uses in-memory cache — same text will never be translated twice per session.
+ * Uses LITE model (translation is a simple task).
  */
-export async function detectLanguage(text: string): Promise<SupportedLocale> {
-  if (!text?.trim() || text.trim().length < 3) return 'en'
-
-  const prompt = `Detect the language of the following text.
-Reply with ONLY one of these codes: en, hi, te
-- en = English
-- hi = Hindi (Devanagari script or romanized Hindi)
-- te = Telugu
-
-Text: "${text.trim().slice(0, 200)}"`
-
-  try {
-    const result = (await callGemini(prompt)).trim().toLowerCase()
-    if (result.startsWith('hi')) return 'hi'
-    if (result.startsWith('te')) return 'te'
-    return 'en'
-  } catch {
-    return 'en'
-  }
-}
-
-/**
- * Translate a dynamic field (e.g. job description, notification) for display.
- * Uses cached results to avoid repeated API calls.
- */
-const _translationCache = new Map<string, string>()
-
 export async function translateDynamic(
   text: string,
   targetLang: SupportedLocale
 ): Promise<string> {
   if (targetLang === 'en') return text
-  const cacheKey = `${targetLang}:${text.slice(0, 100)}`
-  if (_translationCache.has(cacheKey)) return _translationCache.get(cacheKey)!
+  // Local script check — if already in target script, no API needed
+  const local = detectLanguageLocal(text)
+  if (local === targetLang) return text
+
+  const cacheKey = `dyn:${targetLang}:${text.slice(0, 120)}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached
+
   const translated = await translateText(text, targetLang)
-  _translationCache.set(cacheKey, translated)
+  setCached(cacheKey, translated, TTL.TRANSLATION)
   return translated
 }
 
+// ── generateJobMatchSummary ───────────────────────────────────────────────────
 /**
- * Generate AI-powered job recommendations summary for a worker profile.
+ * Generate a short localized match explanation for a worker↔job pair.
+ *
+ * Token saving rules:
+ *  - Cached by (jobTitle + skills fingerprint + locale) — stable for 30 min
+ *  - Uses LITE model (short, structured output)
  */
 export async function generateJobMatchSummary(
   jobTitle: string,
@@ -227,26 +313,32 @@ export async function generateJobMatchSummary(
   jobSkills: string[],
   userLang: SupportedLocale = 'en'
 ): Promise<string> {
-  const langName = LANG_NAMES[userLang]
   const matchedSkills = workerSkills.filter((s) =>
     jobSkills.map((j) => j.toLowerCase()).includes(s.toLowerCase())
   )
 
-  const prompt = `You are a job matching assistant for HyperLocal, an Indian blue-collar job app.
-Generate a short 1-2 sentence explanation (in ${langName}) of why this worker is a good match for "${jobTitle}".
-Worker's skills: ${workerSkills.join(', ') || 'Not specified'}
-Job required skills: ${jobSkills.join(', ') || 'Not specified'}
-Matched skills: ${matchedSkills.join(', ') || 'None yet'}
+  // Cache key based on matched skills fingerprint + locale
+  const fingerprint = matchedSkills.sort().join(',').slice(0, 60)
+  const cacheKey = `summary:${userLang}:${jobTitle.slice(0, 40)}:${fingerprint}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached
 
-Keep it encouraging and simple. No markdown formatting.`
+  const langName = LANG_NAMES[userLang]
+  const prompt = `HyperLocal job app. Write ONE encouraging sentence (in ${langName}, max 20 words) for why this worker matches "${jobTitle}".
+Matched skills: ${matchedSkills.join(', ') || 'general background'}
+No markdown.`
 
   try {
-    return (await callGemini(prompt)).trim()
+    const result = (await _callModel(prompt, 'lite', 64)).trim()
+    setCached(cacheKey, result, TTL.SUMMARY)
+    return result
   } catch {
-    return userLang === 'hi'
+    const fallback = userLang === 'hi'
       ? 'आपके कौशल इस नौकरी के लिए उपयुक्त हैं।'
       : userLang === 'te'
       ? 'మీ నైపుణ్యాలు ఈ ఉద్యోగానికి సరిపోతాయి.'
       : 'Your skills are a good match for this job.'
+    setCached(cacheKey, fallback, TTL.SUMMARY)
+    return fallback
   }
 }

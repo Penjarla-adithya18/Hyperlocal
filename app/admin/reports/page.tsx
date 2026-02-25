@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,8 +8,8 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/api'
-import { Report } from '@/lib/types'
+import { mockReportOps, mockUserOps } from '@/lib/api'
+import { Report, User } from '@/lib/types'
 import { AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
@@ -19,6 +19,7 @@ export default function AdminReportsPage() {
   const { user: currentUser } = useAuth()
   const { toast } = useToast()
   const [reports, setReports] = useState<Report[]>([])
+  const [usersById, setUsersById] = useState<Record<string, User>>({})
   const [selectedReport, setSelectedReport] = useState<Report | null>(null)
   const [resolution, setResolution] = useState('')
 
@@ -27,41 +28,60 @@ export default function AdminReportsPage() {
       router.push('/login')
       return
     }
+
+    let cancelled = false
+
+    async function loadReports() {
+      try {
+        const allReports = await mockReportOps.getAll()
+        if (cancelled) return
+        setReports(allReports)
+
+        // Fetch all unique user IDs referenced in reports (async, no sync cache dependency)
+        const userIds = new Set<string>()
+        for (const r of allReports) {
+          if (r.reporterId) userIds.add(r.reporterId)
+          if (r.reportedId || r.reportedUserId) userIds.add(r.reportedId || r.reportedUserId || '')
+        }
+        const users = await Promise.all([...userIds].filter(Boolean).map((id) => mockUserOps.findById(id)))
+        if (cancelled) return
+        const uMap: Record<string, User> = {}
+        for (const u of users) { if (u) uMap[u.id] = u }
+        setUsersById(uMap)
+      } catch (err) {
+        console.error('Failed to load reports:', err)
+      }
+    }
+
     loadReports()
+    return () => { cancelled = true }
   }, [currentUser, router])
 
-  const loadReports = async () => {
-    await mockDb.getAllUsers()
-    const allReports = await mockDb.getAllReports()
-    setReports(allReports)
-  }
-
   const handleResolve = async (reportId: string, action: 'resolved' | 'dismissed') => {
-    const report = await mockDb.updateReport(reportId, {
+    const report = await mockReportOps.update(reportId, {
       status: action,
       resolvedAt: new Date().toISOString(),
       resolution: resolution || `Report ${action} by admin`,
     })
     if (report) {
-      
       toast({
         title: action === 'resolved' ? 'Report Resolved' : 'Report Dismissed',
-        description: `Report has been ${action}`
+        description: `Report has been ${action}`,
       })
-      
+      // Optimistically update local state instead of full re-fetch
+      setReports((prev) => prev.map((r) => (r.id === reportId ? { ...r, ...report } : r)))
       setSelectedReport(null)
       setResolution('')
-      loadReports()
     }
   }
 
-  const pendingReports = reports.filter(r => r.status === 'pending')
-  const resolvedReports = reports.filter(r => r.status === 'resolved')
-  const dismissedReports = reports.filter(r => r.status === 'dismissed')
+  const pendingReports = useMemo(() => reports.filter((r) => r.status === 'pending'), [reports])
+  const resolvedReports = useMemo(() => reports.filter((r) => r.status === 'resolved'), [reports])
+  const dismissedReports = useMemo(() => reports.filter((r) => r.status === 'dismissed'), [reports])
 
   const ReportCard = ({ report }: { report: Report }) => {
-    const reporter = mockDb.getUserById(report.reporterId)
-    const reported = mockDb.getUserById(report.reportedId || report.reportedUserId || '')
+    const reporter = usersById[report.reporterId]
+    const reported = usersById[report.reportedId || report.reportedUserId || '']
 
     return (
       <Card className="hover:border-primary transition-colors">

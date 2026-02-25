@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, memo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import WorkerNav from '@/components/worker/WorkerNav'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockRatingOps, mockUserOps } from '@/lib/api'
+import { mockApplicationOps, mockJobOps, mockRatingOps, mockUserOps } from '@/lib/api'
 import { Application, Job, User } from '@/lib/types'
 import {
   Briefcase, MapPin, Clock, IndianRupee, Eye, Star, CheckCircle2,
@@ -42,38 +42,52 @@ export default function WorkerApplicationsPage() {
   const [submittingRating, setSubmittingRating] = useState(false)
 
   useEffect(() => {
-    if (user) {
-      loadApplications()
+    if (!user) return
+    let cancelled = false
+
+    async function loadApplications() {
+      try {
+        const workerApplications = await mockApplicationOps.findByWorkerId(user!.id)
+        if (cancelled) return
+        setApplications(workerApplications)
+
+        // Only fetch the jobs referenced by this worker's applications (not ALL jobs)
+        const jobIds = [...new Set(workerApplications.map((a) => a.jobId))]
+        const jobResults = await Promise.all(jobIds.map((id) => mockJobOps.findById(id)))
+        if (cancelled) return
+
+        const byId: Record<string, Job> = {}
+        const empIdSet = new Set<string>()
+        for (const j of jobResults) {
+          if (j) {
+            byId[j.id] = j
+            empIdSet.add(j.employerId)
+          }
+        }
+        setJobsById(byId)
+
+        // Fetch only relevant employers
+        const employers = await Promise.all([...empIdSet].map((id) => mockUserOps.findById(id)))
+        if (cancelled) return
+        const empMap: Record<string, User> = {}
+        for (const e of employers) { if (e) empMap[e.id] = e }
+        setEmployersById(empMap)
+      } catch (error) {
+        console.error('Failed to load applications:', error)
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
     }
+
+    loadApplications()
+    return () => { cancelled = true }
   }, [user])
 
-  const loadApplications = async () => {
-    if (!user) return
-    try {
-      const workerApplications = await mockDb.getApplicationsByWorker(user.id)
-      setApplications(workerApplications)
-
-      const allJobs = await mockDb.getAllJobs()
-      const byId = allJobs.reduce((acc, job) => {
-        acc[job.id] = job
-        return acc
-      }, {} as Record<string, Job>)
-      setJobsById(byId)
-
-      // Load employers for all jobs
-      const empIds = [...new Set(allJobs.map(j => j.employerId))]
-      const emps = await Promise.all(empIds.map(id => mockUserOps.findById(id)))
-      const empMap: Record<string, User> = {}
-      for (const e of emps) {
-        if (e) empMap[e.id] = e
-      }
-      setEmployersById(empMap)
-    } catch (error) {
-      console.error('Failed to load applications:', error)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // ── Memoized status-filtered arrays ──
+  const pendingApps = useMemo(() => applications.filter((a) => a.status === 'pending'), [applications])
+  const acceptedApps = useMemo(() => applications.filter((a) => a.status === 'accepted'), [applications])
+  const completedApps = useMemo(() => applications.filter((a) => a.status === 'completed'), [applications])
+  const rejectedApps = useMemo(() => applications.filter((a) => a.status === 'rejected'), [applications])
 
   const openRatingDialog = (app: Application) => {
     const job = jobsById[app.jobId]
@@ -107,11 +121,6 @@ export default function WorkerApplicationsPage() {
       setSubmittingRating(false)
     }
   }
-
-  const pendingApps = applications.filter(a => a.status === 'pending')
-  const acceptedApps = applications.filter(a => a.status === 'accepted')
-  const completedApps = applications.filter(a => a.status === 'completed')
-  const rejectedApps = applications.filter(a => a.status === 'rejected')
 
   const ApplicationCard = ({ application }: { application: Application }) => {
     const job = jobsById[application.jobId]

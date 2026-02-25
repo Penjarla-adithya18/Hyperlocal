@@ -7,7 +7,7 @@ import { Briefcase, Shield, Sparkles, MessageSquare, Clock, MapPin, Star, Trendi
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
       {/* Header */}
       <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
@@ -46,7 +46,7 @@ export default function LandingPage() {
             <Sparkles className="w-4 h-4" />
             AI-Powered Job Matching
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-balance mb-6 bg-gradient-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
+          <h1 className="text-4xl md:text-6xl font-bold text-balance mb-6 bg-linear-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
             Find Local Jobs That Match Your Skills
           </h1>
           <p className="text-lg md:text-xl text-muted-foreground text-balance mb-10 leading-relaxed">
@@ -170,7 +170,7 @@ export default function LandingPage() {
                   { step: '5', title: 'Get Paid', desc: 'Complete the job and receive secure payment' },
                 ].map((item, i) => (
                   <div key={i} className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
+                    <div className="shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
                       {item.step}
                     </div>
                     <div>
@@ -194,7 +194,7 @@ export default function LandingPage() {
                   { step: '5', title: 'Hire & Complete', desc: 'Chat, select worker, and confirm completion' },
                 ].map((item, i) => (
                   <div key={i} className="flex gap-4">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
+                    <div className="shrink-0 w-10 h-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
                       {item.step}
                     </div>
                     <div>
@@ -251,7 +251,7 @@ export default function LandingPage() {
                 },
               ].map((item, i) => (
                 <div key={i} className="flex gap-4 p-4 rounded-lg bg-background">
-                  <div className="flex-shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
+                  <div className="shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
                   <div>
                     <h4 className="font-semibold mb-1">{item.title}</h4>
                     <p className="text-sm text-muted-foreground">{item.desc}</p>
@@ -266,7 +266,7 @@ export default function LandingPage() {
       {/* CTA Section */}
       <section className="py-20">
         <div className="container mx-auto px-4">
-          <Card className="max-w-4xl mx-auto p-10 md:p-16 text-center bg-gradient-to-br from-primary/10 via-accent/10 to-primary/10 border-2 border-primary/20">
+          <Card className="max-w-4xl mx-auto p-10 md:p-16 text-center bg-linear-to-br from-primary/10 via-accent/10 to-primary/10 border-2 border-primary/20">
             <TrendingUp className="w-16 h-16 text-primary mx-auto mb-6" />
             <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Get Started?</h2>
             <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">

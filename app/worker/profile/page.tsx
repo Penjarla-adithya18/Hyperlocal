@@ -1,6 +1,6 @@
-﻿'use client';
+'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { WorkerNav } from '@/components/worker/WorkerNav';
 import { Button } from '@/components/ui/button';
@@ -206,7 +206,7 @@ export default function WorkerProfilePage() {
         await mockWorkerProfileOps.create(profileData);
       }
 
-      // Update user profile completion status (bio is optional — not counted)
+      // Update user profile completion status (bio is optional � not counted)
       const isComplete =
         formData.skills.length > 0 &&
         formData.availability &&
@@ -247,8 +247,17 @@ export default function WorkerProfilePage() {
     );
   }
 
+  // -- Live profile completeness (bio excluded � optional) --
+  const profileCompleteness = useMemo(() => Math.round(
+    (formData.skills.length > 0 ? 25 : 0) +
+    (formData.categories.length > 0 ? 25 : 0) +
+    (formData.availability ? 20 : 0) +
+    (formData.experience ? 20 : 0) +
+    (formData.location ? 10 : 0)
+  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
+
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
       <WorkerNav />
 
       <div className="container mx-auto px-4 py-8 max-w-4xl">
@@ -257,30 +266,19 @@ export default function WorkerProfilePage() {
           <p className="text-muted-foreground">
             {t('profile.subtitle')}
           </p>
-          {/* Live Profile Completeness (bio excluded — optional field) */}
-          {(() => {
-            const pct = Math.round(
-              (formData.skills.length > 0 ? 25 : 0) +
-              (formData.categories.length > 0 ? 25 : 0) +
-              (formData.availability ? 20 : 0) +
-              (formData.experience ? 20 : 0) +
-              (formData.location ? 10 : 0)
-            );
-            return (
-              <div className="mt-4 p-4 rounded-lg border bg-card">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-sm font-medium">{t('profile.completeness')}</span>
-                  <span className="text-sm font-bold text-primary">{pct}%</span>
-                </div>
-                <Progress value={pct} className="h-2" />
-                {pct < 100 && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {pct < 50 ? 'Add skills, categories and availability to improve your job matches.' : 'Almost there! Fill in remaining fields for the best recommendations.'}
-                  </p>
-                )}
-              </div>
-            );
-          })()}
+          {/* Live Profile Completeness */}
+          <div className="mt-4 p-4 rounded-lg border bg-card">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-medium">{t('profile.completeness')}</span>
+              <span className="text-sm font-bold text-primary">{profileCompleteness}%</span>
+            </div>
+            <Progress value={profileCompleteness} className="h-2" />
+            {profileCompleteness < 100 && (
+              <p className="text-xs text-muted-foreground mt-1">
+                {profileCompleteness < 50 ? 'Add skills, categories and availability to improve your job matches.' : 'Almost there! Fill in remaining fields for the best recommendations.'}
+              </p>
+            )}
+          </div>
         </div>
 
         <form onSubmit={handleSave} className="space-y-6">
@@ -299,7 +297,7 @@ export default function WorkerProfilePage() {
             <div className="space-y-4">
               {/* Profile Photo */}
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-border flex-shrink-0">
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-border shrink-0">
                   {formData.profileImage ? (
                     <img src={formData.profileImage} className="w-full h-full object-cover" alt="Profile" />
                   ) : (
@@ -322,7 +320,7 @@ export default function WorkerProfilePage() {
                       </span>
                     </Button>
                   </label>
-                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG · max 2 MB · shown at 200×200 px</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG � max 2 MB � shown at 200�200 px</p>
                 </div>
               </div>
 
@@ -350,8 +348,8 @@ export default function WorkerProfilePage() {
                   }`} />
                   <div className="flex-1">
                     <p className="text-sm font-semibold capitalize">
-                      {user.trustLevel === 'trusted' ? '✅ Trusted Worker' :
-                       user.trustLevel === 'active' ? '👍 Active Worker' : '🌱 New Worker'}
+                      {user.trustLevel === 'trusted' ? '? Trusted Worker' :
+                       user.trustLevel === 'active' ? '?? Active Worker' : '?? New Worker'}
                     </p>
                     <p className="text-xs text-muted-foreground">Trust Score: {user.trustScore.toFixed(1)} / 5.0</p>
                   </div>

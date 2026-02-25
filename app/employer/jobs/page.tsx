@@ -1,13 +1,13 @@
-﻿'use client'
+'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
 import EmployerNav from '@/components/employer/EmployerNav'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/api'
+import { mockJobOps } from '@/lib/api'
 import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -21,50 +21,41 @@ export default function EmployerJobsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    if (user) {
-      loadJobs()
-    }
-  }, [user])
-
-  const loadJobs = async () => {
     if (!user) return
-    try {
-      const employerJobs = await mockDb.getJobsByEmployer(user.id)
-      setJobs(employerJobs)
-    } catch (error) {
-      toast({
-        title: 'Error',
-        description: 'Failed to load jobs',
-        variant: 'destructive'
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+    let cancelled = false
 
-  const handleDeleteJob = async (jobId: string) => {
-    if (confirm('Are you sure you want to delete this job?')) {
+    async function loadJobs() {
       try {
-        await mockDb.deleteJob(jobId)
-        toast({
-          title: 'Success',
-          description: 'Job deleted successfully'
-        })
-        loadJobs()
-      } catch (error) {
-        toast({
-          title: 'Error',
-          description: 'Failed to delete job',
-          variant: 'destructive'
-        })
+        const employerJobs = await mockJobOps.findByEmployerId(user!.id)
+        if (!cancelled) setJobs(employerJobs)
+      } catch {
+        toast({ title: 'Error', description: 'Failed to load jobs', variant: 'destructive' })
+      } finally {
+        if (!cancelled) setLoading(false)
       }
     }
-  }
 
-  const draftJobs = jobs.filter(j => j.status === 'draft')
-  const activeJobs = jobs.filter(j => j.status === 'active')
-  const completedJobs = jobs.filter(j => j.status === 'completed')
-  const cancelledJobs = jobs.filter(j => j.status === 'cancelled')
+    loadJobs()
+    return () => { cancelled = true }
+  }, [user])
+
+  const handleDeleteJob = useCallback(async (jobId: string) => {
+    if (!confirm('Are you sure you want to delete this job?')) return
+    try {
+      await mockJobOps.delete(jobId)
+      // Remove locally instead of full re-fetch
+      setJobs((prev) => prev.filter((j) => j.id !== jobId))
+      toast({ title: 'Success', description: 'Job deleted successfully' })
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete job', variant: 'destructive' })
+    }
+  }, [toast])
+
+  // Memoized status-filtered arrays
+  const draftJobs = useMemo(() => jobs.filter((j) => j.status === 'draft'), [jobs])
+  const activeJobs = useMemo(() => jobs.filter((j) => j.status === 'active'), [jobs])
+  const completedJobs = useMemo(() => jobs.filter((j) => j.status === 'completed'), [jobs])
+  const cancelledJobs = useMemo(() => jobs.filter((j) => j.status === 'cancelled'), [jobs])
 
   const JobCard = ({ job }: { job: Job }) => {
     const applicationsCount = job.applicationCount ?? 0
@@ -91,7 +82,7 @@ export default function EmployerJobsPage() {
                 job.status === 'completed' ? 'outline' :
                 'destructive'
               }>
-                {job.status === 'draft' ? '⏳ Pending Payment' : job.status}
+                {job.status === 'draft' ? '? Pending Payment' : job.status}
               </Badge>
               {job.status !== 'draft' && (
                 <span className="text-xs flex items-center gap-1">
@@ -115,7 +106,7 @@ export default function EmployerJobsPage() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              <span>â‚¹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
+              <span>₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
@@ -223,7 +214,7 @@ export default function EmployerJobsPage() {
           {draftJobs.length > 0 && (
             <TabsContent value="draft">
               <div className="mb-4 p-4 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <AlertCircle className="w-4 h-4 shrink-0" />
                 These jobs are not visible to workers until you complete the escrow payment.
               </div>
               <div className="grid md:grid-cols-2 gap-6">

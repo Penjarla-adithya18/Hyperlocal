@@ -1,6 +1,6 @@
 'use client'
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { createContext, useContext, useState, useEffect, useCallback, ReactNode } from 'react'
 import { LOCALE_COOKIE, LOCALE_STORAGE_KEY } from '@/i18n'
 
 export type Locale = 'en' | 'hi' | 'te'
@@ -508,13 +508,13 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     return 'en'
   })
 
-  const setLocale = (l: Locale) => {
+  const setLocale = useCallback((l: Locale) => {
     setLocaleState(l)
     if (typeof window !== 'undefined') {
       localStorage.setItem(LOCALE_STORAGE_KEY, l)
       writeLocaleCookie(l)
     }
-  }
+  }, [])
 
   // Keep <html lang="…"> in sync with the selected locale
   useEffect(() => {
@@ -534,7 +534,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const t = (key: string, vars?: Record<string, string | number>): string => {
+  const t = useCallback((key: string, vars?: Record<string, string | number>): string => {
     let str = translations[locale]?.[key] ?? translations['en']?.[key] ?? key
     if (vars) {
       for (const [k, v] of Object.entries(vars)) {
@@ -542,7 +542,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       }
     }
     return str
-  }
+  }, [locale])
 
   return (
     <I18nContext.Provider value={{ locale, setLocale, t }}>

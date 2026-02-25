@@ -93,7 +93,7 @@ export function NotificationBell() {
               const Icon = ICON_MAP[n.type] ?? Info
               return (
                 <div key={n.id} className={`flex gap-3 px-4 py-3 hover:bg-muted/50 transition-colors ${!n.isRead ? 'bg-primary/5' : ''}`}>
-                  <div className={`mt-0.5 w-8 h-8 rounded-full flex-shrink-0 flex items-center justify-center ${!n.isRead ? 'bg-primary/10' : 'bg-muted'}`}>
+                  <div className={`mt-0.5 w-8 h-8 rounded-full shrink-0 flex items-center justify-center ${!n.isRead ? 'bg-primary/10' : 'bg-muted'}`}>
                     <Icon className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
@@ -101,7 +101,7 @@ export function NotificationBell() {
                     <p className="text-xs text-muted-foreground mt-0.5 line-clamp-2">{n.message}</p>
                     <p className="text-xs text-muted-foreground mt-1">{relativeTime(n.createdAt)}</p>
                   </div>
-                  {!n.isRead && <div className="w-2 h-2 rounded-full bg-primary mt-2 flex-shrink-0" />}
+                  {!n.isRead && <div className="w-2 h-2 rounded-full bg-primary mt-2 shrink-0" />}
                 </div>
               )
             })}

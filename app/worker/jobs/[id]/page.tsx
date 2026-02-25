@@ -12,7 +12,8 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
-import { calculateMatchScore, explainJobMatch } from '@/lib/aiMatching'
+import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
+import { translateDynamic, SupportedLocale } from '@/lib/gemini'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
   Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag
@@ -29,13 +30,16 @@ export default function JobDetailsPage() {
   const params = useParams()
   const { user } = useAuth()
   const { toast } = useToast()
-  const { t } = useI18n()
+  const { t, locale } = useI18n()
   const [job, setJob] = useState<Job | null>(null)
   const [employer, setEmployer] = useState<User | null>(null)
   const [application, setApplication] = useState<Application | null>(null)
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null)
   const [matchScore, setMatchScore] = useState<number | null>(null)
   const [matchExplanation, setMatchExplanation] = useState<string | null>(null)
+  // Translated title/description for non-English locales
+  const [displayTitle, setDisplayTitle] = useState<string | null>(null)
+  const [displayDescription, setDisplayDescription] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [applying, setApplying] = useState(false)
   const [showApplicationForm, setShowApplicationForm] = useState(false)
@@ -63,6 +67,38 @@ export default function JobDetailsPage() {
     loadJobDetails()
   }, [params.id, user])
 
+  // Translate job title + description when locale changes (hi/te)
+  useEffect(() => {
+    if (!job || locale === 'en') {
+      setDisplayTitle(null)
+      setDisplayDescription(null)
+      return
+    }
+    const titleKey = `ai_title_${job.id}_${locale}`
+    const descKey  = `ai_desc_${job.id}_${locale}`
+    const cachedTitle = sessionStorage.getItem(titleKey)
+    const cachedDesc  = sessionStorage.getItem(descKey)
+    if (cachedTitle && cachedDesc) {
+      setDisplayTitle(cachedTitle)
+      setDisplayDescription(cachedDesc)
+      return
+    }
+    let cancelled = false
+    const lang = locale as SupportedLocale
+    Promise.all([
+      translateDynamic(job.title, lang).catch(() => job.title),
+      translateDynamic(job.description, lang).catch(() => job.description),
+    ]).then(([title, desc]) => {
+      if (!cancelled) {
+        setDisplayTitle(title)
+        setDisplayDescription(desc)
+        sessionStorage.setItem(titleKey, title)
+        sessionStorage.setItem(descKey,  desc)
+      }
+    })
+    return () => { cancelled = true }
+  }, [job, locale])
+
   const loadJobDetails = async () => {
     try {
       const jobData = await mockDb.getJobById(params.id as string)
@@ -83,7 +119,23 @@ export default function JobDetailsPage() {
             setWorkerProfile(profile)
             const score = calculateMatchScore(profile, jobData)
             setMatchScore(score)
-            setMatchExplanation(explainJobMatch(profile, jobData, score))
+            // sessionStorage cache — avoids re-calling Gemini on every navigation
+            const expCacheKey = `ai_exp_${jobData.id}_${user?.id}`
+            const cachedExp = sessionStorage.getItem(expCacheKey)
+            if (cachedExp) {
+              setMatchExplanation(cachedExp)
+            } else {
+              // Show deterministic explanation immediately, then upgrade with Gemini
+              setMatchExplanation(explainJobMatch(profile, jobData, score))
+              generateMatchExplanationWithAI(profile, jobData, score)
+                .then((exp) => {
+                  if (exp) {
+                    setMatchExplanation(exp)
+                    sessionStorage.setItem(expCacheKey, exp)
+                  }
+                })
+                .catch(() => { /* deterministic fallback already shown */ })
+            }
           }
         }
       }
@@ -234,7 +286,7 @@ export default function JobDetailsPage() {
               <CardHeader>
                 <div className="flex justify-between items-start mb-4">
                   <div>
-                    <CardTitle className="text-2xl mb-2">{job.title}</CardTitle>
+                    <CardTitle className="text-2xl mb-2">{displayTitle || job.title}</CardTitle>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Building2 className="h-4 w-4" />
                       <span>{employer?.companyName || 'Company'}</span>
@@ -306,7 +358,7 @@ export default function JobDetailsPage() {
                 <CardTitle>Job Description</CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-muted-foreground whitespace-pre-line">{job.description}</p>
+                <p className="text-muted-foreground whitespace-pre-line">{displayDescription || job.description}</p>
               </CardContent>
             </Card>
 

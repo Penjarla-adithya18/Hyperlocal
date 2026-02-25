@@ -99,7 +99,7 @@ export function VoiceInput({ onResult, lang = 'en-IN', className, append }: Voic
       type="button"
       variant={state === 'listening' ? 'destructive' : 'outline'}
       size="icon"
-      className={cn('flex-shrink-0 transition-all', state === 'listening' && 'animate-pulse', className)}
+      className={cn('shrink-0 transition-all', state === 'listening' && 'animate-pulse', className)}
       onClick={toggle}
       title={state === 'listening' ? 'Stop recording' : 'Speak to fill'}
     >
