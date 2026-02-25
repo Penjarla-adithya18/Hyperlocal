@@ -117,7 +117,7 @@ export default function WorkerApplicationsPage() {
     return (
       <div className="min-h-screen bg-background">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 pb-24">
           <p className="text-center text-muted-foreground">Loading applications...</p>
         </div>
       </div>
@@ -128,7 +128,7 @@ export default function WorkerApplicationsPage() {
     <div className="min-h-screen bg-background">
       <WorkerNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 pb-24">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">My Applications</h1>
           <p className="text-muted-foreground">Track your job applications and their status</p>

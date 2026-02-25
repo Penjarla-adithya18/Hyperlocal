@@ -1,6 +1,6 @@
 import { createClient } from '@supabase/supabase-js'
 
-let browserClient: ReturnType<typeof createClient> | null = null
+let browserClient: any = null
 
 export function getSupabaseBrowserClient() {
   if (browserClient) return browserClient
@@ -13,6 +13,6 @@ export function getSupabaseBrowserClient() {
     throw new Error('Missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_ANON_KEY')
   }
 
-  browserClient = createClient(supabaseUrl, supabaseAnonKey)
+  browserClient = createClient(supabaseUrl, supabaseAnonKey) as any
   return browserClient
 }

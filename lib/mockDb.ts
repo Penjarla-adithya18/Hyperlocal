@@ -907,7 +907,7 @@ async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
       return { data: [] } as T;
     }
 
-    const conversationIds = conversations.map((conversation) => conversation.id);
+    const conversationIds = conversations.map((conversation: any) => conversation.id);
     const { data: messages, error: messagesError } = await supabase
       .from('chat_messages')
       .select('*')
@@ -924,7 +924,7 @@ async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
     }
 
     return {
-      data: conversations.map((conversation) =>
+      data: conversations.map((conversation: any) =>
         mapConversation({
           ...conversation,
           last_message: latestByConversation.get(conversation.id),
@@ -1004,7 +1004,7 @@ async function apiFetch<T>(input: string, init?: RequestInit): Promise<T> {
 
     if (error) throw error;
     return {
-      data: (data || []).map((row) => ({
+      data: (data || []).map((row: any) => ({
         id: row.id,
         jobId: row.job_id,
         employerId: row.employer_id,

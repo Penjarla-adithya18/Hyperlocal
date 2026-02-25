@@ -86,17 +86,17 @@ export default function WorkerChatPage() {
   })
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background flex flex-col">
       <WorkerNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto flex-1 px-4 py-8 pb-24">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
           <p className="text-muted-foreground">Chat with employers about job opportunities</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-250px)]">
-          <Card className="lg:col-span-1">
+        <div className="grid gap-6 lg:grid-cols-3 lg:h-[calc(100dvh-14rem)] lg:min-h-[540px]">
+          <Card className="lg:col-span-1 flex flex-col min-h-0">
             <CardHeader>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -108,7 +108,7 @@ export default function WorkerChatPage() {
                 />
               </div>
             </CardHeader>
-            <ScrollArea className="h-[calc(100vh-380px)]">
+            <ScrollArea className="flex-1 min-h-0">
               <CardContent className="space-y-2">
                 {filteredConversations.length === 0 ? (
                   <div className="text-center py-8">
@@ -162,7 +162,7 @@ export default function WorkerChatPage() {
             </ScrollArea>
           </Card>
 
-          <Card className="lg:col-span-2 flex flex-col">
+          <Card className="lg:col-span-2 flex flex-col min-h-0">
             {selectedConversation ? (
               <>
                 <CardHeader className="border-b">
@@ -182,7 +182,7 @@ export default function WorkerChatPage() {
                     </div>
                   </div>
                 </CardHeader>
-                <ScrollArea className="flex-1 p-6">
+                <ScrollArea className="flex-1 min-h-0 p-6">
                   <div className="space-y-4">
                     {messages.length === 0 ? (
                       <div className="text-center py-8">

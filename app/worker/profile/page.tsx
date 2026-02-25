@@ -183,7 +183,7 @@ export default function WorkerProfilePage() {
     return (
       <div className="min-h-screen bg-background">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 pb-24">
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 animate-spin text-primary" />
           </div>
@@ -196,7 +196,7 @@ export default function WorkerProfilePage() {
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
       <WorkerNav />
 
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-8 pb-24 max-w-4xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">Your Profile</h1>
           <p className="text-muted-foreground">
@@ -396,7 +396,7 @@ export default function WorkerProfilePage() {
             </Button>
           </div>
         </form>
-      </div>
+      </main>
     </div>
   );
 }

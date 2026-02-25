@@ -88,7 +88,7 @@ export default function WorkerDashboardPage() {
     return (
       <div className="min-h-screen bg-background">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 pb-24">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
@@ -104,7 +104,7 @@ export default function WorkerDashboardPage() {
     <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
       <WorkerNav />
 
-      <div className="container mx-auto px-4 py-8 space-y-8">
+      <main className="container mx-auto px-4 py-8 pb-24 space-y-8">
         {/* Welcome Section */}
         <div>
           <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.fullName}!</h1>
@@ -293,7 +293,7 @@ export default function WorkerDashboardPage() {
             </div>
           </div>
         )}
-      </div>
+      </main>
     </div>
   );
 }
