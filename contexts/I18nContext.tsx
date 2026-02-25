@@ -1,11 +1,12 @@
 'use client'
 
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react'
+import { LOCALE_COOKIE, LOCALE_STORAGE_KEY } from '@/i18n'
 
-export type Locale = 'en' | 'hi' | 'te' | 'ta'
+export type Locale = 'en' | 'hi' | 'te'
 
 // ──────────────────────────────────────────────────────────────────────────
-// Translation dictionaries  (English / Hindi / Telugu / Tamil)
+// Translation dictionaries  (English / Hindi / Telugu)
 // Supports {{variable}} interpolation via t(key, { variable: value })
 // ──────────────────────────────────────────────────────────────────────────
 const translations: Record<Locale, Record<string, string>> = {
@@ -461,140 +462,6 @@ const translations: Record<Locale, Record<string, string>> = {
     'job.reported': '✓ నివేదించబడింది',
     'profile.saveProfile': 'ప్రొఫైల్ సేవ్ చేయండి',
   },
-
-  // ── TAMIL ─────────────────────────────────────────────────────────────────
-  ta: {
-    'nav.dashboard': 'டாஷ்போர்டு',
-    'nav.profile': 'சுயவிவரம்',
-    'nav.logout': 'வெளியேறு',
-    'nav.settings': 'அமைப்புகள்',
-    'nav.messages': 'செய்திகள்',
-    'nav.worker.findJobs': 'வேலைகள் தேடு',
-    'nav.worker.myApps': 'என் விண்ணப்பங்கள்',
-    'nav.employer.postJob': 'வேலை இடுக',
-    'nav.employer.myJobs': 'என் வேலைகள்',
-    'auth.backHome': 'முகப்புக்கு திரும்பு',
-    'auth.phoneLabel': 'தொலைபேசி எண்',
-    'auth.phonePh': '10 இலக்க மொபைல் எண் உள்ளிடவும்',
-    'auth.passwordLabel': 'கடவுச்சொல்',
-    'auth.passwordPh': 'கடவுச்சொல் உள்ளிடவும்',
-    'auth.login.title': 'மீண்டும் வருக',
-    'auth.login.subtitle': 'உங்கள் கணக்கில் உள்நுழையவும்',
-    'auth.login.btn': 'உள்நுழை',
-    'auth.login.loading': 'உள்நுழைகிறது…',
-    'auth.login.forgotPw': 'கடவுச்சொல் மறந்துவிட்டதா?',
-    'auth.login.noAccount': 'கணக்கு இல்லையா?',
-    'auth.login.signupLink': 'பதிவு செய்யுங்கள்',
-    'auth.signup.title': 'கணக்கு உருவாக்கவும்',
-    'auth.signup.subtitle': 'ஆயிரக்கணக்கான தொழிலாளர்களுடன் சேரவும்',
-    'auth.signup.workerTab': 'நான் ஒரு தொழிலாளி',
-    'auth.signup.employerTab': 'நான் ஒரு முதலாளி',
-    'auth.signup.fullName': 'முழு பெயர்',
-    'auth.signup.fullNamePh': 'உங்கள் முழு பெயர் உள்ளிடவும்',
-    'auth.signup.sendOtp': 'OTP அனுப்பு',
-    'auth.signup.enterOtp': '6 இலக்க OTP உள்ளிடவும்',
-    'auth.signup.verifyOtp': 'OTP சரிபார்',
-    'auth.signup.confirmPassword': 'கடவுச்சொல் உறுதிப்படுத்தவும்',
-    'auth.signup.businessName': 'வணிகப் பெயர்',
-    'auth.signup.orgName': 'நிறுவன பெயர் (விருப்பம்)',
-    'auth.signup.createBtn': 'கணக்கு உருவாக்கவும்',
-    'auth.signup.creating': 'கணக்கு உருவாகுகிறது…',
-    'auth.signup.hasAccount': 'ஏற்கனவே கணக்கு உள்ளதா?',
-    'auth.signup.loginLink': 'உள்நுழை',
-    'auth.signup.step': 'படி {{n}} / 2',
-    'auth.signup.verifying': 'சரிபார்க்கிறது…',
-    'auth.signup.sending': 'அனுப்புகிறது…',
-    'worker.dash.welcome': 'மீண்டும் வருக, {{name}}!',
-    'worker.dash.subtitle': 'உங்கள் வேலை தேடல் நிலை',
-    'worker.dash.completeProfile': 'சுயவிவரம் பூர்த்தி செய்யவும்',
-    'worker.dash.completeProfileDesc': 'சிறந்த AI பரிந்துரைகளுக்கு சுயவிவரம் பூர்த்தி செய்யவும்',
-    'worker.dash.profilePct': 'சுயவிவர முழுமை',
-    'worker.dash.completeBtn': 'சுயவிவரம் பூர்த்தி செய்யவும்',
-    'worker.dash.applications': 'விண்ணப்பங்கள்',
-    'worker.dash.trustScore': 'நம்பகத்தன்மை மதிப்பெண்',
-    'worker.dash.avgRating': 'சராசரி மதிப்பீடு',
-    'worker.dash.completedJobs': 'முடிந்த வேலைகள்',
-    'worker.dash.aiRecs': 'AI பரிந்துரைகள்',
-    'worker.dash.recs': 'பரிந்துரைக்கப்பட்ட வேலைகள்',
-    'worker.dash.matchedDesc': 'உங்கள் திறன்களுக்கு பொருந்தும் வேலைகள்',
-    'worker.dash.completeForMatches': 'தனிப்பயன் பொருத்தங்களுக்கு சுயவிவரம் பூர்த்தி செய்யவும்',
-    'worker.dash.viewAllJobs': 'அனைத்து வேலைகளும் காண்க',
-    'worker.dash.noRecsTitle': 'இன்னும் பரிந்துரைகள் இல்லை',
-    'worker.dash.noRecsDesc': 'AI பரிந்துரைகளுக்கு திறன்களுடன் சுயவிவரம் பூர்த்தி செய்யவும்',
-    'worker.dash.recentApps': 'சமீபத்திய விண்ணப்பங்கள்',
-    'worker.dash.viewAll': 'அனைத்தும் காண்க',
-    'worker.dash.match': '{{score}}% பொருத்தம்',
-    'worker.dash.appNo': 'விண்ணப்பம் #{{id}}',
-    'worker.dash.appliedOn': '{{date}} அன்று விண்ணப்பித்தது',
-    'employer.dash.welcome': 'வருக, {{name}}!',
-    'employer.dash.subtitle': 'உங்கள் வேலை பதிவுகளை நிர்வகிக்கவும்',
-    'employer.dash.postJob': 'வேலை இடுக',
-    'employer.dash.activeJobs': 'செயலில் வேலைகள்',
-    'employer.dash.totalApps': 'மொத்த விண்ணப்பங்கள்',
-    'employer.dash.pendingApps': 'நிலுவையில் உள்ள விண்ணப்பங்கள்',
-    'employer.dash.pendingPayments': 'நிலுவையில் உள்ள கட்டணங்கள்',
-    'employer.dash.recentJobs': 'சமீபத்திய வேலைகள்',
-    'employer.dash.viewAllJobs': 'அனைத்து வேலைகளும் காண்க',
-    'employer.dash.noJobs': 'இன்னும் வேலைகள் இடப்படவில்லை',
-    'employer.dash.postFirst': 'தொடங்க உங்கள் முதல் வேலையை இடுக',
-    'employer.dash.applicants': '{{count}} விண்ணப்பதாரர்கள்',
-    'employer.dash.pending': 'நிலுவையில்',
-    'employer.dash.viewJob': 'வேலை காண்க',
-    'employer.dash.quickActions': 'விரைவு செயல்கள்',
-    'job.applyNow': 'இப்போது விண்ணப்பிக்கவும்',
-    'job.applied': 'விண்ணப்பித்துவிட்டீர்கள்',
-    'job.location': 'இடம்',
-    'job.pay': 'ஊதியம்',
-    'job.duration': 'காலம்',
-    'job.requiredSkills': 'தேவையான திறன்கள்',
-    'job.description': 'விவரம்',
-    'job.postJob': 'வேலை இடுக',
-    'job.status.active': 'செயலில்',
-    'job.status.draft': 'கட்டணம் நிலுவையில்',
-    'job.status.completed': 'முடிந்தது',
-    'job.status.cancelled': 'ரத்து',
-    'payment.escrowSecured': 'எஸ்க்ரோ பாதுகாப்பானது',
-    'payment.releasePayment': 'கட்டணம் விடுவிக்கவும்',
-    'payment.raiseDispute': 'தகராறு பதிவு செய்யவும்',
-    'worker.hireWorker': 'தொழிலாளரை அமர்த்தவும்',
-    'worker.matchScore': 'பொருத்த மதிப்பெண்',
-    'status.pending': 'நிலுவையில்',
-    'status.accepted': 'ஏற்கப்பட்டது',
-    'status.rejected': 'நிராகரிக்கப்பட்டது',
-    'status.completed': 'முடிந்தது',
-    'common.loading': 'ஏற்றுகிறது…',
-    'common.viewDetails': 'விவரங்கள் காண்க',
-    'common.save': 'சேமி',
-    'common.cancel': 'ரத்து',
-    'common.submit': 'சமர்ப்பி',
-    'common.back': 'பின்',
-    'common.search': 'தேடு',
-    'common.filter': 'வடிகட்டி',
-    'common.noResults': 'முடிவுகள் இல்லை',
-    'common.delete': 'நீக்கு',
-    'common.edit': 'திருத்தவும்',
-    'common.refresh': 'புதுப்பி',
-    'common.send': 'அனுப்பு',
-    'common.chat': 'அரட்டை',
-    'common.change': 'மாற்று',
-    'common.upload': 'பதிவேற்று',
-    'common.apply': 'இப்போதே விண்ணப்பிடு',
-    'job.status.filled': 'நிரப்பப்ம்பட்டது',
-    'settings.title': 'அமைப்புகள்',
-    'settings.changePw': 'கடவுச்சொல் மாற்று',
-    'settings.currentPw': 'தற்போதைய கடவுச்சொல்',
-    'settings.newPw': 'புதிய கடவுச்சொல்',
-    'settings.confirmPw': 'கடவுச்சொல் உறுதிப்படுத்து',
-    'settings.updatePw': 'கடவுச்சொல் பத்தி',
-    'settings.signOut': 'வெளியேறு',
-    'settings.dangerZone': 'ஆபத்து மண்டலம்',
-    'apps.title': 'என் விண்ணப்பங்கள்',
-    'apps.viewJob': 'வேலை காண்க',
-    'apps.noApps': 'விண்ணப்பங்கள் இல்லை',
-    'job.reportThis': 'இந்த வேலையை புகார் செய்',
-    'job.reported': '✓ புகார் செய்யப்பட்டது',
-    'profile.saveProfile': 'சுயவிவரம் சேமி',
-  },
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -613,23 +480,59 @@ const I18nContext = createContext<I18nContextValue>({
   t: (key) => key,
 })
 
-const LANG_ATTR: Record<Locale, string> = { en: 'en', hi: 'hi', te: 'te', ta: 'ta' }
+const LANG_ATTR: Record<Locale, string> = { en: 'en', hi: 'hi', te: 'te' }
+
+/** Read locale cookie set by middleware (server-side detection) */
+function readLocaleCookie(): Locale | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie
+    .split('; ')
+    .find((row) => row.startsWith(`${LOCALE_COOKIE}=`))
+  return (match?.split('=')?.[1] as Locale) ?? null
+}
+
+/** Write locale to cookie so middleware sees it on next request */
+function writeLocaleCookie(locale: Locale) {
+  if (typeof document === 'undefined') return
+  document.cookie = `${LOCALE_COOKIE}=${locale}; path=/; max-age=${60 * 60 * 24 * 365}; samesite=lax`
+}
 
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [locale, setLocaleState] = useState<Locale>(() => {
     if (typeof window === 'undefined') return 'en'
-    return (localStorage.getItem('locale') as Locale) ?? 'en'
+    // Priority: localStorage → cookie set by middleware → default
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY) as Locale | null
+    if (stored && ['en', 'hi', 'te'].includes(stored)) return stored
+    const cookie = readLocaleCookie()
+    if (cookie && ['en', 'hi', 'te'].includes(cookie)) return cookie
+    return 'en'
   })
 
   const setLocale = (l: Locale) => {
     setLocaleState(l)
-    if (typeof window !== 'undefined') localStorage.setItem('locale', l)
+    if (typeof window !== 'undefined') {
+      localStorage.setItem(LOCALE_STORAGE_KEY, l)
+      writeLocaleCookie(l)
+    }
   }
 
   // Keep <html lang="…"> in sync with the selected locale
   useEffect(() => {
     document.documentElement.lang = LANG_ATTR[locale]
   }, [locale])
+
+  // On first mount: if middleware detected a different locale via cookie
+  // and localStorage isn't set yet, switch to middleware's detected locale.
+  useEffect(() => {
+    const stored = localStorage.getItem(LOCALE_STORAGE_KEY) as Locale | null
+    if (!stored) {
+      const cookie = readLocaleCookie()
+      if (cookie && ['en', 'hi', 'te'].includes(cookie) && cookie !== locale) {
+        setLocale(cookie)
+      }
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const t = (key: string, vars?: Record<string, string | number>): string => {
     let str = translations[locale]?.[key] ?? translations['en']?.[key] ?? key
@@ -656,5 +559,4 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   en: 'English',
   hi: 'हिंदी',
   te: 'తెలుగు',
-  ta: 'தமிழ்',
 }

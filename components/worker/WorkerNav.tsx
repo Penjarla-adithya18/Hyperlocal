@@ -4,17 +4,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, LogOut, Settings, Globe } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, LogOut, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useI18n, LOCALE_LABELS, Locale } from '@/contexts/I18nContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { NotificationBell } from '@/components/ui/notification-bell';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export function WorkerNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { locale, setLocale, t } = useI18n();
+  const { t } = useI18n();
 
   const navItems = [
     { href: '/worker/dashboard', label: t('nav.dashboard'), icon: Home },
@@ -63,21 +63,7 @@ export function WorkerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1">
-                  <Globe className="w-4 h-4" />
-                  <span className="hidden sm:inline">{LOCALE_LABELS[locale]}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {(Object.keys(LOCALE_LABELS) as Locale[]).map((l) => (
-                  <DropdownMenuItem key={l} onClick={() => setLocale(l)} className={l === locale ? 'font-semibold text-primary' : ''}>
-                    {LOCALE_LABELS[l]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <LanguageSwitcher />
             <NotificationBell />
             <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="w-4 h-4" />

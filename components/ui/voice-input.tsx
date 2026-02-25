@@ -32,8 +32,8 @@ interface SpeechRecognitionInstance extends EventTarget {
 }
 declare global {
   interface Window {
-    SpeechRecognition?: new () => SpeechRecognitionInstance
-    webkitSpeechRecognition?: new () => SpeechRecognitionInstance
+    readonly SpeechRecognition?: new () => SpeechRecognitionInstance
+    readonly webkitSpeechRecognition?: new () => SpeechRecognitionInstance
   }
 }
 
@@ -65,10 +65,13 @@ export function VoiceInput({ onResult, lang = 'en-IN', className, append }: Voic
     rec.continuous = false
     rec.interimResults = false
 
-    rec.onresult = (e) => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    rec.onresult = (e: any) => {
       setState('processing')
-      const transcript = Array.from(e.results)
-        .map(r => r[0].transcript)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const transcript = Array.from(e.results as any[])
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        .map((r: any) => r[0].transcript)
         .join(' ')
         .trim()
         .replace(/[.!?,;:]+$/, '') // strip trailing punctuation added by speech recognition

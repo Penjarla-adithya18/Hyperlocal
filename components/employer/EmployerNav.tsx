@@ -4,17 +4,17 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, MessageSquare, Settings, LogOut, Globe } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, Settings, LogOut } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useI18n, LOCALE_LABELS, Locale } from '@/contexts/I18nContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
+import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export function EmployerNav() {
   const pathname = usePathname();
   const { user, logout } = useAuth();
-  const { locale, setLocale, t } = useI18n();
+  const { t } = useI18n();
 
   const navItems = [
     { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home },
@@ -62,21 +62,7 @@ export function EmployerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="ghost" size="sm" className="gap-1">
-                  <Globe className="w-4 h-4" />
-                  <span className="hidden sm:inline">{LOCALE_LABELS[locale]}</span>
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                {(Object.keys(LOCALE_LABELS) as Locale[]).map((l) => (
-                  <DropdownMenuItem key={l} onClick={() => setLocale(l)} className={l === locale ? 'font-semibold text-primary' : ''}>
-                    {LOCALE_LABELS[l]}
-                  </DropdownMenuItem>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+            <LanguageSwitcher />
             <NotificationBell />
             <Link href="/settings">
               <Button variant="ghost" size="icon">
