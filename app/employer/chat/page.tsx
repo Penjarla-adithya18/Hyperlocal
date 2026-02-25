@@ -73,56 +73,66 @@ export default function EmployerChatPage() {
   const loadConversations = async () => {
     if (!user) return
     setLoadingConversations(true)
-    const userConvs = await mockDb.getConversationsByUser(user.id)
-    setConversations(userConvs)
-    const participantIds = [...new Set(
-      userConvs
-        .flatMap((conversation) => conversation.participants)
-        .filter((participantId) => participantId !== user.id)
-    )]
-    if (participantIds.length > 0) {
-      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
-      setUsersById((previous) => {
-        const next = { ...previous }
-        for (const fetched of fetchedUsers) {
-          if (fetched) next[fetched.id] = fetched
+    try {
+      const userConvs = await mockDb.getConversationsByUser(user.id)
+      setConversations(userConvs)
+      const participantIds = [...new Set(
+        userConvs
+          .flatMap((conversation) => conversation.participants)
+          .filter((participantId) => participantId !== user.id)
+      )]
+      if (participantIds.length > 0) {
+        const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+        setUsersById((previous) => {
+          const next = { ...previous }
+          for (const fetched of fetchedUsers) {
+            if (fetched) next[fetched.id] = fetched
+          }
+          return next
+        })
+      }
+      // Check sessionStorage for a conversation to pre-select (from employer/jobs chat button)
+      const targetConvId = sessionStorage.getItem('targetChatConvId')
+      if (targetConvId) {
+        sessionStorage.removeItem('targetChatConvId')
+        const targetConv = userConvs.find(c => c.id === targetConvId)
+        if (targetConv) {
+          setSelectedConversation(targetConv)
+          // Eagerly load messages for the target conversation
+          const msgs = await mockDb.getMessagesByConversation(targetConv.id)
+          setMessages(msgs)
+          setLoadingConversations(false)
+          return
         }
-        return next
-      })
-    }
-    // Check sessionStorage for a conversation to pre-select (from employer/jobs chat button)
-    const targetConvId = sessionStorage.getItem('targetChatConvId')
-    if (targetConvId) {
-      sessionStorage.removeItem('targetChatConvId')
-      const targetConv = userConvs.find(c => c.id === targetConvId)
-      if (targetConv) {
-        setSelectedConversation(targetConv)
-        // Eagerly load messages for the target conversation
-        const msgs = await mockDb.getMessagesByConversation(targetConv.id)
-        setMessages(msgs)
-        setLoadingConversations(false)
-        return
       }
-    }
-    if (userConvs.length > 0 && !selectedConversation) {
-      setSelectedConversation(userConvs[0])
-    }
-    // Load jobs for completion check
-    const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
-    if (jobIds.length > 0) {
-      const allJobs = await mockDb.getAllJobs()
-      const jMap: Record<string, Job> = {}
-      for (const j of allJobs) {
-        if (jobIds.includes(j.id)) jMap[j.id] = j
+      if (userConvs.length > 0 && !selectedConversation) {
+        setSelectedConversation(userConvs[0])
       }
-      setJobsById(jMap)
+      // Load jobs for completion check
+      const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
+      if (jobIds.length > 0) {
+        const allJobs = await mockDb.getAllJobs()
+        const jMap: Record<string, Job> = {}
+        for (const j of allJobs) {
+          if (jobIds.includes(j.id)) jMap[j.id] = j
+        }
+        setJobsById(jMap)
+      }
+    } catch (error) {
+      console.error('Failed to load conversations:', error)
+      toast({ title: 'Connection Error', description: 'Unable to load conversations. Please check your connection and try again.', variant: 'destructive' })
+    } finally {
+      setLoadingConversations(false)
     }
-    setLoadingConversations(false)
   }
 
   const loadMessages = async (conversationId: string) => {
-    const convMessages = await mockDb.getMessagesByConversation(conversationId)
-    setMessages(convMessages)
+    try {
+      const convMessages = await mockDb.getMessagesByConversation(conversationId)
+      setMessages(convMessages)
+    } catch (error) {
+      console.error('Failed to load messages:', error)
+    }
   }
 
   const handleSendMessage = async () => {

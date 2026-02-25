@@ -234,6 +234,16 @@ export default function WorkerProfilePage() {
     }
   };
 
+  // -- Live profile completeness (bio excluded — optional) --
+  // Must be declared BEFORE any early return to satisfy Rules of Hooks
+  const profileCompleteness = useMemo(() => Math.round(
+    (formData.skills.length > 0 ? 25 : 0) +
+    (formData.categories.length > 0 ? 25 : 0) +
+    (formData.availability ? 20 : 0) +
+    (formData.experience ? 20 : 0) +
+    (formData.location ? 10 : 0)
+  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -246,15 +256,6 @@ export default function WorkerProfilePage() {
       </div>
     );
   }
-
-  // -- Live profile completeness (bio excluded � optional) --
-  const profileCompleteness = useMemo(() => Math.round(
-    (formData.skills.length > 0 ? 25 : 0) +
-    (formData.categories.length > 0 ? 25 : 0) +
-    (formData.availability ? 20 : 0) +
-    (formData.experience ? 20 : 0) +
-    (formData.location ? 10 : 0)
-  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">

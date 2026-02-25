@@ -41,6 +41,43 @@ function setSessionToken(token: string | null): void {
   else localStorage.removeItem(SESSION_TOKEN_KEY)
 }
 
+/** Default request timeout in milliseconds */
+const REQUEST_TIMEOUT_MS = 15_000
+/** Max retries on network / 5xx errors */
+const MAX_RETRIES = 1
+/** Base delay between retries (doubles each attempt) */
+const RETRY_BASE_MS = 1_500
+
+/**
+ * Internal fetch wrapper with timeout via AbortController.
+ * Throws a descriptive error on timeout instead of hanging forever.
+ */
+async function fetchWithTimeout(
+  endpoint: string,
+  init: RequestInit,
+  timeoutMs: number = REQUEST_TIMEOUT_MS
+): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(endpoint, { ...init, signal: controller.signal })
+  } catch (err: unknown) {
+    if (err instanceof DOMException && err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutMs / 1000}s — the server may be unavailable. Please try again.`)
+    }
+    // Network failure (offline, DNS, connection refused/timed out)
+    throw new Error(
+      'Network error — unable to reach the server. Please check your internet connection and try again.'
+    )
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+/**
+ * Core edge-function caller with timeout + retry.
+ * Retries once on network errors or 5xx responses with exponential back-off.
+ */
 async function call<T>(
   fn: string,
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE' = 'GET',
@@ -52,7 +89,7 @@ async function call<T>(
   const qs = new URLSearchParams(params).toString()
   const endpoint = `${url}/functions/v1/${fn}${qs ? `?${qs}` : ''}`
 
-  const res = await fetch(endpoint, {
+  const init: RequestInit = {
     method,
     headers: {
       'Content-Type': 'application/json',
@@ -60,18 +97,41 @@ async function call<T>(
       apikey: key,
     },
     body: method !== 'GET' && body !== undefined ? JSON.stringify(body) : undefined,
-  })
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      setSessionToken(null)
-      if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
-    }
-    const text = await res.text()
-    throw new Error(`Edge function ${fn} error ${res.status}: ${text}`)
   }
 
-  return res.json() as Promise<T>
+  let lastError: Error | null = null
+
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const res = await fetchWithTimeout(endpoint, init)
+
+      if (!res.ok) {
+        if (res.status === 401) {
+          setSessionToken(null)
+          if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
+        }
+        // Retry on 5xx server errors
+        if (res.status >= 500 && attempt < MAX_RETRIES) {
+          lastError = new Error(`Edge function ${fn} error ${res.status}`)
+          await new Promise((r) => setTimeout(r, RETRY_BASE_MS * (attempt + 1)))
+          continue
+        }
+        const text = await res.text()
+        throw new Error(`Edge function ${fn} error ${res.status}: ${text}`)
+      }
+
+      return res.json() as Promise<T>
+    } catch (err: unknown) {
+      lastError = err instanceof Error ? err : new Error(String(err))
+      // Retry on network errors (timeout, DNS, connection refused)
+      if (attempt < MAX_RETRIES) {
+        await new Promise((r) => setTimeout(r, RETRY_BASE_MS * (attempt + 1)))
+        continue
+      }
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to call ${fn}`)
 }
 
 // ─── Type helpers ──────────────────────────────────────────────────────────
