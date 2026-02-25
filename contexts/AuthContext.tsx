@@ -22,11 +22,29 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
+  // Load user on mount
   useEffect(() => {
     const currentUser = getCurrentUser();
     setUser(currentUser);
     setLoading(false);
   }, []);
+
+  // Periodically validate token hasn't expired (every 30s)
+  // This catches cases where the token expires while the app is open
+  useEffect(() => {
+    if (!user) return
+    const validateToken = () => {
+      const currentUser = getCurrentUser()
+      // If getCurrentUser returns null but we think we're logged in,
+      // it means the token expired — silently logout
+      if (!currentUser && user) {
+        setUser(null)
+        logoutUser()
+      }
+    }
+    const interval = setInterval(validateToken, 30_000)
+    return () => clearInterval(interval)
+  }, [user])
 
   const login = useCallback((newUser: User) => {
     setUser(newUser);
