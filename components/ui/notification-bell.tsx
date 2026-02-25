@@ -23,24 +23,41 @@ export function NotificationBell() {
   const { user } = useAuth()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open, setOpen] = useState(false)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [loaded, setLoaded] = useState(false)
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const unreadCount = notifications.filter(n => !n.isRead).length
 
   const load = async () => {
-    if (!user) return
+    if (!user || document.visibilityState === 'hidden') return
     try {
       const data = await mockNotificationOps.findByUserId(user.id)
       setNotifications(data)
+      setLoaded(true)
     } catch { /* silently fail */ }
+  }
+
+  const startPolling = () => {
+    if (timerRef.current) return
+    // Poll every 60s (was 30s), only when tab is visible
+    timerRef.current = setInterval(load, 60_000)
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') load()
+    })
   }
 
   useEffect(() => {
     if (!user) return
-    load()
-    // Poll every 30 seconds for new notifications
-    timerRef.current = setInterval(load, 30_000)
-    return () => { if (timerRef.current) clearInterval(timerRef.current) }
+    // Delay initial fetch by 2s — lets page render first, avoids blocking page load network
+    delayRef.current = setTimeout(() => {
+      load().then(startPolling)
+    }, 2000)
+    return () => {
+      if (delayRef.current) clearTimeout(delayRef.current)
+      if (timerRef.current) clearInterval(timerRef.current)
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])
 
   const handleOpen = (isOpen: boolean) => {

@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,7 @@ import { mockWorkerProfileOps, mockUserOps, mockDb } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { VoiceInput } from '@/components/ui/voice-input';
+import { LocationInput } from '@/components/ui/location-input';
 import { useToast } from '@/hooks/use-toast';
 import { useI18n } from '@/contexts/I18nContext';
 
@@ -206,7 +207,7 @@ export default function WorkerProfilePage() {
         await mockWorkerProfileOps.create(profileData);
       }
 
-      // Update user profile completion status (bio is optional � not counted)
+      // Update user profile completion status (bio is optional ï¿½ not counted)
       const isComplete =
         formData.skills.length > 0 &&
         formData.availability &&
@@ -234,6 +235,15 @@ export default function WorkerProfilePage() {
     }
   };
 
+  // -- Live profile completeness: must be above early-return to satisfy Rules of Hooks --
+  const profileCompleteness = useMemo(() => Math.round(
+    (formData.skills.length > 0 ? 25 : 0) +
+    (formData.categories.length > 0 ? 25 : 0) +
+    (formData.availability ? 20 : 0) +
+    (formData.experience ? 20 : 0) +
+    (formData.location ? 10 : 0)
+  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background">
@@ -246,15 +256,6 @@ export default function WorkerProfilePage() {
       </div>
     );
   }
-
-  // -- Live profile completeness (bio excluded � optional) --
-  const profileCompleteness = useMemo(() => Math.round(
-    (formData.skills.length > 0 ? 25 : 0) +
-    (formData.categories.length > 0 ? 25 : 0) +
-    (formData.availability ? 20 : 0) +
-    (formData.experience ? 20 : 0) +
-    (formData.location ? 10 : 0)
-  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
 
   return (
     <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
@@ -320,7 +321,7 @@ export default function WorkerProfilePage() {
                       </span>
                     </Button>
                   </label>
-                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG � max 2 MB � shown at 200�200 px</p>
+                  <p className="text-xs text-muted-foreground mt-1">JPG or PNG ï¿½ max 2 MB ï¿½ shown at 200ï¿½200 px</p>
                 </div>
               </div>
 
@@ -359,11 +360,11 @@ export default function WorkerProfilePage() {
                   </div>
                 </div>
               )}                <Label htmlFor="location">Location</Label>
-                <Input
+                <LocationInput
                   id="location"
                   placeholder="e.g., Vijayawada, Andhra Pradesh"
                   value={formData.location}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
+                  onChange={(val) => setFormData((prev) => ({ ...prev, location: val }))}
                 />
               </div>
 

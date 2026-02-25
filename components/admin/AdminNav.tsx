@@ -8,6 +8,7 @@ import {
   LogOut, Menu, X, IndianRupee 
 } from 'lucide-react'
 import { useState } from 'react'
+import { NotificationBell } from '@/components/ui/notification-bell'
 
 export default function AdminNav() {
   const router = useRouter()
@@ -53,6 +54,7 @@ export default function AdminNav() {
             <div className="text-sm text-muted-foreground">
               Admin: {user?.fullName}
             </div>
+            <NotificationBell />
             <Button variant="outline" onClick={handleLogout} className="gap-2">
               <LogOut className="h-4 w-4" />
               Logout

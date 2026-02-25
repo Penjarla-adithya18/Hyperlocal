@@ -15,14 +15,15 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound } from 'lucide-react'
+import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound, Globe } from 'lucide-react'
 import { useI18n } from '@/contexts/I18nContext'
+import { localeLabels, localeNames, locales, SupportedLocale } from '@/i18n'
 
 export default function SettingsPage() {
   const { user, updateUser, login } = useAuth()
   const router = useRouter()
   const { toast } = useToast()
-  const { t } = useI18n()
+  const { t, locale, setLocale } = useI18n()
 
   // Change password form
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' })
@@ -147,6 +148,42 @@ export default function SettingsPage() {
           <h1 className="text-3xl font-bold text-foreground mb-1">{t('settings.title')}</h1>
           <p className="text-muted-foreground">{t('settings.subtitle')}</p>
         </div>
+
+        {/* ── Language & Region ────────────────────────────── */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Globe className="h-5 w-5 text-primary" />
+              Language &amp; Region
+            </CardTitle>
+            <CardDescription>Choose your preferred display language</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-3 gap-3">
+              {(locales as readonly SupportedLocale[]).map((code) => {
+                const [flag, ...rest] = localeLabels[code].split(' ')
+                return (
+                  <button
+                    key={code}
+                    onClick={() => setLocale(code)}
+                    className={[
+                      'flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all hover:border-primary focus:outline-none',
+                      locale === code
+                        ? 'border-primary bg-primary/5'
+                        : 'border-border',
+                    ].join(' ')}
+                  >
+                    <span className="text-3xl">{flag}</span>
+                    <span className={`text-sm font-medium ${locale === code ? 'text-primary' : ''}`}>
+                      {localeNames[code]}
+                    </span>
+                    <span className="text-xs text-muted-foreground">{rest.join(' ')}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* ── Trust Score Card ─────────────────────────────── */}
         <Card className="mb-6">

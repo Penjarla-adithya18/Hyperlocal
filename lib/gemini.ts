@@ -1,42 +1,21 @@
 /**
  * Gemini AI integration with:
- *  - Round-robin API key rotation (multiple keys = parallel quota)
+ *  - Secure server-side key handling via /api/ai/gemini
  *  - Model tiering: 2.5 Flash-Lite (lite/cheap) for simple tasks, 2.5 Flash for complex ones
  *  - Local-first detection: regex checks before API calls to avoid wasting tokens
  *  - TTL in-memory cache: prevents repeated calls for identical inputs
  *
- * Keys: set NEXT_PUBLIC_GEMINI_API_KEYS (comma-separated) in .env.local
+ * Keys: set GEMINI_API_KEYS (comma-separated) in .env.local / deployment env
  */
-
-// ── API keys (round-robin rotation across multiple keys) ─────────────────────
-
-const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
-  .split(',')
-  .map((k) => k.trim())
-  .filter(Boolean)
-
-let _keyIndex = 0
-
-function getNextKey(): string {
-  if (GEMINI_KEYS.length === 0) {
-    throw new Error('No Gemini API keys configured. Set NEXT_PUBLIC_GEMINI_API_KEYS in .env.local')
-  }
-  const key = GEMINI_KEYS[_keyIndex % GEMINI_KEYS.length]
-  _keyIndex++
-  return key
-}
 
 // ── Model endpoints ───────────────────────────────────────────────────────────
 // LITE  (gemini-2.5-flash-lite): cheaper — used for language detection,
 //        simple translations, short prompts (< 200 token output)
 // FLASH (gemini-2.5-flash):      standard — used for intent extraction, summaries,
 //        longer explanations
-const ENDPOINT = {
-  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
-} as const
+const MODEL_TIER = { lite: 'lite', flash: 'flash' } as const
 
-export type GeminiModelTier = keyof typeof ENDPOINT
+export type GeminiModelTier = keyof typeof MODEL_TIER
 
 // ── TTL in-memory cache ───────────────────────────────────────────────────────
 // Prevents duplicate API calls for identical prompts within the session.
@@ -65,38 +44,18 @@ const TTL = {
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
 async function _callModel(prompt: string, tier: GeminiModelTier, maxTokens = 512): Promise<string> {
-  const url = ENDPOINT[tier]
-  const key = getNextKey()
-
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
-  })
-
-  const res = await fetch(`${url}?key=${key}`, {
+  const res = await fetch('/api/ai/gemini', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body,
+    body: JSON.stringify({ prompt, tier, maxTokens }),
   })
 
   if (!res.ok) {
-    // On rate-limit (429), retry once with the next key
-    if (res.status === 429) {
-      const retryKey = getNextKey()
-      const retry = await fetch(`${url}?key=${retryKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      })
-      if (!retry.ok) throw new Error(`Gemini ${tier} error: ${retry.status}`)
-      const d = await retry.json()
-      return d.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    }
     throw new Error(`Gemini ${tier} error: ${res.status}`)
   }
 
   const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  return data?.text ?? ''
 }
 
 /**
@@ -107,7 +66,6 @@ export async function generateWithGemini(
   prompt: string,
   options: { tier?: GeminiModelTier; maxTokens?: number } = {}
 ): Promise<string | null> {
-  if (GEMINI_KEYS.length === 0) return null
   const tier = options.tier ?? 'flash'
   const maxTokens = options.maxTokens ?? 512
 

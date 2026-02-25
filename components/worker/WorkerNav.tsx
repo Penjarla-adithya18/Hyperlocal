@@ -9,7 +9,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
-import { LanguageSwitcher } from '@/components/ui/LanguageSwitcher';
 
 export function WorkerNav() {
   const pathname = usePathname();
@@ -22,7 +21,6 @@ export function WorkerNav() {
     { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase },
     { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0 },
     { href: '/worker/profile', label: t('nav.profile'), icon: User },
-    { href: '/settings', label: t('nav.settings'), icon: Settings },
   ];
 
   return (
@@ -42,7 +40,7 @@ export function WorkerNav() {
             {navItems.map((item) => {
               const isActive = pathname === item.href;
               return (
-                <Link key={item.href} href={item.href}>
+                <Link key={item.href} href={item.href} prefetch={false}>
                   <Button
                     variant={isActive ? 'default' : 'ghost'}
                     size="sm"
@@ -63,8 +61,12 @@ export function WorkerNav() {
 
           {/* User Menu */}
           <div className="flex items-center gap-2">
-            <LanguageSwitcher />
             <NotificationBell />
+            <Link href="/settings" prefetch={false}>
+              <Button variant="ghost" size="icon" title="Settings">
+                <Settings className="w-4 h-4" />
+              </Button>
+            </Link>
             <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">{t('nav.logout')}</span>
@@ -77,7 +79,7 @@ export function WorkerNav() {
           {navItems.map((item) => {
             const isActive = pathname === item.href;
             return (
-              <Link key={item.href} href={item.href}>
+              <Link key={item.href} href={item.href} prefetch={false}>
                 <Button
                   variant={isActive ? 'default' : 'ghost'}
                   size="sm"
