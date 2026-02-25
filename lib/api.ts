@@ -29,16 +29,31 @@ function getEnv() {
 }
 
 const SESSION_TOKEN_KEY = 'sessionToken'
+const SESSION_EXPIRES_KEY = 'sessionExpiresAt'
 
 function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null
-  return localStorage.getItem(SESSION_TOKEN_KEY)
+  const token = localStorage.getItem(SESSION_TOKEN_KEY)
+  // Return null if token is missing or expired
+  if (!token) return null
+  const expiresAt = localStorage.getItem(SESSION_EXPIRES_KEY)
+  if (expiresAt && new Date(expiresAt).getTime() <= Date.now()) {
+    // Token expired — clear it
+    setSessionToken(null)
+    return null
+  }
+  return token
 }
 
-function setSessionToken(token: string | null): void {
+function setSessionToken(token: string | null, expiresAt?: string): void {
   if (typeof window === 'undefined') return
-  if (token) localStorage.setItem(SESSION_TOKEN_KEY, token)
-  else localStorage.removeItem(SESSION_TOKEN_KEY)
+  if (token && expiresAt) {
+    localStorage.setItem(SESSION_TOKEN_KEY, token)
+    localStorage.setItem(SESSION_EXPIRES_KEY, expiresAt)
+  } else {
+    localStorage.removeItem(SESSION_TOKEN_KEY)
+    localStorage.removeItem(SESSION_EXPIRES_KEY)
+  }
 }
 
 async function call<T>(
@@ -64,8 +79,9 @@ async function call<T>(
 
   if (!res.ok) {
     if (res.status === 401) {
+      // Token is invalid/expired — clear it silently
+      // Don't clear currentUser yet; let the next getCurrentUser() call detect it
       setSessionToken(null)
-      if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
     }
     const text = await res.text()
     throw new Error(`Edge function ${fn} error ${res.status}: ${text}`)
@@ -91,8 +107,8 @@ export async function registerUser(data: {
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data })
-  if (res.success && res.token) setSessionToken(res.token)
-  if (!res.success) setSessionToken(null)
+  if (res.success && res.token && res.expiresAt) setSessionToken(res.token, res.expiresAt)
+  else setSessionToken(null)
   return { success: res.success, user: res.user, message: res.message }
 }
 
@@ -101,8 +117,8 @@ export async function loginUser(
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password })
-  if (res.success && res.token) setSessionToken(res.token)
-  if (!res.success) setSessionToken(null)
+  if (res.success && res.token && res.expiresAt) setSessionToken(res.token, res.expiresAt)
+  else setSessionToken(null)
   return { success: res.success, user: res.user, message: res.message }
 }
 
@@ -128,17 +144,28 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
   return res.data
 }
 
-// ─── Session helpers (localStorage, unchanged) ─────────────────────────────
+// ─── Session helpers (localStorage with expiration checks) ─────────────────
 
 export function getCurrentUser(): User | null {
   if (typeof window === 'undefined') return null
-  if (!getSessionToken()) return null
-  try { return JSON.parse(localStorage.getItem('currentUser') ?? 'null') } catch { return null }
+  const token = getSessionToken() // This also validates expiration
+  if (!token) {
+    // Token is missing or expired — clear the user too
+    localStorage.removeItem('currentUser')
+    return null
+  }
+  try { 
+    return JSON.parse(localStorage.getItem('currentUser') ?? 'null') 
+  } catch { 
+    return null 
+  }
 }
+
 export function setCurrentUser(user: User | null): void {
   if (typeof window === 'undefined') return
   user ? localStorage.setItem('currentUser', JSON.stringify(user)) : localStorage.removeItem('currentUser')
 }
+
 export function logout(): void {
   call<SR>('auth', 'POST', {}, { action: 'logout' }).catch(() => {})
   setCurrentUser(null)
