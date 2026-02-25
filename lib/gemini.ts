@@ -1,7 +1,7 @@
 /**
  * Gemini AI integration with:
  *  - Round-robin API key rotation (multiple keys = parallel quota)
- *  - Model tiering: flash-8b (lite/cheap) for simple tasks, flash (standard) for complex ones
+ *  - Model tiering: 2.5 Flash-Lite (lite/cheap) for simple tasks, 2.5 Flash for complex ones
  *  - Local-first detection: regex checks before API calls to avoid wasting tokens
  *  - TTL in-memory cache: prevents repeated calls for identical inputs
  *
@@ -27,16 +27,16 @@ function getNextKey(): string {
 }
 
 // ── Model endpoints ───────────────────────────────────────────────────────────
-// LITE  (gemini-1.5-flash-8b): ~4x cheaper — used for language detection,
+// LITE  (gemini-2.5-flash-lite): cheaper — used for language detection,
 //        simple translations, short prompts (< 200 token output)
-// FLASH (gemini-1.5-flash):     standard — used for intent extraction, summaries,
+// FLASH (gemini-2.5-flash):      standard — used for intent extraction, summaries,
 //        longer explanations
 const ENDPOINT = {
-  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent',
-  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
+  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent',
 } as const
 
-type ModelTier = keyof typeof ENDPOINT
+export type GeminiModelTier = keyof typeof ENDPOINT
 
 // ── TTL in-memory cache ───────────────────────────────────────────────────────
 // Prevents duplicate API calls for identical prompts within the session.
@@ -64,7 +64,7 @@ const TTL = {
 
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
-async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Promise<string> {
+async function _callModel(prompt: string, tier: GeminiModelTier, maxTokens = 512): Promise<string> {
   const url = ENDPOINT[tier]
   const key = getNextKey()
 
@@ -97,6 +97,26 @@ async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Pro
 
   const data = await res.json()
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+}
+
+/**
+ * Shared Gemini text-generation helper for other modules.
+ * Returns null on missing keys or API failure so callers can safely fallback.
+ */
+export async function generateWithGemini(
+  prompt: string,
+  options: { tier?: GeminiModelTier; maxTokens?: number } = {}
+): Promise<string | null> {
+  if (GEMINI_KEYS.length === 0) return null
+  const tier = options.tier ?? 'flash'
+  const maxTokens = options.maxTokens ?? 512
+
+  try {
+    const text = (await _callModel(prompt, tier, maxTokens)).trim()
+    return text || null
+  } catch {
+    return null
+  }
 }
 
 // ── Local-first language detection (NO API cost) ──────────────────────────────

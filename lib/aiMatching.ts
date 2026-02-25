@@ -7,34 +7,15 @@
  *  - Weighted scoring: Skills(40) + Category(20) + Location(15) + Availability(15) + Experience(10)
  */
 import { Job, WorkerProfile } from './types';
+import { generateWithGemini } from './gemini';
 
 // ────────────────────────────────────────────────────────────────────────────
 // Gemini AI integration (optional — falls back to keyword logic)
 // ────────────────────────────────────────────────────────────────────────────
 
-const GEMINI_API_KEY =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_GEMINI_API_KEY ?? '')
-    : '';
-
-/** Call Gemini 1.5 Flash with a text prompt. Returns null on failure. */
+/** Call Gemini via shared client. Returns null on failure. */
 async function callGemini(prompt: string): Promise<string | null> {
-  if (!GEMINI_API_KEY) return null;
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
-      },
-    );
-    if (!res.ok) return null;
-    const json = await res.json();
-    return (json?.candidates?.[0]?.content?.parts?.[0]?.text as string) ?? null;
-  } catch {
-    return null;
-  }
+  return generateWithGemini(prompt, { tier: 'flash', maxTokens: 256 });
 }
 
 // ────────────────────────────────────────────────────────────────────────────

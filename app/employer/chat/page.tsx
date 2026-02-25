@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
-import { Send, Search, MessageCircle, Flag, AlertCircle } from 'lucide-react'
+import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -39,6 +39,9 @@ export default function EmployerChatPage() {
   const [reportReason, setReportReason] = useState('spam')
   const [reportDescription, setReportDescription] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
+  const [voiceListening, setVoiceListening] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -165,6 +168,46 @@ export default function EmployerChatPage() {
     } finally {
       setSubmittingReport(false)
     }
+  }
+
+  const toggleVoiceInput = () => {
+    if (voiceListening) {
+      recognitionRef.current?.stop()
+      setVoiceListening(false)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any
+    const SpeechRecognitionAPI = win.SpeechRecognition ?? win.webkitSpeechRecognition
+
+    if (!SpeechRecognitionAPI) {
+      toast({ title: 'Voice input not supported in this browser', variant: 'destructive' })
+      return
+    }
+
+    const recognition = new SpeechRecognitionAPI()
+    recognition.lang = 'hi-IN'
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+
+    recognition.onstart = () => setVoiceListening(true)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? ''
+      if (transcript) {
+        setNewMessage((prev: string) => (prev ? prev + ' ' + transcript : transcript))
+      }
+      setVoiceListening(false)
+    }
+
+    recognition.onerror = () => setVoiceListening(false)
+    recognition.onend = () => setVoiceListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
   }
 
   const getOtherUser = (conversation: ChatConversation): User | null => {
@@ -330,11 +373,20 @@ export default function EmployerChatPage() {
                   ) : (
                     <div className="flex gap-2">
                       <Input
-                        placeholder="Type a message..."
+                        placeholder="Type a message… or use 🎤"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                       />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={toggleVoiceInput}
+                        title={voiceListening ? 'Stop recording' : 'Voice input (Hindi/Telugu/English)'}
+                        className={voiceListening ? 'border-red-400 text-red-500 animate-pulse' : ''}
+                      >
+                        {voiceListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </Button>
                       <Button onClick={handleSendMessage}>
                         <Send className="h-4 w-4" />
                       </Button>
