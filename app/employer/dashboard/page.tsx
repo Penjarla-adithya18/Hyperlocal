@@ -18,10 +18,13 @@ import {
   Eye,
   Clock,
   CheckCircle2,
+  Sparkles,
+  AlertCircle,
 } from 'lucide-react';
 import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
+import { generateDashboardInsights, type DashboardInsight } from '@/lib/gemini';
 import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
@@ -34,6 +37,7 @@ export default function EmployerDashboardPage() {
   const [applications, setApplications] = useState<Application[]>([]);
   const [appCountByJob, setAppCountByJob] = useState<Record<string, number>>({});
   const [loading, setLoading] = useState(true);
+  const [aiInsights, setAiInsights] = useState<DashboardInsight[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== 'employer') {
@@ -68,6 +72,27 @@ export default function EmployerDashboardPage() {
           countMap[app.jobId] = (countMap[app.jobId] || 0) + 1;
         }
         setAppCountByJob(countMap);
+
+        // AI insights
+        const insightKey = `dash_insights_employer_${user!.id}`
+        const cachedInsights = sessionStorage.getItem(insightKey)
+        if (cachedInsights) {
+          if (!cancelled) setAiInsights(JSON.parse(cachedInsights))
+        } else {
+          generateDashboardInsights('employer', {
+            totalJobs: employerJobs.length,
+            activeJobs: employerJobs.filter(j => j.status === 'active').length,
+            completedJobs: employerJobs.filter(j => j.status === 'filled').length,
+            avgRating: trust?.averageRating,
+            pendingApplications: flatApps.filter(a => a.status === 'pending').length,
+            hireRate: flatApps.length > 0 ? Math.round(flatApps.filter(a => a.status === 'accepted').length / flatApps.length * 100) : 0,
+          }).then(insights => {
+            if (!cancelled) {
+              setAiInsights(insights)
+              sessionStorage.setItem(insightKey, JSON.stringify(insights))
+            }
+          }).catch(() => {})
+        }
       } catch (error) {
         console.error('Failed to load dashboard data:', error);
       } finally {
@@ -173,6 +198,34 @@ export default function EmployerDashboardPage() {
             <div className="text-sm text-muted-foreground">{t('worker.dash.trustScore')}</div>
           </Card>
         </div>
+
+        {/* AI Insights */}
+        {aiInsights.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {aiInsights.map((insight, i) => {
+              const iconMap: Record<string, typeof Sparkles> = {
+                star: Star, trophy: CheckCircle2, target: Briefcase, 'trending-up': TrendingUp,
+                'alert-triangle': AlertCircle, lightbulb: Sparkles, rocket: TrendingUp, heart: Star,
+              }
+              const IconComp = iconMap[insight.icon] || Sparkles
+              const borderColor = insight.type === 'achievement' ? 'border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+                : insight.type === 'alert' ? 'border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+                : insight.type === 'opportunity' ? 'border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20'
+                : 'border-purple-300 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20'
+              return (
+                <Card key={i} className={`p-4 ${borderColor} transition-all hover:shadow-md`}>
+                  <div className="flex items-start gap-3">
+                    <IconComp className="h-5 w-5 text-accent shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-sm">{insight.title}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">{insight.message}</p>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
 
         {/* Quick Actions */}
         <Card className="p-6">
@@ -282,7 +335,7 @@ export default function EmployerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-accent">?{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-accent">₹{(job.payAmount ?? job.pay ?? 0).toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         {job.paymentStatus === 'locked' ? (
                           <>
@@ -333,7 +386,7 @@ export default function EmployerDashboardPage() {
                   </div>
                   <div>
                     <div className="text-muted-foreground">Average Rating</div>
-                    <div className="font-semibold">{trustScore.averageRating.toFixed(1)} / 5.0</div>
+                    <div className="font-semibold">{(trustScore.averageRating ?? 0).toFixed(1)} / 5.0</div>
                   </div>
                   <div>
                     <div className="text-muted-foreground">Total Ratings</div>

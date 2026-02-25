@@ -153,7 +153,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              Trust &amp; Reputation
+              Trust & Reputation
             </CardTitle>
             <CardDescription>Your current standing on the platform</CardDescription>
           </CardHeader>
@@ -290,7 +290,7 @@ export default function SettingsPage() {
 
               {otpSent && (
                 <Button type="submit" disabled={phoneLoading}>
-                  {phoneLoading ? 'Verifying…' : 'Verify &amp; Update'}
+                  {phoneLoading ? 'Verifying…' : 'Verify & Update'}
                 </Button>
               )}
             </form>

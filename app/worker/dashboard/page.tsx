@@ -24,7 +24,7 @@ import {
 import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
-import { generateJobMatchSummary, SupportedLocale } from '@/lib/gemini';
+import { generateJobMatchSummary, generateDashboardInsights, SupportedLocale, type DashboardInsight } from '@/lib/gemini';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useI18n } from '@/contexts/I18nContext';
 
@@ -40,6 +40,7 @@ export default function WorkerDashboardPage() {
   const [loading, setLoading] = useState(true);
   // AI-generated match summary for the top recommended job
   const [topMatchSummary, setTopMatchSummary] = useState<string | null>(null);
+  const [aiInsights, setAiInsights] = useState<DashboardInsight[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== 'worker') {
@@ -75,6 +76,27 @@ export default function WorkerDashboardPage() {
           ? getRecommendedJobs(profile, allJobs, 5)
           : getBasicRecommendations(profile?.categories ?? [], allJobs, 5).map((job) => ({ job, matchScore: 0 }))
         setRecommendedJobs(recs);
+
+        // AI insights
+        const insightKey = `dash_insights_worker_${user!.id}`
+        const cachedInsights = sessionStorage.getItem(insightKey)
+        if (cachedInsights) {
+          if (!cancelled) setAiInsights(JSON.parse(cachedInsights))
+        } else {
+          generateDashboardInsights('worker', {
+            totalJobs: allJobs.length,
+            activeJobs: allJobs.filter(j => j.status === 'active').length,
+            completedJobs: (apps || []).filter(a => a.status === 'completed').length,
+            avgRating: trust?.averageRating,
+            skills: profile?.skills ?? [],
+            pendingApplications: (apps || []).filter(a => a.status === 'pending').length,
+          }).then(insights => {
+            if (!cancelled) {
+              setAiInsights(insights)
+              sessionStorage.setItem(insightKey, JSON.stringify(insights))
+            }
+          }).catch(() => {})
+        }
 
         // Auto-generate locale-aware AI match summary for the top recommendation
         if (recs.length > 0 && profile?.skills?.length) {
@@ -211,7 +233,7 @@ export default function WorkerDashboardPage() {
             <div className="flex items-center justify-between mb-2">
               <TrendingUp className="w-8 h-8 text-primary" />
             </div>
-            <div className="text-2xl font-bold">{trustScore?.averageRating.toFixed(1) || 'N/A'}</div>
+            <div className="text-2xl font-bold">{trustScore?.averageRating?.toFixed(1) ?? 'N/A'}</div>
             <div className="text-sm text-muted-foreground">{t('worker.dash.avgRating')}</div>
           </Card>
 
@@ -225,6 +247,34 @@ export default function WorkerDashboardPage() {
             <div className="text-sm text-muted-foreground">{t('worker.dash.completedJobs')}</div>
           </Card>
         </div>
+
+        {/* AI Insights */}
+        {aiInsights.length > 0 && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {aiInsights.map((insight, i) => {
+              const iconMap: Record<string, typeof Sparkles> = {
+                star: Star, trophy: CheckCircle2, target: Briefcase, 'trending-up': TrendingUp,
+                'alert-triangle': AlertCircle, lightbulb: Sparkles, rocket: TrendingUp, heart: Star,
+              }
+              const IconComp = iconMap[insight.icon] || Sparkles
+              const borderColor = insight.type === 'achievement' ? 'border-green-300 dark:border-green-800 bg-green-50/50 dark:bg-green-950/20'
+                : insight.type === 'alert' ? 'border-amber-300 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-950/20'
+                : insight.type === 'opportunity' ? 'border-blue-300 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20'
+                : 'border-purple-300 dark:border-purple-800 bg-purple-50/50 dark:bg-purple-950/20'
+              return (
+                <Card key={i} className={`p-4 ${borderColor} transition-all hover:shadow-md`}>
+                  <div className="flex items-start gap-3">
+                    <IconComp className="h-5 w-5 text-primary shrink-0 mt-0.5" />
+                    <div>
+                      <h4 className="font-semibold text-sm">{insight.title}</h4>
+                      <p className="text-xs text-muted-foreground mt-1">{insight.message}</p>
+                    </div>
+                  </div>
+                </Card>
+              )
+            })}
+          </div>
+        )}
 
         {/* AI Recommendations */}
         <div>

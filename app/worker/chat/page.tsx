@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
-import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff } from 'lucide-react'
+import { Send, Search, MessageCircle, Flag, AlertCircle, Languages, Loader2 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
+import { translateChatMessage, type SupportedLocale } from '@/lib/gemini'
+import { useI18n } from '@/contexts/I18nContext'
 import {
   Dialog,
   DialogContent,
@@ -39,10 +41,10 @@ export default function WorkerChatPage() {
   const [reportReason, setReportReason] = useState('spam')
   const [reportDescription, setReportDescription] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
-  const [voiceListening, setVoiceListening] = useState(false)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const recognitionRef = useRef<any>(null)
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({})
+  const [translatingId, setTranslatingId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { locale } = useI18n()
 
   useEffect(() => {
     if (user) {
@@ -158,47 +160,6 @@ export default function WorkerChatPage() {
     } finally {
       setSubmittingReport(false)
     }
-  }
-
-  const toggleVoiceInput = () => {
-    if (voiceListening) {
-      recognitionRef.current?.stop()
-      setVoiceListening(false)
-      return
-    }
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const win = window as any
-    const SpeechRecognitionAPI = win.SpeechRecognition ?? win.webkitSpeechRecognition
-
-    if (!SpeechRecognitionAPI) {
-      toast({ title: 'Voice input not supported in this browser', variant: 'destructive' })
-      return
-    }
-
-    const recognition = new SpeechRecognitionAPI()
-    // Accept Hindi, Telugu and English speech
-    recognition.lang = 'hi-IN'
-    recognition.continuous = false
-    recognition.interimResults = false
-    recognition.maxAlternatives = 1
-
-    recognition.onstart = () => setVoiceListening(true)
-
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    recognition.onresult = (event: any) => {
-      const transcript = event.results[0]?.[0]?.transcript ?? ''
-      if (transcript) {
-        setNewMessage((prev: string) => (prev ? prev + ' ' + transcript : transcript))
-      }
-      setVoiceListening(false)
-    }
-
-    recognition.onerror = () => setVoiceListening(false)
-    recognition.onend = () => setVoiceListening(false)
-
-    recognitionRef.current = recognition
-    recognition.start()
   }
 
   const getOtherUser = (conversation: ChatConversation): User | null => {
@@ -331,6 +292,7 @@ export default function WorkerChatPage() {
                     ) : (
                       messages.map((message) => {
                         const isSent = message.senderId === user?.id
+                        const translated = translatedMessages[message.id]
                         return (
                           <div
                             key={message.id}
@@ -344,14 +306,33 @@ export default function WorkerChatPage() {
                               }`}
                             >
                               <p className="text-sm">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
-                              <p className={`text-xs mt-1 ${
-                                isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                              }`}>
-                                {new Date(message.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </p>
+                              {translated && (
+                                <p className={`text-sm mt-1 pt-1 border-t ${isSent ? 'border-primary-foreground/20 text-primary-foreground/80' : 'border-border text-muted-foreground'} italic`}>
+                                  {translated}
+                                </p>
+                              )}
+                              <div className={`flex items-center gap-1 mt-1 ${isSent ? 'justify-end' : 'justify-between'}`}>
+                                <p className={`text-xs ${isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                                {!translated && (
+                                  <button
+                                    className={`text-xs flex items-center gap-0.5 hover:underline ${isSent ? 'text-primary-foreground/60 hover:text-primary-foreground/90' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={async () => {
+                                      setTranslatingId(message.id)
+                                      try {
+                                        const result = await translateChatMessage(message.message, locale as SupportedLocale)
+                                        setTranslatedMessages(prev => ({ ...prev, [message.id]: result }))
+                                      } catch { /* ignore */ }
+                                      setTranslatingId(null)
+                                    }}
+                                    disabled={translatingId === message.id}
+                                  >
+                                    {translatingId === message.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3" />}
+                                    Translate
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )
@@ -369,20 +350,11 @@ export default function WorkerChatPage() {
                   ) : (
                     <div className="flex gap-2">
                       <Input
-                        placeholder="Type a message… or use 🎤"
+                        placeholder="Type a message..."
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                       />
-                      <Button
-                        variant="outline"
-                        size="icon"
-                        onClick={toggleVoiceInput}
-                        title={voiceListening ? 'Stop recording' : 'Voice input (Hindi/Telugu/English)'}
-                        className={voiceListening ? 'border-red-400 text-red-500 animate-pulse' : ''}
-                      >
-                        {voiceListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
-                      </Button>
                       <Button onClick={handleSendMessage}>
                         <Send className="h-4 w-4" />
                       </Button>

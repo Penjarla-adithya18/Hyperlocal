@@ -180,9 +180,7 @@ export default function AdminEscrowPage() {
                         <TableCell>{statusBadge(txn.status)}</TableCell>
                         <TableCell className="text-xs text-muted-foreground">{new Date(txn.createdAt).toLocaleDateString('en-IN')}</TableCell>
                         <TableCell>
-                          <Button size="sm" variant="ghost" onClick={() => router.push(`/employer/jobs/${txn.jobId}`)}>
-                            View Job
-                          </Button>
+                          <span className="text-xs text-muted-foreground font-mono">{txn.jobId.slice(0, 8)}…</span>
                         </TableCell>
                       </TableRow>
                     ))}

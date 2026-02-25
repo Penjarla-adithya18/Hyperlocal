@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useRouter } from 'next/navigation'
 import EmployerNav from '@/components/employer/EmployerNav'
 import { Button } from '@/components/ui/button'
@@ -13,17 +13,12 @@ import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
 import { mockDb } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { IndianRupee, X, Plus, Calendar } from 'lucide-react'
-import { JOB_CATEGORIES } from '@/lib/aiMatching'
+import { IndianRupee, X, Plus, Calendar, Laptop, MapPin, Briefcase, FileText, AlertCircle, Sparkles, Loader2, TrendingUp, Lightbulb } from 'lucide-react'
 import { Checkbox } from '@/components/ui/checkbox'
 import { LocationInput } from '@/components/ui/location-input'
-
-const SKILLS = [
-  'Plumber', 'Electrician', 'Carpenter', 'Painter', 'Mason', 'Welder',
-  'Driver', 'Delivery', 'Cook', 'Cleaner', 'Security Guard', 'Gardener',
-  'Mechanic', 'AC Repair', 'Sales', 'Customer Service', 'Data Entry',
-  'Content Writing', 'Teaching', 'Photography',
-]
+import { JOB_CATEGORIES_V2, getRoleSkills, isRoleTechnical, inferJobNature } from '@/lib/roleSkills'
+import type { JobMode, JobNature } from '@/lib/types'
+import { generateJobDescription, estimateSalary, type GeneratedJobContent, type SalaryEstimate } from '@/lib/gemini'
 
 const DURATION_PRESETS = [
   '1 hour', '2 hours', '3 hours', '4 hours', 'Half day', 'Full day',
@@ -37,6 +32,10 @@ export default function PostJobPage() {
   const [loading, setLoading] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [customSkill, setCustomSkill] = useState('')
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [salaryEstimate, setSalaryEstimate] = useState<SalaryEstimate | null>(null)
+  const [estimatingPay, setEstimatingPay] = useState(false)
+  const [aiApplied, setAiApplied] = useState(false)
 
   const [formData, setFormData] = useState({
     title: '',
@@ -53,8 +52,82 @@ export default function PostJobPage() {
     startDate: '',
     requirements: '',
     benefits: '',
-    escrowRequired: true
+    escrowRequired: true,
+    jobMode: 'local' as JobMode,
+    jobNature: 'non-technical' as JobNature,
   })
+
+  // Derive role-based skills when category changes
+  const roleSkills = useMemo(() => getRoleSkills(formData.category), [formData.category])
+  const isTechnical = useMemo(() => isRoleTechnical(formData.category), [formData.category])
+
+  // When category changes, auto-set job nature and reset skills
+  const handleAIGenerate = async () => {
+    if (!formData.title) {
+      toast({ title: 'Enter a Title First', description: 'AI needs at least the job title to generate content.', variant: 'destructive' })
+      return
+    }
+    setAiGenerating(true)
+    try {
+      const result = await generateJobDescription(
+        formData.title,
+        formData.category || 'General',
+        formData.location,
+        formData.jobMode,
+        formData.experienceRequired,
+        formData.duration,
+      )
+      setFormData(prev => ({
+        ...prev,
+        description: result.description,
+        requirements: result.requirements,
+        benefits: result.benefits,
+        payType: result.suggestedPay.type,
+        payAmount: String(result.suggestedPay.min),
+      }))
+      // Add suggested skills that aren't already selected
+      const newSkills = result.suggestedSkills.filter(s => !selectedSkills.includes(s))
+      if (newSkills.length > 0) {
+        setSelectedSkills(prev => [...prev, ...newSkills])
+      }
+      setAiApplied(true)
+      toast({ title: '✨ AI Generated!', description: 'Job description, requirements, benefits, and skills have been filled. Review and adjust as needed.' })
+    } catch {
+      toast({ title: 'AI Error', description: 'Could not generate content. Please try again.', variant: 'destructive' })
+    } finally {
+      setAiGenerating(false)
+    }
+  }
+
+  const handleEstimatePay = async () => {
+    if (!formData.title && !formData.category) {
+      toast({ title: 'Add Job Details', description: 'Enter title or category first for salary estimation.', variant: 'destructive' })
+      return
+    }
+    setEstimatingPay(true)
+    try {
+      const result = await estimateSalary(
+        formData.title,
+        formData.category || 'General',
+        formData.location,
+        formData.experienceRequired,
+        selectedSkills,
+      )
+      setSalaryEstimate(result)
+      toast({ title: '💰 Pay Estimated', description: `Suggested: ₹${result.minPay}-${result.maxPay}/${result.payType === 'hourly' ? 'hr' : 'fixed'}` })
+    } catch {
+      toast({ title: 'Error', description: 'Could not estimate pay.', variant: 'destructive' })
+    } finally {
+      setEstimatingPay(false)
+    }
+  }
+
+  const handleCategoryChange = (value: string) => {
+    const nature = inferJobNature(value)
+    setFormData({ ...formData, category: value, jobNature: nature })
+    // Reset skills when category changes (user can re-select)
+    setSelectedSkills([])
+  }
 
   const handleAddSkill = (skill: string) => {
     if (!selectedSkills.includes(skill)) {
@@ -117,6 +190,8 @@ export default function PostJobPage() {
         employerId: user.id,
         requiredSkills: selectedSkills,
         payAmount: parseFloat(formData.payAmount),
+        jobMode: formData.jobMode,
+        jobNature: formData.jobNature,
         status: 'draft',
         paymentStatus: 'pending',
       })
@@ -148,6 +223,37 @@ export default function PostJobPage() {
           <p className="text-muted-foreground">Fill in the details to find the perfect match for your job</p>
         </div>
 
+        {/* AI Smart Assistant Banner */}
+        <Card className="mb-6 border-purple-200 dark:border-purple-800 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-950/20 dark:to-blue-950/20">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between flex-wrap gap-4">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-purple-100 dark:bg-purple-900/40 rounded-xl">
+                  <Sparkles className="h-6 w-6 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div>
+                  <h3 className="font-semibold text-foreground">AI Smart Job Posting</h3>
+                  <p className="text-sm text-muted-foreground">Enter a job title and let AI write the perfect description, requirements, and suggest fair pay</p>
+                </div>
+              </div>
+              <Button
+                type="button"
+                onClick={handleAIGenerate}
+                disabled={aiGenerating}
+                className="bg-purple-600 hover:bg-purple-700 text-white gap-2"
+              >
+                {aiGenerating ? <><Loader2 className="h-4 w-4 animate-spin" /> Generating...</> : <><Sparkles className="h-4 w-4" /> Auto-Fill with AI</>}
+              </Button>
+            </div>
+            {aiApplied && (
+              <div className="mt-3 flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
+                <Lightbulb className="h-4 w-4" />
+                AI has filled the form. Review each section and adjust to your needs.
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         <form onSubmit={handleSubmit}>
           <Card className="mb-6">
             <CardHeader>
@@ -178,21 +284,52 @@ export default function PostJobPage() {
                 />
               </div>
 
+              {/* Job Mode: Remote vs Local */}
+              <div className="space-y-2">
+                <Label>Job Mode *</Label>
+                <div className="flex gap-3">
+                  <Button
+                    type="button"
+                    variant={formData.jobMode === 'local' ? 'default' : 'outline'}
+                    className="flex-1 gap-2"
+                    onClick={() => setFormData({ ...formData, jobMode: 'local' })}
+                  >
+                    <MapPin className="h-4 w-4" />
+                    On-site / Local
+                  </Button>
+                  <Button
+                    type="button"
+                    variant={formData.jobMode === 'remote' ? 'default' : 'outline'}
+                    className="flex-1 gap-2"
+                    onClick={() => setFormData({ ...formData, jobMode: 'remote' })}
+                  >
+                    <Laptop className="h-4 w-4" />
+                    Remote
+                  </Button>
+                </div>
+              </div>
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="category">Category *</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    onValueChange={handleCategoryChange}
                     required
                   >
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
                     <SelectContent>
-                      {JOB_CATEGORIES.map(cat => (
+                      <SelectItem value="_non_tech_header" disabled>── Non-Technical ──</SelectItem>
+                      {JOB_CATEGORIES_V2.filter(c => !isRoleTechnical(c) && c !== 'Other').map(cat => (
                         <SelectItem key={cat} value={cat}>{cat}</SelectItem>
                       ))}
+                      <SelectItem value="_tech_header" disabled>── Technical ──</SelectItem>
+                      {JOB_CATEGORIES_V2.filter(c => isRoleTechnical(c)).map(cat => (
+                        <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                      ))}
+                      <SelectItem value="Other">Other</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -208,28 +345,62 @@ export default function PostJobPage() {
                   />
                 </div>
               </div>
+
+              {/* Job Nature indicator */}
+              {formData.category && (
+                <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm ${
+                  isTechnical
+                    ? 'bg-blue-50 dark:bg-blue-950/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300'
+                    : 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300'
+                }`}>
+                  {isTechnical ? (
+                    <>
+                      <FileText className="h-4 w-4 shrink-0" />
+                      <span><strong>Technical Job</strong> — Workers will be asked to upload a resume when applying.</span>
+                    </>
+                  ) : (
+                    <>
+                      <Briefcase className="h-4 w-4 shrink-0" />
+                      <span><strong>Non-Technical Job</strong> — No resume required for applicants.</span>
+                    </>
+                  )}
+                </div>
+              )}
             </CardContent>
           </Card>
 
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Required Skills</CardTitle>
-              <CardDescription>Select or add skills required for this job</CardDescription>
+              <CardDescription>
+                {formData.category
+                  ? `Showing skills relevant to ${formData.category}. Add custom skills below.`
+                  : 'Select a category first to see relevant skills, or add custom skills.'}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex flex-wrap gap-2">
-                {SKILLS.map((skill) => (
-                  <Badge
-                    key={skill}
-                    variant={selectedSkills.includes(skill) ? 'default' : 'outline'}
-                    className="cursor-pointer"
-                    onClick={() => selectedSkills.includes(skill) ? handleRemoveSkill(skill) : handleAddSkill(skill)}
-                  >
-                    {skill}
-                    {selectedSkills.includes(skill) && <X className="ml-1 h-3 w-3" />}
-                  </Badge>
-                ))}
-              </div>
+              {!formData.category && (
+                <div className="flex items-center gap-2 text-sm text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/20 p-3 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <AlertCircle className="h-4 w-4 shrink-0" />
+                  <span>Please select a job category above to see role-specific skills.</span>
+                </div>
+              )}
+
+              {roleSkills.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {roleSkills.map((skill) => (
+                    <Badge
+                      key={skill}
+                      variant={selectedSkills.includes(skill) ? 'default' : 'outline'}
+                      className="cursor-pointer"
+                      onClick={() => selectedSkills.includes(skill) ? handleRemoveSkill(skill) : handleAddSkill(skill)}
+                    >
+                      {skill}
+                      {selectedSkills.includes(skill) && <X className="ml-1 h-3 w-3" />}
+                    </Badge>
+                  ))}
+                </div>
+              )}
 
               <div className="flex gap-2">
                 <Input
@@ -286,9 +457,22 @@ export default function PostJobPage() {
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="payAmount">
-                    {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (₹) *
-                  </Label>
+                  <div className="flex items-center justify-between">
+                    <Label htmlFor="payAmount">
+                      {formData.payType === 'hourly' ? 'Rate per Hour' : 'Fixed Amount'} (₹) *
+                    </Label>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 text-xs gap-1 text-purple-600 hover:text-purple-700"
+                      onClick={handleEstimatePay}
+                      disabled={estimatingPay}
+                    >
+                      {estimatingPay ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+                      AI Suggest Pay
+                    </Button>
+                  </div>
                   <div className="relative">
                     <IndianRupee className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                     <Input
@@ -302,6 +486,30 @@ export default function PostJobPage() {
                       min="0"
                     />
                   </div>
+                  {salaryEstimate && (
+                    <div className="p-3 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm space-y-1">
+                      <div className="flex items-center gap-2 font-medium text-blue-700 dark:text-blue-300">
+                        <TrendingUp className="h-4 w-4" />
+                        Market Rate: ₹{salaryEstimate.minPay} – ₹{salaryEstimate.maxPay}/{salaryEstimate.payType === 'hourly' ? 'hr' : 'fixed'}
+                      </div>
+                      <p className="text-muted-foreground">{salaryEstimate.reasoning}</p>
+                      <div className="flex gap-2">
+                        <Badge variant="outline" className="text-xs">Confidence: {salaryEstimate.confidence}</Badge>
+                        <Badge variant="outline" className="text-xs">Trend: {salaryEstimate.marketTrend}</Badge>
+                      </div>
+                      <div className="flex gap-2 mt-1">
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setFormData({ ...formData, payAmount: String(salaryEstimate.minPay), payType: salaryEstimate.payType })}>
+                          Use ₹{salaryEstimate.minPay}
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setFormData({ ...formData, payAmount: String(salaryEstimate.avgPay), payType: salaryEstimate.payType })}>
+                          Use ₹{salaryEstimate.avgPay} (avg)
+                        </Button>
+                        <Button type="button" variant="outline" size="sm" className="h-7 text-xs" onClick={() => setFormData({ ...formData, payAmount: String(salaryEstimate.maxPay), payType: salaryEstimate.payType })}>
+                          Use ₹{salaryEstimate.maxPay}
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 

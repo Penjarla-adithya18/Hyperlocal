@@ -1,7 +1,7 @@
 /**
  * Gemini AI integration with:
  *  - Round-robin API key rotation (multiple keys = parallel quota)
- *  - Model tiering: flash-8b (lite/cheap) for simple tasks, flash (standard) for complex ones
+ *  - Model tiering: flash-lite (cheaper) for simple tasks, flash (standard) for complex ones
  *  - Local-first detection: regex checks before API calls to avoid wasting tokens
  *  - TTL in-memory cache: prevents repeated calls for identical inputs
  *
@@ -27,13 +27,13 @@ function getNextKey(): string {
 }
 
 // ── Model endpoints ───────────────────────────────────────────────────────────
-// LITE  (gemini-1.5-flash-8b): ~4x cheaper — used for language detection,
+// LITE  (gemini-2.0-flash-lite): ~3x cheaper — used for language detection,
 //        simple translations, short prompts (< 200 token output)
-// FLASH (gemini-1.5-flash):     standard — used for intent extraction, summaries,
+// FLASH (gemini-2.0-flash):      standard — used for intent extraction, summaries,
 //        longer explanations
 const ENDPOINT = {
-  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-8b:generateContent',
-  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
+  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent',
+  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
 } as const
 
 type ModelTier = keyof typeof ENDPOINT
@@ -340,5 +340,682 @@ No markdown.`
       : 'Your skills are a good match for this job.'
     setCached(cacheKey, fallback, TTL.SUMMARY)
     return fallback
+  }
+}
+
+// ── AI Skill Gap Analyzer ────────────────────────────────────────────────────
+// Compares worker skills against in-demand skills from active jobs and returns
+// a structured JSON analysis with gaps and up-skilling tips.
+
+export interface SkillGapResult {
+  strongSkills: string[]
+  gapSkills: string[]
+  tips: Array<{ skill: string; suggestion: string }>
+  summary: string
+}
+
+export async function analyzeSkillGap(
+  workerSkills: string[],
+  demandedSkills: string[],
+  userLang: SupportedLocale = 'en'
+): Promise<SkillGapResult> {
+  const cacheKey = `skillgap:${userLang}:${workerSkills.sort().join(',').slice(0, 60)}:${demandedSkills.sort().join(',').slice(0, 60)}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) } catch { /* fall through */ }
+  }
+
+  const langName = LANG_NAMES[userLang]
+  const prompt = `You are a career advisor for HyperLocal, a blue-collar/hyperlocal job platform in India.
+
+Worker's current skills: ${workerSkills.join(', ') || 'none listed'}
+Top in-demand skills from active job listings: ${demandedSkills.join(', ')}
+
+Analyze the gap. Respond in ${langName} with ONLY valid JSON (no markdown, no code fences):
+{
+  "strongSkills": ["skills the worker already has that are in demand"],
+  "gapSkills": ["top 5 in-demand skills the worker is missing"],
+  "tips": [{"skill": "skill name", "suggestion": "one-sentence actionable tip to learn it"}],
+  "summary": "2-3 sentence encouraging overview of their position and growth path"
+}`
+
+  try {
+    const raw = (await _callModel(prompt, 'flash', 512)).trim()
+    // Strip possible code fences
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result: SkillGapResult = JSON.parse(cleaned)
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    // Deterministic fallback
+    const matched = workerSkills.filter((s) =>
+      demandedSkills.map((d) => d.toLowerCase()).includes(s.toLowerCase())
+    )
+    const missing = demandedSkills
+      .filter((d) => !workerSkills.map((s) => s.toLowerCase()).includes(d.toLowerCase()))
+      .slice(0, 5)
+    const fallback: SkillGapResult = {
+      strongSkills: matched,
+      gapSkills: missing,
+      tips: missing.map((s) => ({ skill: s, suggestion: `Look for free online tutorials or local workshops on ${s}.` })),
+      summary: `You have ${matched.length} in-demand skill${matched.length !== 1 ? 's' : ''}. Learning ${missing.slice(0, 3).join(', ')} could open more opportunities for you.`,
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Learning Recommendations (Agentic) ───────────────────────────────────
+// Given a job's required skills and the worker's current skills, generates
+// personalized learning resources with real web links, YouTube channels,
+// free course platforms, and local training center suggestions.
+
+export interface LearningResource {
+  skill: string
+  hasSkill: boolean
+  resources: Array<{
+    title: string
+    url: string
+    type: 'video' | 'course' | 'article' | 'practice' | 'community'
+    free: boolean
+    platform: string
+    description: string
+  }>
+  estimatedTime: string
+}
+
+export interface AILearningPlan {
+  resources: LearningResource[]
+  quickWins: string[]
+  careerPath: string
+  readinessScore: number
+}
+
+export async function generateLearningPlan(
+  jobTitle: string,
+  jobSkills: string[],
+  workerSkills: string[],
+  workerExperience: string,
+  userLang: SupportedLocale = 'en'
+): Promise<AILearningPlan> {
+  const cacheKey = `learnplan:${userLang}:${jobTitle.slice(0, 30)}:${jobSkills.sort().join(',').slice(0, 60)}:${workerSkills.sort().join(',').slice(0, 40)}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) } catch { /* fall through */ }
+  }
+
+  const langName = LANG_NAMES[userLang]
+  const matched = workerSkills.filter((s) =>
+    jobSkills.map((j) => j.toLowerCase()).includes(s.toLowerCase())
+  )
+  const missing = jobSkills.filter(
+    (s) => !workerSkills.map((w) => w.toLowerCase()).includes(s.toLowerCase())
+  )
+
+  const prompt = `You are an AI career coach for HyperLocal, India's hyperlocal job platform.
+
+Job: "${jobTitle}"
+Required skills: ${jobSkills.join(', ')}
+Worker's skills: ${workerSkills.join(', ') || 'none listed'}
+Worker's experience level: ${workerExperience || 'not specified'}
+Skills worker already has: ${matched.join(', ') || 'none'}
+Skills to learn: ${missing.join(', ') || 'none (fully qualified!)'}
+
+Generate a PERSONALIZED learning plan. Respond in ${langName} with ONLY valid JSON (no markdown, no code fences):
+{
+  "resources": [
+    {
+      "skill": "skill name",
+      "hasSkill": false,
+      "resources": [
+        {
+          "title": "resource title",
+          "url": "https://real-working-url",
+          "type": "video|course|article|practice|community",
+          "free": true,
+          "platform": "YouTube/Coursera/Khan Academy/Udemy/Skillshare/NPTEL/Government portal etc",
+          "description": "one line about what they'll learn"
+        }
+      ],
+      "estimatedTime": "e.g. 2 weeks"
+    }
+  ],
+  "quickWins": ["3 things the worker can do TODAY to get closer to this job"],
+  "careerPath": "2-3 sentence career growth path from current position through this job to long term",
+  "readinessScore": 75
+}
+
+Rules:
+- Include 2-3 resources per skill (mix of YouTube, free courses, practice sites)
+- For blue-collar skills, prefer: YouTube tutorials in Hindi, government skill portals (skill.gov.in), NSDC courses
+- For technical skills: Coursera, freeCodeCamp, Khan Academy, NPTEL
+- URLs must be real, well-known platforms (YouTube search URLs are acceptable: https://www.youtube.com/results?search_query=...)
+- readinessScore: 0-100 based on how ready the worker is
+- quickWins should be specific and actionable
+- Keep resources for skills the worker ALREADY has brief (1 resource to level up)
+- Focus more on MISSING skills`
+
+  try {
+    const raw = (await _callModel(prompt, 'flash', 1024)).trim()
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result: AILearningPlan = JSON.parse(cleaned)
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    // Deterministic fallback with real links
+    const fallbackResources: LearningResource[] = [
+      ...missing.slice(0, 4).map((skill) => ({
+        skill,
+        hasSkill: false,
+        resources: [
+          {
+            title: `Learn ${skill} - Complete Guide`,
+            url: `https://www.youtube.com/results?search_query=${encodeURIComponent(skill + ' tutorial hindi')}`,
+            type: 'video' as const,
+            free: true,
+            platform: 'YouTube',
+            description: `Search for ${skill} tutorials in your language`,
+          },
+          {
+            title: `${skill} courses on Skill India`,
+            url: 'https://www.skillindiadigital.gov.in/courses',
+            type: 'course' as const,
+            free: true,
+            platform: 'Skill India',
+            description: 'Free government-certified courses',
+          },
+        ],
+        estimatedTime: '1-2 weeks',
+      })),
+      ...matched.slice(0, 2).map((skill) => ({
+        skill,
+        hasSkill: true,
+        resources: [
+          {
+            title: `Advanced ${skill}`,
+            url: `https://www.youtube.com/results?search_query=${encodeURIComponent('advanced ' + skill + ' tips')}`,
+            type: 'video' as const,
+            free: true,
+            platform: 'YouTube',
+            description: `Level up your existing ${skill} knowledge`,
+          },
+        ],
+        estimatedTime: '1 week',
+      })),
+    ]
+    const fallback: AILearningPlan = {
+      resources: fallbackResources,
+      quickWins: [
+        'Update your HyperLocal profile with all your skills',
+        `Practice ${missing[0] || 'relevant skills'} with free YouTube tutorials`,
+        'Apply to similar jobs to gain experience and build your rating',
+      ],
+      careerPath: `Starting with ${jobTitle}, you can build expertise and move to higher-paying roles in this field. Consistent work and good ratings will unlock premium job opportunities.`,
+      readinessScore: Math.round((matched.length / Math.max(jobSkills.length, 1)) * 100),
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Cover Letter Generator (Agentic) ─────────────────────────────────────
+// Generates a tailored cover letter / application message for a worker applying
+// to a specific job, based on their profile and the job requirements.
+
+export async function generateCoverLetter(
+  jobTitle: string,
+  jobDescription: string,
+  jobSkills: string[],
+  workerSkills: string[],
+  workerExperience: string,
+  workerName: string,
+  userLang: SupportedLocale = 'en'
+): Promise<string> {
+  const cacheKey = `cover:${userLang}:${jobTitle.slice(0, 30)}:${workerName.slice(0, 20)}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached
+
+  const langName = LANG_NAMES[userLang]
+  const matched = workerSkills.filter((s) =>
+    jobSkills.map((j) => j.toLowerCase()).includes(s.toLowerCase())
+  )
+
+  const prompt = `You are writing a job application message for a worker on HyperLocal (India's hyperlocal job platform).
+
+Job: "${jobTitle}"
+Job description: ${jobDescription.slice(0, 300)}
+Required skills: ${jobSkills.join(', ')}
+Worker name: ${workerName}
+Worker skills: ${workerSkills.join(', ') || 'general experience'}
+Matching skills: ${matched.join(', ') || 'general background'}
+Experience: ${workerExperience || 'not specified'}
+
+Write a SHORT, professional application message (${langName}, 60-100 words) that:
+- Is warm and confident, not generic
+- Highlights specific matching skills
+- Shows enthusiasm for the role
+- Mentions availability and willingness to learn
+- Sounds natural, NOT like a template
+Do NOT include subject lines, "Dear Sir/Madam", or formal letter formatting.
+Just write the message text directly.`
+
+  try {
+    const result = (await _callModel(prompt, 'flash', 256)).trim()
+    setCached(cacheKey, result, TTL.SUMMARY)
+    return result
+  } catch {
+    const fallback = userLang === 'hi'
+      ? `नमस्ते, मैं ${workerName} हूं। मुझे "${jobTitle}" पद में रुचि है। मेरे पास ${matched.length > 0 ? matched.join(', ') + ' में अनुभव है' : 'संबंधित अनुभव है'}। मैं तुरंत शुरू कर सकता/सकती हूं और नई चीजें सीखने को तैयार हूं।`
+      : `Hi, I'm ${workerName}. I'm interested in the "${jobTitle}" position. ${matched.length > 0 ? `I have experience in ${matched.join(', ')}` : 'I have relevant experience'} and I'm available to start immediately. I'm a quick learner and committed to delivering quality work.`
+    setCached(cacheKey, fallback, TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Interview Prep (Agentic) ─────────────────────────────────────────────
+// Generates likely interview questions + tips for a specific job, tailored to
+// the worker's profile. Helps blue-collar workers prepare confidently.
+
+export interface InterviewPrepResult {
+  questions: Array<{
+    question: string
+    sampleAnswer: string
+    tip: string
+  }>
+  generalTips: string[]
+  dresscode: string
+  whatToBring: string[]
+}
+
+export async function generateInterviewPrep(
+  jobTitle: string,
+  jobCategory: string,
+  jobSkills: string[],
+  workerSkills: string[],
+  userLang: SupportedLocale = 'en'
+): Promise<InterviewPrepResult> {
+  const cacheKey = `interview:${userLang}:${jobTitle.slice(0, 30)}:${jobCategory}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) } catch { /* fall through */ }
+  }
+
+  const langName = LANG_NAMES[userLang]
+  const prompt = `You are an AI interview coach for HyperLocal, India's hyperlocal job platform (primarily blue-collar and gig economy).
+
+Job: "${jobTitle}" (Category: ${jobCategory})
+Required skills: ${jobSkills.join(', ')}
+Worker's skills: ${workerSkills.join(', ') || 'general'}
+
+Generate interview preparation material in ${langName}. Respond with ONLY valid JSON (no markdown):
+{
+  "questions": [
+    {
+      "question": "likely interview question",
+      "sampleAnswer": "a good sample answer the worker can adapt",
+      "tip": "pro tip for answering this"
+    }
+  ],
+  "generalTips": ["5 general interview tips relevant to this type of job"],
+  "dresscode": "what to wear for this type of job interview",
+  "whatToBring": ["list of documents/items to bring"]
+}
+
+Rules:
+- Include 5 questions: 2 about skills, 1 about experience, 1 about availability, 1 behavioral
+- Keep language simple and encouraging — many workers may be first-time interviewees
+- Tips should be practical for Indian blue-collar/gig context
+- Sample answers should sound natural, not robotic`
+
+  try {
+    const raw = (await _callModel(prompt, 'flash', 768)).trim()
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result: InterviewPrepResult = JSON.parse(cleaned)
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    const fallback: InterviewPrepResult = {
+      questions: [
+        { question: `What experience do you have related to ${jobTitle}?`, sampleAnswer: `I have worked on similar tasks and have skills in ${workerSkills.slice(0, 3).join(', ') || 'this area'}.`, tip: 'Be specific about past work, even informal experience counts.' },
+        { question: 'Why do you want this job?', sampleAnswer: `I am looking for steady work and this role matches my skills well. I am reliable and available immediately.`, tip: 'Show enthusiasm and mention your availability.' },
+        { question: 'How do you handle difficult situations at work?', sampleAnswer: 'I stay calm, ask for help if needed, and focus on solving the problem step by step.', tip: 'Give a real example if you can.' },
+        { question: 'Are you available to start immediately?', sampleAnswer: 'Yes, I can start right away and am flexible with timings.', tip: 'Employers value availability — be honest about your schedule.' },
+        { question: 'Do you have any questions for us?', sampleAnswer: 'Yes, I would like to know about the work timings and payment schedule.', tip: 'Always ask at least one question — it shows interest.' },
+      ],
+      generalTips: [
+        'Arrive 10-15 minutes early',
+        'Bring your Aadhaar card and any skill certificates',
+        'Make eye contact and speak clearly',
+        'Be honest about what you know and what you are willing to learn',
+        'Follow up with a thank-you message after the interview',
+      ],
+      dresscode: 'Clean, neat clothes appropriate for the work environment. For office jobs, wear formal clothes. For field/manual jobs, clean casual clothes are fine.',
+      whatToBring: ['Aadhaar Card / ID proof', 'Any skill certificates', 'Phone with HyperLocal profile', 'Pen and small notebook'],
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── Agentic AI: Smart Candidate Ranking for Employers ────────────────────────
+// Given a job and multiple applicant profiles, ranks them with reasoning.
+
+export interface CandidateRanking {
+  rankings: Array<{
+    workerId: string
+    rank: number
+    score: number
+    reasoning: string
+    strengths: string[]
+    concerns: string[]
+  }>
+  summary: string
+}
+
+export async function rankCandidates(
+  jobTitle: string,
+  jobSkills: string[],
+  jobDescription: string,
+  candidates: Array<{ id: string; name: string; skills: string[]; experience: string; matchScore: number; rating: number }>
+): Promise<CandidateRanking> {
+  const cacheKey = `rank:${jobTitle.slice(0, 20)}:${candidates.map((c) => c.id).join(',').slice(0, 60)}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) } catch { /* fall through */ }
+  }
+
+  const candidateList = candidates
+    .map((c, i) => `${i + 1}. ${c.name} — Skills: ${c.skills.join(', ') || 'N/A'}, Experience: ${c.experience || 'N/A'}, Match: ${c.matchScore}%, Rating: ${c.rating}/5`)
+    .join('\n')
+
+  const prompt = `You are an AI hiring assistant for HyperLocal, India's hyperlocal job platform.
+
+Job: "${jobTitle}"
+Required skills: ${jobSkills.join(', ')}
+Description: ${jobDescription.slice(0, 200)}
+
+Candidates:
+${candidateList}
+
+Rank ALL candidates from best to worst fit. Respond with ONLY valid JSON (no markdown):
+{
+  "rankings": [
+    {
+      "workerId": "candidate id",
+      "rank": 1,
+      "score": 92,
+      "reasoning": "one sentence why this rank",
+      "strengths": ["key strength 1", "key strength 2"],
+      "concerns": ["potential concern"] or []
+    }
+  ],
+  "summary": "Brief hiring recommendation sentence"
+}
+
+Rules:
+- Score 0-100 based on skill match, experience, and rating
+- Be fair and objective
+- Highlight both strengths and concerns
+- Summary should be actionable`
+
+  try {
+    const raw = (await _callModel(prompt, 'flash', 768)).trim()
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result: CandidateRanking = JSON.parse(cleaned)
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    // Deterministic fallback — sort by matchScore * rating
+    const sorted = [...candidates].sort((a, b) => (b.matchScore * b.rating) - (a.matchScore * a.rating))
+    const fallback: CandidateRanking = {
+      rankings: sorted.map((c, i) => ({
+        workerId: c.id,
+        rank: i + 1,
+        score: c.matchScore,
+        reasoning: `Ranked #${i + 1} based on ${c.matchScore}% skill match and ${c.rating}/5 rating.`,
+        strengths: c.skills.slice(0, 2),
+        concerns: c.matchScore < 50 ? ['Low skill match — may need training'] : [],
+      })),
+      summary: `${sorted[0]?.name || 'Top candidate'} appears to be the strongest fit based on skill match and ratings.`,
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Job Description Generator ─────────────────────────────────────────────
+
+export interface GeneratedJobContent {
+  description: string
+  requirements: string
+  benefits: string
+  suggestedSkills: string[]
+  suggestedPay: { min: number; max: number; type: 'hourly' | 'fixed' }
+}
+
+export async function generateJobDescription(
+  title: string,
+  category: string,
+  location: string,
+  jobMode: 'local' | 'remote',
+  experienceLevel: 'entry' | 'intermediate' | 'expert',
+  duration: string,
+): Promise<GeneratedJobContent> {
+  const cacheKey = `jd_${title}_${category}_${jobMode}_${experienceLevel}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) as GeneratedJobContent } catch { /* regenerate */ }
+  }
+
+  const prompt = `You are an expert Indian job-posting writer for a hyperlocal blue-collar / gig-work platform.
+Generate a compelling, concise job post for:
+  Title: "${title}"
+  Category: ${category}
+  Location: ${location || 'Not specified'}
+  Mode: ${jobMode}
+  Experience: ${experienceLevel}
+  Duration: ${duration || 'Not specified'}
+
+Return ONLY a valid JSON object (no markdown, no code fences):
+{
+  "description": "A 3-5 sentence engaging description. Use simple language suitable for Indian blue-collar workers. Mention what the work involves.",
+  "requirements": "Bullet-pointed specific requirements (separated by newlines). Include tools, timing, physical requirements if relevant.",
+  "benefits": "Bullet-pointed benefits (separated by newlines). Include realistic perks like tea/lunch, travel allowance, bonus, flexible hours.",
+  "suggestedSkills": ["skill1", "skill2", "skill3", "skill4", "skill5"],
+  "suggestedPay": { "min": 300, "max": 500, "type": "hourly" }
+}
+
+Pay guideline: Entry ₹200-400/hr, Intermediate ₹400-700/hr, Expert ₹700-1500/hr for hourly. For fixed, scale by typical daily rate × duration. Use realistic Indian market rates.`
+
+  try {
+    const raw = await _callModel(prompt, 'flash')
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result = JSON.parse(cleaned) as GeneratedJobContent
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    const fallback: GeneratedJobContent = {
+      description: `Looking for a skilled ${category} professional for ${title}. ${jobMode === 'remote' ? 'This is a remote position.' : `Work will be at ${location || 'the specified location'}.`} ${experienceLevel === 'entry' ? 'Freshers are welcome to apply.' : experienceLevel === 'expert' ? 'We need someone with significant hands-on experience.' : 'Some prior experience is preferred.'}`,
+      requirements: `• Must be available for ${duration || 'the required duration'}\n• ${jobMode === 'local' ? 'Must be able to commute to the work location' : 'Must have a reliable internet connection'}\n• Punctual and professional attitude\n• Own tools/equipment preferred`,
+      benefits: `• Timely payment via secure escrow\n• Tea/snacks provided during work hours\n• Bonus for early completion\n• Good review helps get more jobs`,
+      suggestedSkills: [category, 'Punctuality', 'Communication', 'Problem Solving'],
+      suggestedPay: {
+        min: experienceLevel === 'entry' ? 250 : experienceLevel === 'intermediate' ? 450 : 750,
+        max: experienceLevel === 'entry' ? 400 : experienceLevel === 'intermediate' ? 700 : 1500,
+        type: 'hourly',
+      },
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Smart Salary Estimator ────────────────────────────────────────────────
+
+export interface SalaryEstimate {
+  minPay: number
+  maxPay: number
+  avgPay: number
+  payType: 'hourly' | 'fixed'
+  confidence: 'low' | 'medium' | 'high'
+  reasoning: string
+  marketTrend: 'rising' | 'stable' | 'declining'
+}
+
+export async function estimateSalary(
+  title: string,
+  category: string,
+  location: string,
+  experienceLevel: 'entry' | 'intermediate' | 'expert',
+  skills: string[],
+): Promise<SalaryEstimate> {
+  const cacheKey = `sal_${title}_${category}_${experienceLevel}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) as SalaryEstimate } catch { /* regenerate */ }
+  }
+
+  const prompt = `You are an Indian labour market salary analyst. Estimate fair compensation for:
+  Job: "${title}"
+  Category: ${category}
+  Location: ${location || 'Urban India'}
+  Experience Level: ${experienceLevel}
+  Required Skills: ${skills.join(', ') || 'General'}
+
+Return ONLY a valid JSON object (no markdown, no code fences):
+{
+  "minPay": <number in INR>,
+  "maxPay": <number in INR>,
+  "avgPay": <number in INR>,
+  "payType": "hourly" or "fixed",
+  "confidence": "low" | "medium" | "high",
+  "reasoning": "1-2 sentence explanation of the estimate based on Indian market rates",
+  "marketTrend": "rising" | "stable" | "declining"
+}
+
+Use realistic Indian hyperlocal/gig-work rates. Entry: ₹200-400/hr, Intermediate: ₹400-700/hr, Expert: ₹700-1500/hr. For technical roles, rates can be higher.`
+
+  try {
+    const raw = await _callModel(prompt, 'lite')
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result = JSON.parse(cleaned) as SalaryEstimate
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    const baseMin = experienceLevel === 'entry' ? 250 : experienceLevel === 'intermediate' ? 450 : 750
+    const baseMax = experienceLevel === 'entry' ? 400 : experienceLevel === 'intermediate' ? 700 : 1500
+    const fallback: SalaryEstimate = {
+      minPay: baseMin,
+      maxPay: baseMax,
+      avgPay: Math.round((baseMin + baseMax) / 2),
+      payType: 'hourly',
+      confidence: 'medium',
+      reasoning: `Based on average ${experienceLevel}-level ${category} rates in India.`,
+      marketTrend: 'stable',
+    }
+    setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
+    return fallback
+  }
+}
+
+// ── AI Chat Message Translation ──────────────────────────────────────────────
+
+export async function translateChatMessage(
+  message: string,
+  targetLang: SupportedLocale,
+): Promise<string> {
+  if (targetLang === 'en') {
+    if (isLikelyEnglish(message)) return message
+  }
+  const langNames: Record<SupportedLocale, string> = { en: 'English', hi: 'Hindi', te: 'Telugu' }
+  const cacheKey = `chat_tr_${message.slice(0, 60)}_${targetLang}`
+  const cached = getCached(cacheKey)
+  if (cached) return cached
+
+  const prompt = `Translate the following message to ${langNames[targetLang]}. Keep it natural, informal, and suitable for chat between a worker and employer. If it's already in ${langNames[targetLang]}, return as-is. Return ONLY the translated text, no quotes or explanation.
+
+Message: "${message}"`
+
+  try {
+    const result = await _callModel(prompt, 'lite')
+    const cleaned = result.replace(/^["']|["']$/g, '').trim()
+    setCached(cacheKey, cleaned, TTL.TRANSLATION)
+    return cleaned
+  } catch {
+    return message
+  }
+}
+
+// ── AI Dashboard Insights ────────────────────────────────────────────────────
+
+export interface DashboardInsight {
+  title: string
+  message: string
+  type: 'tip' | 'alert' | 'achievement' | 'opportunity'
+  icon: string
+  actionLabel?: string
+  actionHref?: string
+}
+
+export async function generateDashboardInsights(
+  role: 'worker' | 'employer',
+  stats: {
+    totalJobs?: number
+    activeJobs?: number
+    completedJobs?: number
+    totalEarnings?: number
+    avgRating?: number
+    skills?: string[]
+    pendingApplications?: number
+    hireRate?: number
+  },
+): Promise<DashboardInsight[]> {
+  const cacheKey = `dash_${role}_${JSON.stringify(stats).slice(0, 80)}`
+  const cached = getCached(cacheKey)
+  if (cached) {
+    try { return JSON.parse(cached) as DashboardInsight[] } catch { /* regenerate */ }
+  }
+
+  const prompt = `You are a career/business coach for an Indian hyperlocal gig-work platform.
+Generate 3-4 personalized, actionable dashboard insights for a ${role}.
+
+Stats: ${JSON.stringify(stats)}
+
+Return ONLY a valid JSON array (no markdown, no code fences):
+[
+  {
+    "title": "Short catchy title (3-5 words)",
+    "message": "1-2 sentence actionable insight. Be specific, encouraging, and practical.",
+    "type": "tip" | "alert" | "achievement" | "opportunity",
+    "icon": "one of: star, trophy, target, trending-up, alert-triangle, lightbulb, rocket, heart"
+  }
+]
+
+Rules:
+- For workers: focus on profile optimization, skill improvement, earning tips, job match advice
+- For employers: focus on hiring efficiency, better job descriptions, candidate management
+- Be culturally relevant to India
+- At least 1 should be an achievement/positive reinforcement if stats are decent`
+
+  try {
+    const raw = await _callModel(prompt, 'lite')
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const result = JSON.parse(cleaned) as DashboardInsight[]
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
+  } catch {
+    const workerFallback: DashboardInsight[] = [
+      { title: 'Complete Your Profile', message: 'Workers with complete profiles get 3x more job offers. Add your skills and experience!', type: 'tip', icon: 'target' },
+      { title: 'Stay Active', message: 'Apply to at least 2 jobs daily to stay visible to employers.', type: 'opportunity', icon: 'rocket' },
+      { title: 'Keep It Up!', message: `You have ${stats.completedJobs || 0} completed jobs — great work! Each completed job builds your reputation.`, type: 'achievement', icon: 'trophy' },
+    ]
+    const employerFallback: DashboardInsight[] = [
+      { title: 'Write Better Descriptions', message: 'Jobs with detailed descriptions get 40% more qualified applicants. Use our AI assistant!', type: 'tip', icon: 'lightbulb' },
+      { title: 'Respond Quickly', message: 'Employers who respond within 24 hours hire 2x faster. Check your pending applications!', type: 'alert', icon: 'alert-triangle' },
+      { title: 'Growing Network', message: `You've posted ${stats.totalJobs || 0} jobs — keep building your reputation for reliable work.`, type: 'achievement', icon: 'star' },
+    ]
+    const result = role === 'worker' ? workerFallback : employerFallback
+    setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
+    return result
   }
 }

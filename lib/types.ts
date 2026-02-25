@@ -12,6 +12,12 @@ export type PaymentStatus = 'pending' | 'locked' | 'released' | 'refunded';
 
 export type TrustLevel = 'basic' | 'active' | 'trusted';
 
+/** Remote vs On-site */
+export type JobMode = 'remote' | 'local';
+
+/** Technical (requires resume) vs Non-technical (blue-collar) */
+export type JobNature = 'technical' | 'non-technical';
+
 export interface User {
   id: string;
   fullName: string;
@@ -27,6 +33,25 @@ export interface User {
   companyName?: string;
   companyDescription?: string;
   skills?: string[];
+  /** GSTIN number for business verification (employer only) */
+  gstin?: string;
+  /** Whether GSTIN has been verified via ClearTax API */
+  gstinVerified?: boolean;
+  /** Business details fetched from ClearTax */
+  gstinDetails?: GSTINDetails;
+}
+
+/** GSTIN verification details from ClearTax API */
+export interface GSTINDetails {
+  tradeName: string;
+  legalName: string;
+  status: string;        // 'Active' | 'Cancelled' | 'Suspended'
+  taxpayerType: string;
+  registeredDate?: string;
+  address?: string;
+  state?: string;
+  verified: boolean;
+  verifiedAt: string;
 }
 
 export interface WorkerProfile {
@@ -39,6 +64,41 @@ export interface WorkerProfile {
   profilePictureUrl?: string;
   bio?: string;
   profileCompleted?: boolean;
+  /** Resume file URL (required for technical job applications) */
+  resumeUrl?: string;
+  /** Parsed resume text for RAG indexing */
+  resumeText?: string;
+  /** Resume parsed metadata (projects, experience, education) */
+  resumeParsed?: ResumeData;
+}
+
+/** Structured data extracted from a resume */
+export interface ResumeData {
+  summary?: string;
+  skills: string[];
+  experience: ResumeExperience[];
+  education: ResumeEducation[];
+  projects: ResumeProject[];
+  certifications?: string[];
+}
+
+export interface ResumeExperience {
+  title: string;
+  company: string;
+  duration: string;
+  description: string;
+}
+
+export interface ResumeEducation {
+  degree: string;
+  institution: string;
+  year?: string;
+}
+
+export interface ResumeProject {
+  name: string;
+  description: string;
+  technologies: string[];
 }
 
 export interface EmployerProfile {
@@ -56,6 +116,10 @@ export interface Job {
   title: string;
   description: string;
   jobType: JobType;
+  /** Remote vs On-site */
+  jobMode: JobMode;
+  /** Technical (resume required) vs Non-technical */
+  jobNature: JobNature;
   category: string;
   requiredSkills: string[];
   location: string;
@@ -89,6 +153,8 @@ export interface Application {
   matchScore: number;
   coverMessage?: string;
   coverLetter?: string;
+  /** Resume URL attached for technical job applications */
+  resumeUrl?: string;
   createdAt: string;
   updatedAt: string;
 }

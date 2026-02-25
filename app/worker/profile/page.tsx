@@ -351,11 +351,11 @@ export default function WorkerProfilePage() {
                       {user.trustLevel === 'trusted' ? '? Trusted Worker' :
                        user.trustLevel === 'active' ? '?? Active Worker' : '?? New Worker'}
                     </p>
-                    <p className="text-xs text-muted-foreground">Trust Score: {user.trustScore.toFixed(1)} / 5.0</p>
+                    <p className="text-xs text-muted-foreground">Trust Score: {(user.trustScore ?? 0).toFixed(1)} / 5.0</p>
                   </div>
                   <div className="flex items-center gap-1">
                     <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                    <span className="text-sm font-bold">{user.trustScore.toFixed(1)}</span>
+                    <span className="text-sm font-bold">{(user.trustScore ?? 0).toFixed(1)}</span>
                   </div>
                 </div>
               )}                <Label htmlFor="location">Location</Label>

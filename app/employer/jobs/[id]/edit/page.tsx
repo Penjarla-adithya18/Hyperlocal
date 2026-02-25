@@ -9,44 +9,79 @@ import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/hooks/use-toast'
+import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/api'
 
 export default function EmployerJobEditPage() {
   const params = useParams()
   const router = useRouter()
+  const { user } = useAuth()
   const { toast } = useToast()
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [form, setForm] = useState({ title: '', description: '', location: '', payAmount: '' })
 
   useEffect(() => {
+    if (!user) { router.push('/login'); return }
+    if (user.role !== 'employer') { router.push('/'); return }
+
     async function load() {
       const job = await mockDb.getJobById(params.id as string)
-      if (job) {
-        setForm({
-          title: job.title,
-          description: job.description,
-          location: job.location,
-          payAmount: String(job.payAmount ?? job.pay),
-        })
+      if (!job) {
+        toast({ title: 'Not found', description: 'Job not found', variant: 'destructive' })
+        router.push('/employer/jobs')
+        return
       }
+      if (job.employerId !== user!.id) {
+        toast({ title: 'Unauthorized', description: 'You cannot edit this job', variant: 'destructive' })
+        router.push('/employer/jobs')
+        return
+      }
+      setForm({
+        title: job.title,
+        description: job.description,
+        location: job.location,
+        payAmount: String(job.payAmount ?? job.pay ?? ''),
+      })
       setLoading(false)
     }
     load()
-  }, [params.id])
+  }, [params.id, user])
 
   async function onSave() {
-    const updated = await mockDb.updateJob(params.id as string, {
-      title: form.title,
-      description: form.description,
-      location: form.location,
-      payAmount: Number(form.payAmount),
-      pay: Number(form.payAmount),
-    })
+    // Validate required fields
+    if (!form.title.trim() || !form.description.trim() || !form.location.trim()) {
+      toast({ title: 'Validation Error', description: 'Title, description, and location are required', variant: 'destructive' })
+      return
+    }
+    const pay = Number(form.payAmount)
+    if (!pay || pay <= 0 || isNaN(pay)) {
+      toast({ title: 'Validation Error', description: 'Pay must be a positive number', variant: 'destructive' })
+      return
+    }
 
-    if (!updated) return
+    setSaving(true)
+    try {
+      const updated = await mockDb.updateJob(params.id as string, {
+        title: form.title.trim(),
+        description: form.description.trim(),
+        location: form.location.trim(),
+        payAmount: pay,
+        pay: pay,
+      })
 
-    toast({ title: 'Saved', description: 'Job updated successfully' })
-    router.push(`/employer/jobs/${params.id}`)
+      if (!updated) {
+        toast({ title: 'Error', description: 'Failed to update job', variant: 'destructive' })
+        return
+      }
+
+      toast({ title: 'Saved', description: 'Job updated successfully' })
+      router.push(`/employer/jobs/${params.id}`)
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update job', variant: 'destructive' })
+    } finally {
+      setSaving(false)
+    }
   }
 
   if (loading) {
@@ -84,7 +119,9 @@ export default function EmployerJobEditPage() {
               <Input type="number" value={form.payAmount} onChange={(e) => setForm({ ...form, payAmount: e.target.value })} />
             </div>
             <div className="flex gap-2">
-              <Button onClick={onSave}>Save</Button>
+              <Button onClick={onSave} disabled={saving}>
+                {saving ? 'Saving…' : 'Save'}
+              </Button>
               <Button variant="outline" onClick={() => router.back()}>Cancel</Button>
             </div>
           </CardContent>

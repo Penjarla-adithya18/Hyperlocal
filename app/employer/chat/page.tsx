@@ -10,9 +10,11 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
-import { Send, Search, MessageCircle, Flag, AlertCircle } from 'lucide-react'
+import { Send, Search, MessageCircle, Flag, AlertCircle, Languages, Loader2 } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
+import { translateChatMessage, type SupportedLocale } from '@/lib/gemini'
+import { useI18n } from '@/contexts/I18nContext'
 import {
   Dialog,
   DialogContent,
@@ -39,7 +41,11 @@ export default function EmployerChatPage() {
   const [reportReason, setReportReason] = useState('spam')
   const [reportDescription, setReportDescription] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
+  const [loadingConversations, setLoadingConversations] = useState(true)
+  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({})
+  const [translatingId, setTranslatingId] = useState<string | null>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const { locale } = useI18n()
 
   useEffect(() => {
     if (user) {
@@ -66,6 +72,7 @@ export default function EmployerChatPage() {
 
   const loadConversations = async () => {
     if (!user) return
+    setLoadingConversations(true)
     const userConvs = await mockDb.getConversationsByUser(user.id)
     setConversations(userConvs)
     const participantIds = [...new Set(
@@ -90,6 +97,10 @@ export default function EmployerChatPage() {
       const targetConv = userConvs.find(c => c.id === targetConvId)
       if (targetConv) {
         setSelectedConversation(targetConv)
+        // Eagerly load messages for the target conversation
+        const msgs = await mockDb.getMessagesByConversation(targetConv.id)
+        setMessages(msgs)
+        setLoadingConversations(false)
         return
       }
     }
@@ -106,6 +117,7 @@ export default function EmployerChatPage() {
       }
       setJobsById(jMap)
     }
+    setLoadingConversations(false)
   }
 
   const loadMessages = async (conversationId: string) => {
@@ -204,7 +216,12 @@ export default function EmployerChatPage() {
             </CardHeader>
             <ScrollArea className="h-[calc(100vh-380px)]">
               <CardContent className="space-y-2">
-                {filteredConversations.length === 0 ? (
+                {loadingConversations ? (
+                  <div className="text-center py-8">
+                    <div className="w-8 h-8 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+                    <p className="text-sm text-muted-foreground">Loading conversations...</p>
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="text-center py-8">
                     <MessageCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -292,6 +309,7 @@ export default function EmployerChatPage() {
                     ) : (
                       messages.map((message) => {
                         const isSent = message.senderId === user?.id
+                        const translated = translatedMessages[message.id]
                         return (
                           <div
                             key={message.id}
@@ -305,14 +323,33 @@ export default function EmployerChatPage() {
                               }`}
                             >
                               <p className="text-sm">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
-                              <p className={`text-xs mt-1 ${
-                                isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
-                              }`}>
-                                {new Date(message.createdAt).toLocaleTimeString([], {
-                                  hour: '2-digit',
-                                  minute: '2-digit'
-                                })}
-                              </p>
+                              {translated && (
+                                <p className={`text-sm mt-1 pt-1 border-t ${isSent ? 'border-primary-foreground/20 text-primary-foreground/80' : 'border-border text-muted-foreground'} italic`}>
+                                  {translated}
+                                </p>
+                              )}
+                              <div className={`flex items-center gap-1 mt-1 ${isSent ? 'justify-end' : 'justify-between'}`}>
+                                <p className={`text-xs ${isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </p>
+                                {!translated && (
+                                  <button
+                                    className={`text-xs flex items-center gap-0.5 hover:underline ${isSent ? 'text-primary-foreground/60 hover:text-primary-foreground/90' : 'text-muted-foreground hover:text-foreground'}`}
+                                    onClick={async () => {
+                                      setTranslatingId(message.id)
+                                      try {
+                                        const result = await translateChatMessage(message.message, locale as SupportedLocale)
+                                        setTranslatedMessages(prev => ({ ...prev, [message.id]: result }))
+                                      } catch { /* ignore */ }
+                                      setTranslatingId(null)
+                                    }}
+                                    disabled={translatingId === message.id}
+                                  >
+                                    {translatingId === message.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3" />}
+                                    Translate
+                                  </button>
+                                )}
+                              </div>
                             </div>
                           </div>
                         )
@@ -345,11 +382,20 @@ export default function EmployerChatPage() {
             ) : (
               <CardContent className="flex items-center justify-center h-full">
                 <div className="text-center">
-                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
-                  <p className="text-muted-foreground">
-                    Choose a conversation from the list to start chatting
-                  </p>
+                  {loadingConversations ? (
+                    <>
+                      <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+                      <p className="text-muted-foreground">Loading...</p>
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
+                      <p className="text-muted-foreground">
+                        Choose a conversation from the list to start chatting
+                      </p>
+                    </>
+                  )}
                 </div>
               </CardContent>
             )}

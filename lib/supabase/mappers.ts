@@ -54,6 +54,8 @@ export function mapJob(row: AnyRecord): Job {
     updatedAt: row.updated_at,
     applicationCount: Number(row.application_count || 0),
     views: Number(row.views || 0),
+    jobMode: row.job_mode || 'local',
+    jobNature: row.job_nature || 'non-technical',
   }
 }
 

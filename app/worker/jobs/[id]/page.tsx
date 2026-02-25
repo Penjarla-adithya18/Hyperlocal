@@ -13,10 +13,14 @@ import { useToast } from '@/hooks/use-toast'
 import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
 import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
-import { translateDynamic, SupportedLocale } from '@/lib/gemini'
+import { translateDynamic, generateLearningPlan, generateCoverLetter, generateInterviewPrep, SupportedLocale } from '@/lib/gemini'
+import type { AILearningPlan, InterviewPrepResult } from '@/lib/gemini'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
-  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag
+  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag,
+  Upload, FileText, Laptop, Trash2,
+  BookOpen, ExternalLink, Video, GraduationCap, Users, Lightbulb, MessageSquarePlus,
+  Loader2, ChevronDown, ChevronUp, Target, Mic
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -24,6 +28,11 @@ import {
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useI18n } from '@/contexts/I18nContext'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Progress } from '@/components/ui/progress'
+import { isRoleTechnical } from '@/lib/roleSkills'
+import { processResumeFile, getResumeSummaryText } from '@/lib/resumeParser'
+import type { ResumeData } from '@/lib/types'
 
 export default function JobDetailsPage() {
   const router = useRouter()
@@ -50,6 +59,18 @@ export default function JobDetailsPage() {
   const [reportDesc, setReportDesc] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
   const [isReported, setIsReported] = useState(false)
+  // Resume upload state (for technical jobs)
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [resumeParsed, setResumeParsed] = useState<ResumeData | null>(null)
+  const [parsingResume, setParsingResume] = useState(false)
+
+  // ── AI Agentic features state ──
+  const [learningPlan, setLearningPlan] = useState<AILearningPlan | null>(null)
+  const [loadingLearning, setLoadingLearning] = useState(false)
+  const [interviewPrep, setInterviewPrep] = useState<InterviewPrepResult | null>(null)
+  const [loadingInterview, setLoadingInterview] = useState(false)
+  const [generatingCover, setGeneratingCover] = useState(false)
+  const [aiTabExpanded, setAiTabExpanded] = useState(true)
 
   // Load reported state from localStorage
   useEffect(() => {
@@ -153,11 +174,22 @@ export default function JobDetailsPage() {
   const handleApply = async () => {
     if (!user || !job) return
 
-    // Cover letter validation
-    if (coverLetter.trim().length < 20) {
+    // Cover letter validation (only if provided, since it's optional)
+    if (coverLetter && coverLetter.trim().length < 20) {
       toast({
         title: 'Cover Letter Too Short',
         description: 'Please write at least 20 characters explaining why you are a good fit.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    // Resume requirement for technical jobs
+    const jobIsTechnical = job.jobNature === 'technical' || isRoleTechnical(job.category)
+    if (jobIsTechnical && !resumeFile && !workerProfile?.resumeUrl) {
+      toast({
+        title: 'Resume Required',
+        description: 'This is a technical job. Please upload your resume before applying.',
         variant: 'destructive'
       })
       return
@@ -171,12 +203,34 @@ export default function JobDetailsPage() {
 
     setApplying(true)
     try {
-      const newApplication = await mockDb.createApplication({
+      // Build application payload
+      const appPayload: Record<string, unknown> = {
         jobId: job.id,
         workerId: user.id,
         coverLetter,
-        status: 'pending'
-      })
+        status: 'pending',
+        matchScore: matchScore ?? 0,
+      }
+
+      // Attach resume URL if available
+      if (resumeFile) {
+        // For now, store resume data in the application
+        // In production, upload to Supabase Storage and store the URL
+        appPayload.resumeUrl = `resume_${user.id}_${Date.now()}.pdf`
+      } else if (workerProfile?.resumeUrl) {
+        appPayload.resumeUrl = workerProfile.resumeUrl
+      }
+
+      const newApplication = await mockDb.createApplication(appPayload as Parameters<typeof mockDb.createApplication>[0])
+
+      // If resume was parsed, update worker profile with parsed data
+      if (resumeParsed && resumeFile) {
+        await mockWorkerProfileOps.update(user.id, {
+          resumeUrl: appPayload.resumeUrl as string,
+          resumeText: await resumeFile.text().catch(() => ''),
+          resumeParsed: resumeParsed,
+        }).catch(() => {})
+      }
 
       setApplication(newApplication)
       setShowApplicationForm(false)
@@ -205,6 +259,39 @@ export default function JobDetailsPage() {
     }
   }
 
+  // Handle resume file selection
+  const handleResumeSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast({ title: 'File Too Large', description: 'Resume must be under 5MB', variant: 'destructive' })
+      return
+    }
+
+    // Validate file type
+    const allowedTypes = ['.pdf', '.txt', '.doc', '.docx']
+    const ext = '.' + file.name.split('.').pop()?.toLowerCase()
+    if (!allowedTypes.includes(ext)) {
+      toast({ title: 'Invalid File Type', description: 'Please upload a PDF, TXT, DOC, or DOCX file', variant: 'destructive' })
+      return
+    }
+
+    setResumeFile(file)
+    setParsingResume(true)
+
+    try {
+      const { parsed } = await processResumeFile(file)
+      setResumeParsed(parsed)
+      toast({ title: 'Resume Parsed', description: `Found ${parsed.skills.length} skills, ${parsed.experience.length} experiences` })
+    } catch {
+      toast({ title: 'Resume Upload OK', description: 'Could not parse resume details, but the file is attached.' })
+    } finally {
+      setParsingResume(false)
+    }
+  }
+
   const handleReportJob = async () => {
     if (!user || !job) return
     setSubmittingReport(true)
@@ -221,7 +308,6 @@ export default function JobDetailsPage() {
       setReportOpen(false)
       setReportDesc('')
       setIsReported(true)
-      // Persist reported state so the job stays marked even after navigation
       if (user && job) {
         const key = `reported_jobs_${user.id}`
         const stored = localStorage.getItem(key)
@@ -234,6 +320,84 @@ export default function JobDetailsPage() {
       toast({ title: 'Failed to submit report', variant: 'destructive' })
     } finally {
       setSubmittingReport(false)
+    }
+  }
+
+  // ── Agentic AI: Fetch learning plan ──
+  const handleLoadLearningPlan = async () => {
+    if (!job || loadingLearning) return
+    // Check sessionStorage cache
+    const cacheKey = `lp_${job.id}_${user?.id}_${locale}`
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      try { setLearningPlan(JSON.parse(cached)); return } catch { /* fall through */ }
+    }
+    setLoadingLearning(true)
+    try {
+      const plan = await generateLearningPlan(
+        job.title,
+        job.requiredSkills,
+        workerProfile?.skills ?? [],
+        workerProfile?.experience ?? '',
+        locale as SupportedLocale
+      )
+      setLearningPlan(plan)
+      sessionStorage.setItem(cacheKey, JSON.stringify(plan))
+    } catch (e) {
+      console.error('Learning plan failed', e)
+      toast({ title: 'Could not load learning plan', variant: 'destructive' })
+    } finally {
+      setLoadingLearning(false)
+    }
+  }
+
+  // ── Agentic AI: Interview prep ──
+  const handleLoadInterviewPrep = async () => {
+    if (!job || loadingInterview) return
+    const cacheKey = `ip_${job.id}_${locale}`
+    const cached = sessionStorage.getItem(cacheKey)
+    if (cached) {
+      try { setInterviewPrep(JSON.parse(cached)); return } catch { /* fall through */ }
+    }
+    setLoadingInterview(true)
+    try {
+      const prep = await generateInterviewPrep(
+        job.title,
+        job.category,
+        job.requiredSkills,
+        workerProfile?.skills ?? [],
+        locale as SupportedLocale
+      )
+      setInterviewPrep(prep)
+      sessionStorage.setItem(cacheKey, JSON.stringify(prep))
+    } catch (e) {
+      console.error('Interview prep failed', e)
+      toast({ title: 'Could not load interview prep', variant: 'destructive' })
+    } finally {
+      setLoadingInterview(false)
+    }
+  }
+
+  // ── Agentic AI: Cover letter generator ──
+  const handleGenerateCoverLetter = async () => {
+    if (!job || !user || generatingCover) return
+    setGeneratingCover(true)
+    try {
+      const letter = await generateCoverLetter(
+        job.title,
+        job.description,
+        job.requiredSkills,
+        workerProfile?.skills ?? [],
+        workerProfile?.experience ?? '',
+        user.fullName,
+        locale as SupportedLocale
+      )
+      setCoverLetter(letter)
+      toast({ title: 'Cover letter generated!', description: 'Feel free to edit it before submitting.' })
+    } catch {
+      toast({ title: 'Could not generate cover letter', variant: 'destructive' })
+    } finally {
+      setGeneratingCover(false)
     }
   }
 
@@ -297,6 +461,18 @@ export default function JobDetailsPage() {
                   </Badge>
                 </div>
                 <div className="flex flex-wrap gap-2">
+                  {job.jobMode && (
+                    <Badge variant="outline" className="gap-1">
+                      {job.jobMode === 'remote' ? <Laptop className="h-3 w-3" /> : <MapPin className="h-3 w-3" />}
+                      {job.jobMode === 'remote' ? 'Remote' : 'On-site'}
+                    </Badge>
+                  )}
+                  {job.jobNature && (
+                    <Badge variant={job.jobNature === 'technical' ? 'default' : 'secondary'} className="gap-1">
+                      {job.jobNature === 'technical' ? <FileText className="h-3 w-3" /> : <Briefcase className="h-3 w-3" />}
+                      {job.jobNature === 'technical' ? 'Technical' : 'Non-Technical'}
+                    </Badge>
+                  )}
                   {job.requiredSkills.map((skill) => (
                     <Badge key={skill} variant="secondary">{skill}</Badge>
                   ))}
@@ -417,6 +593,219 @@ export default function JobDetailsPage() {
               </Card>
             )}
 
+            {/* ── AI Career Coach Panel ── */}
+            <Card className="border-primary/20 overflow-hidden">
+              <CardHeader
+                className="cursor-pointer hover:bg-muted/50 transition-colors pb-3"
+                onClick={() => setAiTabExpanded((v) => !v)}
+              >
+                <CardTitle className="flex items-center justify-between text-base">
+                  <span className="flex items-center gap-2">
+                    <span className="relative flex h-6 w-6">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75" />
+                      <Sparkles className="relative h-6 w-6 text-primary" />
+                    </span>
+                    AI Career Coach
+                  </span>
+                  {aiTabExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+                </CardTitle>
+                <p className="text-xs text-muted-foreground">Personalized learning resources, interview prep & more</p>
+              </CardHeader>
+              {aiTabExpanded && (
+                <CardContent className="pt-0">
+                  <Tabs defaultValue="learn" className="w-full">
+                    <TabsList className="w-full grid grid-cols-2 mb-3">
+                      <TabsTrigger value="learn" className="text-xs gap-1">
+                        <BookOpen className="h-3 w-3" /> Learn Skills
+                      </TabsTrigger>
+                      <TabsTrigger value="interview" className="text-xs gap-1">
+                        <Mic className="h-3 w-3" /> Interview Prep
+                      </TabsTrigger>
+                    </TabsList>
+
+                    {/* ── Learning Plan Tab ── */}
+                    <TabsContent value="learn" className="mt-0">
+                      {!learningPlan && !loadingLearning ? (
+                        <div className="text-center py-4">
+                          <Target className="h-8 w-8 mx-auto mb-2 text-primary/60" />
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Get AI-curated learning resources to improve your chances for this job
+                          </p>
+                          <Button size="sm" onClick={handleLoadLearningPlan} className="gap-2">
+                            <Sparkles className="h-3.5 w-3.5" /> Generate Learning Plan
+                          </Button>
+                        </div>
+                      ) : loadingLearning ? (
+                        <div className="flex flex-col items-center py-6 gap-2">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          <p className="text-xs text-muted-foreground animate-pulse">AI is researching the best resources for you...</p>
+                        </div>
+                      ) : learningPlan ? (
+                        <div className="space-y-4">
+                          {/* Readiness Score */}
+                          <div className="p-3 rounded-lg bg-primary/5 border border-primary/10">
+                            <div className="flex items-center justify-between mb-1.5">
+                              <span className="text-xs font-medium">Job Readiness</span>
+                              <span className="text-sm font-bold text-primary">{learningPlan.readinessScore}%</span>
+                            </div>
+                            <Progress value={learningPlan.readinessScore} className="h-2" />
+                          </div>
+
+                          {/* Quick Wins */}
+                          {learningPlan.quickWins.length > 0 && (
+                            <div>
+                              <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                                <Lightbulb className="h-3 w-3" /> Quick Wins — Do Today
+                              </h4>
+                              <div className="space-y-1.5">
+                                {learningPlan.quickWins.map((tip, i) => (
+                                  <div key={i} className="flex items-start gap-2 text-xs">
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
+                                    <span>{tip}</span>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Learning Resources */}
+                          <div>
+                            <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2 flex items-center gap-1">
+                              <GraduationCap className="h-3 w-3" /> Learning Resources
+                            </h4>
+                            <div className="space-y-3">
+                              {learningPlan.resources.map((res, i) => (
+                                <div key={i} className="border rounded-lg p-3 space-y-2">
+                                  <div className="flex items-center justify-between">
+                                    <Badge variant={res.hasSkill ? 'default' : 'secondary'} className="text-xs">
+                                      {res.hasSkill ? '✓ ' : ''}{res.skill}
+                                    </Badge>
+                                    <span className="text-xs text-muted-foreground">{res.estimatedTime}</span>
+                                  </div>
+                                  <div className="space-y-1.5">
+                                    {res.resources.map((link, j) => {
+                                      const TypeIcon = link.type === 'video' ? Video
+                                        : link.type === 'course' ? GraduationCap
+                                        : link.type === 'community' ? Users
+                                        : BookOpen
+                                      return (
+                                        <a
+                                          key={j}
+                                          href={link.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="flex items-start gap-2 text-xs p-1.5 rounded hover:bg-muted/80 transition-colors group"
+                                        >
+                                          <TypeIcon className="h-3.5 w-3.5 text-muted-foreground mt-0.5 shrink-0" />
+                                          <div className="flex-1 min-w-0">
+                                            <span className="text-primary group-hover:underline font-medium">{link.title}</span>
+                                            <span className="block text-muted-foreground">{link.description}</span>
+                                          </div>
+                                          <div className="flex items-center gap-1 shrink-0">
+                                            {link.free && <Badge variant="outline" className="text-[10px] px-1 py-0 text-green-600 border-green-200">Free</Badge>}
+                                            <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                                          </div>
+                                        </a>
+                                      )
+                                    })}
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Career Path */}
+                          {learningPlan.careerPath && (
+                            <div className="p-3 rounded-lg bg-gradient-to-r from-primary/5 to-primary/10 border border-primary/10">
+                              <h4 className="text-xs font-semibold mb-1 flex items-center gap-1">
+                                <Target className="h-3 w-3 text-primary" /> Career Growth Path
+                              </h4>
+                              <p className="text-xs text-muted-foreground leading-relaxed">{learningPlan.careerPath}</p>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+                    </TabsContent>
+
+                    {/* ── Interview Prep Tab ── */}
+                    <TabsContent value="interview" className="mt-0">
+                      {!interviewPrep && !loadingInterview ? (
+                        <div className="text-center py-4">
+                          <Mic className="h-8 w-8 mx-auto mb-2 text-primary/60" />
+                          <p className="text-sm text-muted-foreground mb-3">
+                            Practice likely questions and get tips for your interview
+                          </p>
+                          <Button size="sm" onClick={handleLoadInterviewPrep} className="gap-2">
+                            <Sparkles className="h-3.5 w-3.5" /> Generate Interview Prep
+                          </Button>
+                        </div>
+                      ) : loadingInterview ? (
+                        <div className="flex flex-col items-center py-6 gap-2">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          <p className="text-xs text-muted-foreground animate-pulse">AI is preparing interview questions...</p>
+                        </div>
+                      ) : interviewPrep ? (
+                        <div className="space-y-4">
+                          {/* Questions */}
+                          <div className="space-y-3">
+                            {interviewPrep.questions.map((q, i) => (
+                              <div key={i} className="border rounded-lg p-3 space-y-2">
+                                <p className="text-sm font-medium flex items-start gap-2">
+                                  <span className="h-5 w-5 rounded-full bg-primary/10 text-primary text-xs flex items-center justify-center shrink-0 mt-0.5">
+                                    {i + 1}
+                                  </span>
+                                  {q.question}
+                                </p>
+                                <div className="ml-7 space-y-1.5">
+                                  <div className="text-xs text-muted-foreground bg-muted/50 rounded p-2">
+                                    <span className="font-medium text-foreground">Sample answer: </span>
+                                    {q.sampleAnswer}
+                                  </div>
+                                  <p className="text-xs text-primary/80 flex items-start gap-1">
+                                    <Lightbulb className="h-3 w-3 mt-0.5 shrink-0" />
+                                    {q.tip}
+                                  </p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+
+                          {/* General Tips */}
+                          <div>
+                            <h4 className="text-xs font-semibold uppercase text-muted-foreground mb-2">General Tips</h4>
+                            <div className="space-y-1.5">
+                              {interviewPrep.generalTips.map((tip, i) => (
+                                <div key={i} className="flex items-start gap-2 text-xs">
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500 mt-0.5 shrink-0" />
+                                  <span>{tip}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+
+                          {/* Dress Code & What to Bring */}
+                          <div className="grid grid-cols-2 gap-3">
+                            <div className="border rounded-lg p-2.5">
+                              <h4 className="text-xs font-semibold mb-1">👔 Dress Code</h4>
+                              <p className="text-xs text-muted-foreground">{interviewPrep.dresscode}</p>
+                            </div>
+                            <div className="border rounded-lg p-2.5">
+                              <h4 className="text-xs font-semibold mb-1">📋 What to Bring</h4>
+                              <ul className="space-y-0.5">
+                                {interviewPrep.whatToBring.map((item, i) => (
+                                  <li key={i} className="text-xs text-muted-foreground">• {item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          </div>
+                        </div>
+                      ) : null}
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              )}
+            </Card>
+
             {employer && (
               <Card>
                 <CardHeader>
@@ -478,8 +867,89 @@ export default function JobDetailsPage() {
                   <CardTitle>Apply for this Job</CardTitle>
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Resume upload for technical jobs */}
+                  {(job.jobNature === 'technical' || isRoleTechnical(job.category)) && (
+                    <div className="space-y-3">
+                      <Label className="flex items-center gap-2">
+                        <FileText className="h-4 w-4" />
+                        Resume *
+                      </Label>
+                      {workerProfile?.resumeUrl && !resumeFile && (
+                        <div className="flex items-center gap-2 p-2 bg-green-50 dark:bg-green-950/20 rounded-lg border border-green-200 dark:border-green-800 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                          <span className="text-green-700 dark:text-green-300">Profile resume will be used</span>
+                        </div>
+                      )}
+                      {!resumeFile ? (
+                        <label className="flex flex-col items-center justify-center gap-2 p-6 border-2 border-dashed rounded-lg cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-colors">
+                          <Upload className="h-8 w-8 text-muted-foreground" />
+                          <span className="text-sm text-muted-foreground text-center">
+                            {workerProfile?.resumeUrl ? 'Upload a new resume (optional)' : 'Upload your resume (PDF, DOCX, TXT)'}
+                          </span>
+                          <span className="text-xs text-muted-foreground">Max 5MB</span>
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.doc,.docx,.txt"
+                            onChange={handleResumeSelect}
+                          />
+                        </label>
+                      ) : (
+                        <div className="p-3 border rounded-lg space-y-2">
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <FileText className="h-4 w-4 text-primary" />
+                              <span className="text-sm font-medium truncate max-w-45">{resumeFile.name}</span>
+                              <span className="text-xs text-muted-foreground">({(resumeFile.size / 1024).toFixed(0)} KB)</span>
+                            </div>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => { setResumeFile(null); setResumeParsed(null) }}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                          {parsingResume && (
+                            <p className="text-xs text-muted-foreground animate-pulse">Analyzing resume with AI...</p>
+                          )}
+                          {resumeParsed && !parsingResume && (
+                            <div className="text-xs text-muted-foreground space-y-1 border-t pt-2">
+                              {resumeParsed.skills.length > 0 && (
+                                <p><strong>Skills:</strong> {resumeParsed.skills.slice(0, 6).join(', ')}{resumeParsed.skills.length > 6 ? ` +${resumeParsed.skills.length - 6} more` : ''}</p>
+                              )}
+                              {resumeParsed.experience.length > 0 && (
+                                <p><strong>Experience:</strong> {resumeParsed.experience.length} position{resumeParsed.experience.length > 1 ? 's' : ''}</p>
+                              )}
+                              {resumeParsed.projects.length > 0 && (
+                                <p><strong>Projects:</strong> {resumeParsed.projects.length}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div className="space-y-2">
-                    <Label htmlFor="coverLetter">Cover Letter (Optional)</Label>
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="coverLetter">Cover Letter (Optional)</Label>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-xs gap-1.5 h-7 text-primary hover:text-primary"
+                        onClick={() => { setShowApplicationForm(true); handleGenerateCoverLetter() }}
+                        disabled={generatingCover}
+                      >
+                        {generatingCover ? (
+                          <><Loader2 className="h-3 w-3 animate-spin" /> Generating...</>
+                        ) : (
+                          <><Sparkles className="h-3 w-3" /> AI Write for me</>
+                        )}
+                      </Button>
+                    </div>
                     <Textarea
                       id="coverLetter"
                       placeholder="Introduce yourself and explain why you're a great fit..."
@@ -492,10 +962,10 @@ export default function JobDetailsPage() {
                     <Button
                       className="flex-1"
                       onClick={handleApply}
-                      disabled={applying}
+                      disabled={applying || parsingResume}
                     >
                       <Send className="h-4 w-4 mr-2" />
-                      {applying ? 'Submitting...' : 'Submit Application'}
+                      {applying ? 'Submitting...' : parsingResume ? 'Parsing Resume...' : 'Submit Application'}
                     </Button>
                     <Button
                       variant="outline"

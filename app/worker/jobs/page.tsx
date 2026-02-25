@@ -15,7 +15,7 @@ import { mockJobOps, mockUserOps, mockApplicationOps, mockWorkerProfileOps } fro
 import { matchJobs, JOB_CATEGORIES } from '@/lib/aiMatching'
 import { processUserInput, isLikelyEnglish, SupportedLocale } from '@/lib/gemini'
 import { Application, Job, User } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Navigation, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Navigation, ChevronLeft, ChevronRight, Loader2, Bookmark } from 'lucide-react'
 import { VoiceInput } from '@/components/ui/voice-input'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 
@@ -47,14 +47,18 @@ const JobCard = memo(function JobCard({
   employer,
   hasApplied,
   distKm,
+  isSaved,
   onView,
+  onToggleSave,
 }: {
   job: Job
   matchScore?: number
   employer?: User
   hasApplied: boolean
   distKm: number | null
+  isSaved: boolean
   onView: (id: string) => void
+  onToggleSave: (id: string) => void
 }) {
   return (
     <Card className="hover:border-primary transition-colors">
@@ -66,12 +70,21 @@ const JobCard = memo(function JobCard({
               {employer?.companyName || 'Company'}
             </p>
           </div>
-          {matchScore != null && matchScore >= RECOMMENDED_THRESHOLD && (
-            <Badge className="gap-1">
-              <Sparkles className="h-3 w-3" />
-              {matchScore}% Match
-            </Badge>
-          )}
+          <div className="flex items-center gap-2">
+            {matchScore != null && matchScore >= RECOMMENDED_THRESHOLD && (
+              <Badge className="gap-1">
+                <Sparkles className="h-3 w-3" />
+                {matchScore}% Match
+              </Badge>
+            )}
+            <button
+              onClick={(e) => { e.stopPropagation(); onToggleSave(job.id) }}
+              className={`p-1.5 rounded-full transition-colors ${isSaved ? 'text-primary bg-primary/10' : 'text-muted-foreground hover:text-primary hover:bg-primary/5'}`}
+              title={isSaved ? 'Remove from saved' : 'Save job'}
+            >
+              <Bookmark className={`h-4 w-4 ${isSaved ? 'fill-current' : ''}`} />
+            </button>
+          </div>
         </div>
         <div className="flex flex-wrap gap-2">
           {job.requiredSkills.slice(0, 3).map((skill) => (
@@ -145,6 +158,7 @@ export default function WorkerJobsPage() {
   // ── GPS & reported jobs ──
   const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [reportedJobIds, setReportedJobIds] = useState<Set<string>>(new Set())
+  const [savedJobIds, setSavedJobIds] = useState<Set<string>>(new Set())
 
   // Fetch GPS (fire once)
   useEffect(() => {
@@ -160,6 +174,11 @@ export default function WorkerJobsPage() {
     const stored = localStorage.getItem(`reported_jobs_${user.id}`)
     if (stored) {
       try { setReportedJobIds(new Set(JSON.parse(stored))) } catch { /* ignore corrupt data */ }
+    }
+    // Load saved/bookmarked jobs
+    const saved = localStorage.getItem(`saved_jobs_${user.id}`)
+    if (saved) {
+      try { setSavedJobIds(new Set(JSON.parse(saved))) } catch { /* ignore */ }
     }
   }, [user])
 
@@ -248,6 +267,23 @@ export default function WorkerJobsPage() {
 
   const totalPages = Math.ceil(filteredJobs.length / PAGE_SIZE)
   const paginatedJobs = filteredJobs.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE)
+
+  // ── Saved jobs (bookmarked) ──
+  const savedJobs = useMemo(
+    () => jobs.filter((j) => savedJobIds.has(j.id)),
+    [jobs, savedJobIds],
+  )
+
+  const handleToggleSave = useCallback((jobId: string) => {
+    if (!user) return
+    setSavedJobIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(jobId)) next.delete(jobId)
+      else next.add(jobId)
+      localStorage.setItem(`saved_jobs_${user.id}`, JSON.stringify([...next]))
+      return next
+    })
+  }, [user])
 
   // ── AI smart search: normalizes multilingual queries & extracts job/location hints ──
   const handleSmartSearch = useCallback(async () => {
@@ -377,6 +413,10 @@ export default function WorkerJobsPage() {
             <TabsTrigger value="all">
               All Jobs ({filteredJobs.length})
             </TabsTrigger>
+            <TabsTrigger value="saved" className="gap-2">
+              <Bookmark className="h-4 w-4" />
+              Saved ({savedJobs.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="recommended">
@@ -402,6 +442,8 @@ export default function WorkerJobsPage() {
                     matchScore={score}
                     employer={employersById[job.employerId]}
                     hasApplied={appliedJobIds.has(job.id)}
+                    isSaved={savedJobIds.has(job.id)}
+                    onToggleSave={handleToggleSave}
                     distKm={
                       workerCoords && job.latitude && job.longitude
                         ? haversineKm(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
@@ -435,6 +477,8 @@ export default function WorkerJobsPage() {
                       matchScore={scoreByJobId.get(job.id)}
                       employer={employersById[job.employerId]}
                       hasApplied={appliedJobIds.has(job.id)}
+                      isSaved={savedJobIds.has(job.id)}
+                      onToggleSave={handleToggleSave}
                       distKm={
                         workerCoords && job.latitude && job.longitude
                           ? haversineKm(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
@@ -466,6 +510,40 @@ export default function WorkerJobsPage() {
                   </div>
                 )}
               </>
+            )}
+          </TabsContent>
+
+          <TabsContent value="saved">
+            {savedJobs.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <Bookmark className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+                  <h3 className="text-lg font-semibold mb-2">No Saved Jobs</h3>
+                  <p className="text-muted-foreground">
+                    Bookmark jobs you&apos;re interested in to review them later
+                  </p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {savedJobs.map((job) => (
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    matchScore={scoreByJobId.get(job.id)}
+                    employer={employersById[job.employerId]}
+                    hasApplied={appliedJobIds.has(job.id)}
+                    isSaved={true}
+                    onToggleSave={handleToggleSave}
+                    distKm={
+                      workerCoords && job.latitude && job.longitude
+                        ? haversineKm(workerCoords.lat, workerCoords.lng, job.latitude, job.longitude)
+                        : null
+                    }
+                    onView={handleViewJob}
+                  />
+                ))}
+              </div>
             )}
           </TabsContent>
         </Tabs>

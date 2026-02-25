@@ -8,11 +8,13 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Briefcase, User, ArrowLeft, Loader2, KeyRound } from 'lucide-react';
+import { Briefcase, User, ArrowLeft, Loader2, KeyRound, CheckCircle2, XCircle, Building2 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendOTP, verifyOTP, registerUser } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
 import { useI18n } from '@/contexts/I18nContext';
+import { validateGSTINFormat, verifyGSTIN } from '@/lib/gstinService';
+import type { GSTINDetails } from '@/lib/types';
 
 function SignupPageContent() {
   const router = useRouter();
@@ -35,10 +37,15 @@ function SignupPageContent() {
     businessName: '',
     organizationName: '',
     otp: '',
+    gstin: '',
   });
 
   const [otpSent, setOtpSent] = useState(false);
   const [displayOtp, setDisplayOtp] = useState<string | null>(null);
+  // GSTIN verification state
+  const [gstinDetails, setGstinDetails] = useState<GSTINDetails | null>(null);
+  const [gstinVerifying, setGstinVerifying] = useState(false);
+  const [gstinError, setGstinError] = useState<string | null>(null);
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
@@ -113,6 +120,43 @@ function SignupPageContent() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  // GSTIN verification handler
+  const handleVerifyGSTIN = async () => {
+    const gstin = formData.gstin.trim().toUpperCase();
+    if (!gstin) {
+      setGstinError(null);
+      setGstinDetails(null);
+      return;
+    }
+    const formatError = validateGSTINFormat(gstin);
+    if (formatError) {
+      setGstinError(formatError);
+      setGstinDetails(null);
+      return;
+    }
+    setGstinVerifying(true);
+    setGstinError(null);
+    try {
+      const details = await verifyGSTIN(gstin);
+      setGstinDetails(details);
+      if (details.verified && details.tradeName && !formData.businessName) {
+        setFormData(prev => ({ ...prev, businessName: details.tradeName }));
+      }
+      toast({
+        title: details.verified ? 'GSTIN Verified' : 'GSTIN Found (Unverified)',
+        description: details.verified
+          ? `Business: ${details.tradeName || details.legalName}`
+          : 'Could not fully verify this GSTIN',
+      });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Verification failed';
+      setGstinError(msg);
+      setGstinDetails(null);
+    } finally {
+      setGstinVerifying(false);
     }
   };
 
@@ -347,6 +391,68 @@ function SignupPageContent() {
 
                 {role === 'employer' && (
                   <>
+                    <div className="space-y-2">
+                      <Label htmlFor="gstin">
+                        GSTIN <span className="text-muted-foreground text-xs">(Optional — for business verification)</span>
+                      </Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="gstin"
+                          type="text"
+                          placeholder="e.g., 29ABCDE1234F1Z5"
+                          value={formData.gstin}
+                          onChange={(e) => {
+                            const val = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 15);
+                            setFormData({ ...formData, gstin: val });
+                            setGstinDetails(null);
+                            setGstinError(null);
+                          }}
+                          maxLength={15}
+                          className="font-mono"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={handleVerifyGSTIN}
+                          disabled={gstinVerifying || formData.gstin.length !== 15}
+                          className="shrink-0"
+                        >
+                          {gstinVerifying ? (
+                            <Loader2 className="w-4 h-4 animate-spin" />
+                          ) : (
+                            'Verify'
+                          )}
+                        </Button>
+                      </div>
+                      {gstinError && (
+                        <div className="flex items-center gap-1.5 text-xs text-destructive">
+                          <XCircle className="h-3 w-3" />
+                          {gstinError}
+                        </div>
+                      )}
+                      {gstinDetails && (
+                        <div className={`flex items-start gap-2 p-2.5 rounded-lg border text-xs ${
+                          gstinDetails.verified
+                            ? 'bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800'
+                            : 'bg-amber-50 dark:bg-amber-950/20 border-amber-200 dark:border-amber-800'
+                        }`}>
+                          {gstinDetails.verified ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0 mt-0.5" />
+                          ) : (
+                            <Building2 className="h-4 w-4 text-amber-600 shrink-0 mt-0.5" />
+                          )}
+                          <div className="space-y-0.5">
+                            <p className="font-medium">{gstinDetails.tradeName || gstinDetails.legalName}</p>
+                            {gstinDetails.legalName && gstinDetails.legalName !== gstinDetails.tradeName && (
+                              <p className="text-muted-foreground">Legal: {gstinDetails.legalName}</p>
+                            )}
+                            <p>Status: <strong>{gstinDetails.status}</strong> · Type: {gstinDetails.taxpayerType}</p>
+                            {gstinDetails.address && <p>{gstinDetails.address}</p>}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
                     <div className="space-y-2">
                       <Label htmlFor="businessName">{t('auth.signup.businessName')} *</Label>
                       <Input

@@ -106,7 +106,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/admin/dashboard')}>
+          <Card>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Jobs Posted</CardTitle>
               <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -163,11 +163,11 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Escrow Volume</p>
-                <p className="text-2xl font-bold">â‚¹{stats.totalEscrow.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{stats.totalEscrow.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Currently Held in Escrow</p>
-                <p className="text-xl font-semibold text-primary">â‚¹{stats.heldEscrow.toLocaleString()}</p>
+                <p className="text-xl font-semibold text-primary">₹{stats.heldEscrow.toLocaleString()}</p>
               </div>
             </CardContent>
           </Card>
