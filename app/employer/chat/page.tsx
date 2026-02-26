@@ -226,13 +226,13 @@ export default function EmployerChatPage() {
     <div className="app-surface">
       <EmployerNav />
       
-      <main className="container mx-auto px-4 py-8">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-          <p className="text-muted-foreground">Chat with workers about job applications</p>
+      <main className="container mx-auto px-2 sm:px-4 py-4 md:py-8">
+        <div className="mb-4 md:mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Messages</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Chat with workers about your jobs</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-250px)]">
+        <div className="grid lg:grid-cols-3 gap-4 md:gap-6 h-[calc(100vh-250px)]">
           <Card className="lg:col-span-1">
             <CardHeader>
               <div className="relative">

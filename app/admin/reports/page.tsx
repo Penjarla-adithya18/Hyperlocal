@@ -143,10 +143,10 @@ export default function AdminReportsPage() {
     <div className="app-surface">
       <AdminNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 md:py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Reports & Moderation</h1>
-          <p className="text-muted-foreground">Review and manage user reports</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Reports & Moderation</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Review and manage user reports</p>
         </div>
 
         {selectedReport && (
@@ -202,16 +202,16 @@ export default function AdminReportsPage() {
         )}
 
         <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="pending" className="gap-2">
+          <TabsList className="mb-6 w-full flex-wrap">
+            <TabsTrigger value="pending" className="gap-2 flex-1 min-w-[100px]">
               <AlertTriangle className="h-4 w-4" />
-              Pending ({pendingReports.length})
+              <span className="hidden sm:inline">Pending</span> ({pendingReports.length})
             </TabsTrigger>
-            <TabsTrigger value="resolved">
-              Resolved ({resolvedReports.length})
+            <TabsTrigger value="resolved" className="flex-1 min-w-[100px]">
+              <span className="hidden sm:inline">Resolved</span> ({resolvedReports.length})
             </TabsTrigger>
-            <TabsTrigger value="dismissed">
-              Dismissed ({dismissedReports.length})
+            <TabsTrigger value="dismissed" className="flex-1 min-w-[100px]">
+              <span className="hidden sm:inline">Dismissed</span> ({dismissedReports.length})
             </TabsTrigger>
           </TabsList>
 
@@ -225,7 +225,7 @@ export default function AdminReportsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {pendingReports.map((report) => (
                   <ReportCard key={report.id} report={report} />
                 ))}
@@ -234,7 +234,7 @@ export default function AdminReportsPage() {
           </TabsContent>
 
           <TabsContent value="resolved">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {resolvedReports.map((report) => (
                 <ReportCard key={report.id} report={report} />
               ))}
@@ -242,7 +242,7 @@ export default function AdminReportsPage() {
           </TabsContent>
 
           <TabsContent value="dismissed">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {dismissedReports.map((report) => (
                 <ReportCard key={report.id} report={report} />
               ))}

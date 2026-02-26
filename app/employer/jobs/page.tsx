@@ -102,7 +102,7 @@ export default function EmployerJobsPage() {
           <div className="grid grid-cols-2 gap-4 mb-4">
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span>{job.location}</span>
+              <span className="truncate">{job.location}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
@@ -118,15 +118,16 @@ export default function EmployerJobsPage() {
             </div>
           </div>
 
-          <div className="flex gap-2">
+          <div className="flex flex-col sm:flex-row gap-2">
             {job.status === 'draft' ? (
               <Button
                 size="sm"
                 className="flex-1 bg-amber-500 hover:bg-amber-600 text-white"
                 onClick={() => router.push(`/employer/payment/${job.id}`)}
               >
-                <Lock className="h-4 w-4 mr-2" />
-                Complete Payment to Go Live
+                <Lock className="h-4 w-4 mr-1 sm:mr-2" />
+                <span className="hidden sm:inline">Complete Payment to Go Live</span>
+                <span className="sm:hidden">Complete Payment</span>
               </Button>
             ) : (
               <Button

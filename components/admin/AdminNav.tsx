@@ -55,9 +55,9 @@ export default function AdminNav() {
               Admin: {user?.fullName}
             </div>
             <NotificationBell />
-            <Button variant="outline" onClick={handleLogout} className="gap-2">
+            <Button variant="outline" onClick={handleLogout} className="gap-2 h-9 w-9 p-0 sm:w-auto sm:px-3">
               <LogOut className="h-4 w-4" />
-              Logout
+              <span className="hidden sm:inline">Logout</span>
             </Button>
           </div>
 
@@ -71,7 +71,7 @@ export default function AdminNav() {
         </div>
 
         {mobileMenuOpen && (
-          <div className="md:hidden py-4 space-y-2">
+          <div className="md:hidden py-4 space-y-2 border-t">
             {navItems.map((item) => (
               <Button
                 key={item.path}
@@ -86,6 +86,9 @@ export default function AdminNav() {
                 {item.label}
               </Button>
             ))}
+            <div className="px-4 py-2 text-sm text-muted-foreground border-t">
+              {user?.fullName}
+            </div>
             <Button
               variant="outline"
               onClick={handleLogout}

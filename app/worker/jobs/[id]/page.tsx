@@ -28,7 +28,7 @@ import { useI18n } from '@/contexts/I18nContext'
 export default function JobDetailsPage() {
   const router = useRouter()
   const params = useParams()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const { toast } = useToast()
   const { t, locale } = useI18n()
   const [job, setJob] = useState<Job | null>(null)
@@ -64,8 +64,14 @@ export default function JobDetailsPage() {
   }, [user, params.id])
 
   useEffect(() => {
+    if (authLoading) return
+    if (!user) {
+      setLoading(false)
+      router.replace('/login')
+      return
+    }
     loadJobDetails()
-  }, [params.id, user])
+  }, [params.id, user, authLoading, router])
 
   // Translate job title + description when locale changes (hi/te)
   useEffect(() => {
@@ -140,6 +146,15 @@ export default function JobDetailsPage() {
         }
       }
     } catch (error) {
+      if (error instanceof Error && error.message.includes('error 401')) {
+        toast({
+          title: 'Session expired',
+          description: 'Please log in again to continue.',
+          variant: 'destructive',
+        })
+        router.replace('/login')
+        return
+      }
       toast({
         title: 'Error',
         description: 'Failed to load job details',
@@ -153,16 +168,6 @@ export default function JobDetailsPage() {
   const handleApply = async () => {
     if (!user || !job) return
 
-    // Cover letter validation
-    if (coverLetter.trim().length < 20) {
-      toast({
-        title: 'Cover Letter Too Short',
-        description: 'Please write at least 20 characters explaining why you are a good fit.',
-        variant: 'destructive'
-      })
-      return
-    }
-
     // Duplicate application guard (in case state is stale)
     if (application) {
       toast({ title: 'Already Applied', description: 'You have already applied to this job.' })
@@ -174,7 +179,7 @@ export default function JobDetailsPage() {
       const newApplication = await mockDb.createApplication({
         jobId: job.id,
         workerId: user.id,
-        coverLetter,
+        coverLetter: coverLetter.trim() || undefined,
         status: 'pending'
       })
 
@@ -284,9 +289,9 @@ export default function JobDetailsPage() {
           <div className="lg:col-span-2 space-y-6">
             <Card>
               <CardHeader>
-                <div className="flex justify-between items-start mb-4">
+                <div className="mb-4 flex flex-col items-start justify-between gap-3 sm:flex-row sm:items-start">
                   <div>
-                    <CardTitle className="text-2xl mb-2">{displayTitle || job.title}</CardTitle>
+                    <CardTitle className="mb-2 text-xl sm:text-2xl">{displayTitle || job.title}</CardTitle>
                     <div className="flex items-center gap-2 text-muted-foreground">
                       <Building2 className="h-4 w-4" />
                       <span>{employer?.companyName || 'Company'}</span>
@@ -303,7 +308,7 @@ export default function JobDetailsPage() {
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="flex items-center gap-3">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
                       <IndianRupee className="h-5 w-5 text-primary" />
@@ -467,7 +472,9 @@ export default function JobDetailsPage() {
                   {application.coverLetter && (
                     <div>
                       <p className="text-sm text-muted-foreground mb-2">Cover Letter</p>
-                      <p className="text-sm">{application.coverLetter}</p>
+                      <div className="rounded-md border bg-muted/40 p-3">
+                        <p className="text-sm leading-6 whitespace-pre-wrap break-words">{application.coverLetter}</p>
+                      </div>
                     </div>
                   )}
                 </CardContent>
@@ -487,10 +494,13 @@ export default function JobDetailsPage() {
                       value={coverLetter}
                       onChange={(e) => setCoverLetter(e.target.value)}
                     />
+                    <p className="text-xs leading-5 text-muted-foreground text-left">
+                      Optional: you can leave this blank, or add a short introduction to improve your chances.
+                    </p>
                   </div>
-                  <div className="flex gap-2">
+                  <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
-                      className="flex-1"
+                      className="w-full sm:flex-1"
                       onClick={handleApply}
                       disabled={applying}
                     >
@@ -499,6 +509,7 @@ export default function JobDetailsPage() {
                     </Button>
                     <Button
                       variant="outline"
+                      className="w-full sm:w-auto"
                       onClick={() => setShowApplicationForm(false)}
                     >
                       Cancel

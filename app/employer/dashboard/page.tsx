@@ -26,7 +26,7 @@ import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const { t } = useI18n();
   const [employerProfile, setEmployerProfile] = useState<EmployerProfile | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
@@ -36,8 +36,9 @@ export default function EmployerDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user || user.role !== 'employer') {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 
@@ -77,19 +78,19 @@ export default function EmployerDashboardPage() {
 
     loadDashboardData();
     return () => { cancelled = true; };
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
   // Memoized derived stats
   const activeJobs = useMemo(() => jobs.filter((j) => j.status === 'active').length, [jobs]);
   const totalApplications = applications.length;
   const pendingApplications = useMemo(() => applications.filter((a) => a.status === 'pending').length, [applications]);
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="app-surface">
         <EmployerNav />
         <div className="container mx-auto px-4 py-8 space-y-8">
-          <div className="flex items-start justify-between">
+          <div className="flex flex-col sm:flex-row gap-4 sm:items-start sm:justify-between">
             <div className="space-y-2">
               <Skeleton className="h-8 w-64" />
               <Skeleton className="h-4 w-48" />
@@ -126,13 +127,13 @@ export default function EmployerDashboardPage() {
 
       <div className="container mx-auto px-4 py-8 space-y-8">
         {/* Welcome Section */}
-        <div className="flex items-start justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
-            <h1 className="text-3xl font-bold mb-2">{t('employer.dash.welcome', { name: employerProfile?.businessName || user?.fullName || '' })}</h1>
+            <h1 className="text-2xl sm:text-3xl font-bold mb-2 break-words">{t('employer.dash.welcome', { name: employerProfile?.businessName || user?.fullName || '' })}</h1>
             <p className="text-muted-foreground">{t('employer.dash.subtitle')}</p>
           </div>
           <Link href="/employer/jobs/post">
-            <Button size="lg" className="bg-accent hover:bg-accent/90 gap-2">
+            <Button size="lg" className="w-full sm:w-auto bg-accent hover:bg-accent/90 gap-2">
               <PlusCircle className="w-5 h-5" />
               {t('employer.dash.postJob')}
             </Button>
@@ -177,7 +178,7 @@ export default function EmployerDashboardPage() {
         {/* Quick Actions */}
         <Card className="p-6 transition-all duration-200 hover:shadow-md">
           <h2 className="text-xl font-semibold mb-4">{t('employer.dash.quickActions')}</h2>
-          <div className="grid md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Link href="/employer/jobs/post">
               <Button variant="outline" className="w-full justify-start gap-3 h-auto py-4">
                 <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
@@ -218,7 +219,7 @@ export default function EmployerDashboardPage() {
 
         {/* Recent Jobs */}
         <div>
-          <div className="flex items-center justify-between mb-6">
+          <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-2xl font-bold">{t('employer.dash.recentJobs')}</h2>
             <Link href="/employer/jobs">
               <Button variant="outline" size="sm">

@@ -29,16 +29,84 @@ function getEnv() {
 }
 
 const SESSION_TOKEN_KEY = 'sessionToken'
+const SESSION_EXPIRES_AT_KEY = 'sessionExpiresAt'
+const SESSION_REFRESHED_AT_KEY = 'sessionRefreshedAt'
 
 function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(SESSION_TOKEN_KEY)
 }
 
+function getSessionExpiresAt(): string | null {
+  if (typeof window === 'undefined') return null
+  return localStorage.getItem(SESSION_EXPIRES_AT_KEY)
+}
+
 function setSessionToken(token: string | null): void {
   if (typeof window === 'undefined') return
   if (token) localStorage.setItem(SESSION_TOKEN_KEY, token)
-  else localStorage.removeItem(SESSION_TOKEN_KEY)
+  else {
+    localStorage.removeItem(SESSION_TOKEN_KEY)
+    localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
+    localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
+  }
+}
+
+function setSessionExpiry(expiresAt: string | null): void {
+  if (typeof window === 'undefined') return
+  if (expiresAt) localStorage.setItem(SESSION_EXPIRES_AT_KEY, expiresAt)
+  else localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
+}
+
+async function refreshSessionIfNeeded(): Promise<void> {
+  if (typeof window === 'undefined') return
+  const token = getSessionToken()
+  const expiresAt = getSessionExpiresAt()
+  if (!token || !expiresAt) return
+
+  const expiryMs = new Date(expiresAt).getTime()
+  if (!Number.isFinite(expiryMs)) return
+
+  const now = Date.now()
+  const refreshWindowMs = 24 * 60 * 60 * 1000
+  if (expiryMs - now > refreshWindowMs) return
+
+  const lastRefreshedAtRaw = localStorage.getItem(SESSION_REFRESHED_AT_KEY)
+  const lastRefreshedAt = lastRefreshedAtRaw ? Number(lastRefreshedAtRaw) : 0
+  const refreshThrottleMs = 5 * 60 * 1000
+  if (lastRefreshedAt && now - lastRefreshedAt < refreshThrottleMs) return
+
+  const { url, key } = getEnv()
+  const endpoint = `${url}/functions/v1/auth`
+
+  const res = await fetchWithTimeout(
+    endpoint,
+    {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+        apikey: key,
+      },
+      body: JSON.stringify({ action: 'refresh-session' }),
+    },
+    REQUEST_TIMEOUT_MS
+  )
+
+  if (!res.ok) {
+    if (res.status === 401) {
+      setSessionToken(null)
+      if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
+    }
+    return
+  }
+
+  const data = (await res.json()) as { success?: boolean; token?: string; expiresAt?: string }
+  if (data?.success && data.token && data.expiresAt) {
+    setSessionToken(data.token)
+    setSessionExpiry(data.expiresAt)
+    localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
+  }
 }
 
 /** Default request timeout in milliseconds */
@@ -84,6 +152,8 @@ async function call<T>(
   params: Record<string, string> = {},
   body?: unknown
 ): Promise<T> {
+  await refreshSessionIfNeeded().catch(() => {})
+
   const { url, key } = getEnv()
   const token = getSessionToken()
   const qs = new URLSearchParams(params).toString()
@@ -151,8 +221,14 @@ export async function registerUser(data: {
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data })
-  if (res.success && res.token) setSessionToken(res.token)
-  if (!res.success) setSessionToken(null)
+  if (res.success && res.token) {
+    setSessionToken(res.token)
+    setSessionExpiry(res.expiresAt ?? null)
+  }
+  if (!res.success) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+  }
   return { success: res.success, user: res.user, message: res.message }
 }
 
@@ -161,8 +237,14 @@ export async function loginUser(
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password })
-  if (res.success && res.token) setSessionToken(res.token)
-  if (!res.success) setSessionToken(null)
+  if (res.success && res.token) {
+    setSessionToken(res.token)
+    setSessionExpiry(res.expiresAt ?? null)
+  }
+  if (!res.success) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+  }
   return { success: res.success, user: res.user, message: res.message }
 }
 
@@ -200,7 +282,10 @@ export function setCurrentUser(user: User | null): void {
   user ? localStorage.setItem('currentUser', JSON.stringify(user)) : localStorage.removeItem('currentUser')
 }
 export function logout(): void {
-  call<SR>('auth', 'POST', {}, { action: 'logout' }).catch(() => {})
+  const token = getSessionToken()
+  if (token) {
+    call<SR>('auth', 'POST', {}, { action: 'logout' }).catch(() => {})
+  }
   setCurrentUser(null)
   setSessionToken(null)
 }

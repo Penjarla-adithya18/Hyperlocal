@@ -224,10 +224,10 @@ export default function WorkerJobsPage() {
         <CardContent>
           <p className="text-muted-foreground mb-4 line-clamp-2">{job.description}</p>
           
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 text-muted-foreground" />
-              <span>{job.location}</span>
+              <span className="truncate">{job.location}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Route className="h-4 w-4 text-muted-foreground" />
@@ -235,13 +235,13 @@ export default function WorkerJobsPage() {
             </div>
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
-              <span className="font-semibold">₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
+              <span className="font-semibold truncate">₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span>{job.duration}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
+            <div className="flex items-center gap-2 text-sm col-span-1 sm:col-span-2">
               <Briefcase className="h-4 w-4 text-muted-foreground" />
               <span className="capitalize">{job.experienceRequired}</span>
             </div>
@@ -275,13 +275,13 @@ export default function WorkerJobsPage() {
     <div className="app-surface">
       <WorkerNav />
       
-      <main className="container mx-auto px-4 py-8 pb-24">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Find Jobs</h1>
-          <p className="text-muted-foreground">Browse and apply to jobs that match your skills</p>
+      <main className="container mx-auto px-4 py-6 md:py-8 pb-24">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Find Jobs</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Browse and apply to jobs that match your skills</p>
         </div>
 
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-6">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
           <Card>
             <CardContent className="pt-6">
               <div className="text-sm text-muted-foreground">Active Jobs</div>
@@ -307,7 +307,7 @@ export default function WorkerJobsPage() {
             <Lightbulb className="h-5 w-5 text-primary" />
             AI Insights
           </h2>
-          <div className="grid gap-3 md:grid-cols-3">
+          <div className="grid gap-3 grid-cols-1 md:grid-cols-3">
             {aiInsights.map((insight) => (
               <Card key={insight.title} className={insight.color}>
                 <CardContent className="pt-6">
@@ -346,7 +346,7 @@ export default function WorkerJobsPage() {
 
         <Card className="mb-6">
           <CardContent className="pt-6">
-            <div className="flex flex-col md:flex-row gap-4">
+            <div className="flex flex-col gap-3">
               <div className="flex-1 relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -356,35 +356,36 @@ export default function WorkerJobsPage() {
                   className="pl-10"
                 />
               </div>
-              <Select value={categoryFilter} onValueChange={setCategoryFilter}>
-                <SelectTrigger className="md:w-[200px]">
-                  <Filter className="h-4 w-4 mr-2" />
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Categories</SelectItem>
-                    {uniqueCategories.map((category) => (
-                      <SelectItem key={category} value={category}>{category}</SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
-              <Input
-                placeholder="Location"
-                value={locationFilter}
-                onChange={(e) => setLocationFilter(e.target.value)}
-                className="md:w-[200px]"
-              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                  <SelectTrigger>
+                    <Filter className="h-4 w-4 mr-2" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Categories</SelectItem>
+                      {uniqueCategories.map((category) => (
+                        <SelectItem key={category} value={category}>{category}</SelectItem>
+                      ))}
+                  </SelectContent>
+                </Select>
+                <Input
+                  placeholder="Location"
+                  value={locationFilter}
+                  onChange={(e) => setLocationFilter(e.target.value)}
+                />
+              </div>
             </div>
           </CardContent>
         </Card>
 
         <Tabs defaultValue="recommended" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="recommended" className="gap-2">
+          <TabsList className="mb-6 w-full flex-wrap">
+            <TabsTrigger value="recommended" className="gap-2 flex-1 min-w-[140px]">
               <Sparkles className="h-4 w-4" />
-              Recommended ({topFiveMatches.length})
+              <span className="hidden sm:inline">Recommended</span><span className="sm:hidden">AI Match</span> ({topFiveMatches.length})
             </TabsTrigger>
-            <TabsTrigger value="all">
+            <TabsTrigger value="all" className="flex-1 min-w-[100px]">
               All Jobs ({filteredJobs.length})
             </TabsTrigger>
           </TabsList>

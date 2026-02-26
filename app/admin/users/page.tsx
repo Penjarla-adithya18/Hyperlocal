@@ -156,10 +156,10 @@ export default function AdminUsersPage() {
     <div className="app-surface">
       <AdminNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-6 md:py-8">
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">User Management</h1>
-          <p className="text-muted-foreground">Manage workers and employers on the platform</p>
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">User Management</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Manage workers and employers on the platform</p>
         </div>
 
         <Card className="mb-6">
@@ -177,14 +177,14 @@ export default function AdminUsersPage() {
         </Card>
 
         <Tabs defaultValue="all" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="all">All Users ({users.length})</TabsTrigger>
-            <TabsTrigger value="workers">Workers ({workers.length})</TabsTrigger>
-            <TabsTrigger value="employers">Employers ({employers.length})</TabsTrigger>
+          <TabsList className="mb-6 w-full flex-wrap">
+            <TabsTrigger value="all" className="flex-1 min-w-[100px]">All Users ({users.length})</TabsTrigger>
+            <TabsTrigger value="workers" className="flex-1 min-w-[100px]">Workers ({workers.length})</TabsTrigger>
+            <TabsTrigger value="employers" className="flex-1 min-w-[100px]">Employers ({employers.length})</TabsTrigger>
           </TabsList>
 
           <TabsContent value="all">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {filteredUsers.map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}
@@ -192,7 +192,7 @@ export default function AdminUsersPage() {
           </TabsContent>
 
           <TabsContent value="workers">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {filteredWorkers.map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}
@@ -200,7 +200,7 @@ export default function AdminUsersPage() {
           </TabsContent>
 
           <TabsContent value="employers">
-            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
               {filteredEmployers.map((user) => (
                 <UserCard key={user.id} user={user} />
               ))}

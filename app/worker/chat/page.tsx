@@ -226,15 +226,15 @@ export default function WorkerChatPage() {
     <div className="app-surface flex flex-col">
       <WorkerNav />
       
-      <main className="container mx-auto flex-1 px-4 py-8 pb-24">
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
-          <p className="text-muted-foreground">Chat with employers about job opportunities</p>
+      <main className="container mx-auto flex-1 px-2 sm:px-4 py-4 md:py-8 pb-24">
+        <div className="mb-4 md:mb-6">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Messages</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Chat with employers about job opportunities</p>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-3 lg:h-[calc(100dvh-14rem)] lg:min-h-[540px]">
+        <div className="grid gap-4 md:gap-6 lg:grid-cols-3 lg:h-[calc(100dvh-14rem)] lg:min-h-[540px]">
           <Card className="lg:col-span-1 flex flex-col min-h-0">
-            <CardHeader>
+            <CardHeader className="pb-3">
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
                 <Input

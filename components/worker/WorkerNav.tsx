@@ -19,8 +19,8 @@ export function WorkerNav() {
     { href: '/worker/dashboard', label: t('nav.dashboard'), icon: Home },
     { href: '/worker/jobs', label: t('nav.worker.findJobs'), icon: Search },
     { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase },
-    { href: '/worker/earnings', label: t('Earnings'), icon: Wallet },
-    { href: '/worker/skill-gap', label: t('SkillGap'), icon: Target },
+    { href: '/worker/earnings', label: t('nav.worker.earnings'), icon: Wallet },
+    { href: '/worker/skill-gap', label: t('nav.worker.skillGap'), icon: Target },
     { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0 },
     { href: '/worker/profile', label: t('nav.profile'), icon: User },
   ];
@@ -62,14 +62,20 @@ export function WorkerNav() {
           </div>
 
           {/* User Menu */}
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1 sm:gap-2">
             <NotificationBell />
             <Link href="/settings" prefetch={false}>
               <Button variant="ghost" size="icon" title="Settings">
                 <Settings className="w-4 h-4" />
               </Button>
             </Link>
-            <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="h-9 w-9 p-0 sm:h-9 sm:w-auto sm:px-3 gap-2"
+              title={t('nav.logout')}
+            >
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">{t('nav.logout')}</span>
             </Button>

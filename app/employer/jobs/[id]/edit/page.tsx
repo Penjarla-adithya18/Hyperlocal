@@ -160,14 +160,14 @@ export default function EmployerJobEditPage() {
   return (
     <div className="app-surface">
       <EmployerNav />
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
         <div className="mb-6 flex items-center gap-3">
           <Link href={`/employer/jobs/${jobId}`}>
             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
           </Link>
           <div>
-            <h1 className="text-3xl font-bold">Edit Job</h1>
-            <p className="text-muted-foreground">Update your job listing details</p>
+            <h1 className="text-2xl md:text-3xl font-bold">Edit Job</h1>
+            <p className="text-sm md:text-base text-muted-foreground">Update your job listing details</p>
           </div>
         </div>
 

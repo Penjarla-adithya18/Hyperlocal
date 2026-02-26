@@ -21,9 +21,12 @@ const translations: Record<Locale, Record<string, string>> = {
     // Nav – worker
     'nav.worker.findJobs': 'Find Jobs',
     'nav.worker.myApps': 'My Applications',
+    'nav.worker.earnings': 'Earnings',
+    'nav.worker.skillGap': 'SkillGap',
     // Nav – employer
     'nav.employer.postJob': 'Post Job',
     'nav.employer.myJobs': 'My Jobs',
+    'nav.employer.aiSearch': 'AI Search',
     // Auth – common
     'auth.backHome': 'Back to Home',
     'auth.phoneLabel': 'Phone Number',
@@ -291,8 +294,11 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.messages': 'संदेश',
     'nav.worker.findJobs': 'नौकरी खोजें',
     'nav.worker.myApps': 'मेरे आवेदन',
+    'nav.worker.earnings': 'कमाई',
+    'nav.worker.skillGap': 'स्किल गैप',
     'nav.employer.postJob': 'नौकरी पोस्ट करें',
     'nav.employer.myJobs': 'मेरी नौकरियाँ',
+    'nav.employer.aiSearch': 'AI खोज',
     'auth.backHome': 'होम पर वापस जाएं',
     'auth.phoneLabel': 'फ़ोन नंबर',
     'auth.phonePh': '10 अंकों का मोबाइल नंबर दर्ज करें',
@@ -512,6 +518,8 @@ const translations: Record<Locale, Record<string, string>> = {
     'nav.messages': 'సందేశాలు',
     'nav.worker.findJobs': 'ఉద్యోగాలు వెతకండి',
     'nav.worker.myApps': 'నా దరఖాస్తులు',
+    'nav.worker.earnings': 'ఆదాయం',
+    'nav.worker.skillGap': 'స్కిల్ గ్యాప్',
     'nav.employer.postJob': 'ఉద్యోగం పోస్ట్ చేయండి',
     'nav.employer.myJobs': 'నా ఉద్యోగాలు',
     'auth.backHome': 'హోమ్‌కి తిరిగి వెళ్ళు',

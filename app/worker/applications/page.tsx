@@ -74,7 +74,7 @@ export default function WorkerApplicationsPage() {
         <CardContent>
           <p className="text-muted-foreground mb-4 line-clamp-2">{job.description}</p>
           
-          <div className="grid grid-cols-2 gap-3 mb-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div className="flex items-center gap-2 text-sm">
               <MapPin className="h-4 w-4 text-muted-foreground" />
               <span>{job.location}</span>
@@ -128,22 +128,22 @@ export default function WorkerApplicationsPage() {
     <div className="app-surface">
       <WorkerNav />
       
-      <main className="container mx-auto px-4 py-8 pb-24">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">My Applications</h1>
-          <p className="text-muted-foreground">Track your job applications and their status</p>
+      <main className="container mx-auto px-4 py-6 md:py-8 pb-24">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">My Applications</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Track your job applications and their status</p>
         </div>
 
         <Tabs defaultValue="pending" className="w-full">
-          <TabsList className="mb-6">
-            <TabsTrigger value="pending">
-              Pending ({pendingApps.length})
+          <TabsList className="mb-6 w-full flex-wrap">
+            <TabsTrigger value="pending" className="flex-1 min-w-[90px]">
+              <span className="hidden sm:inline">Pending</span><span className="sm:hidden">Pend.</span> ({pendingApps.length})
             </TabsTrigger>
-            <TabsTrigger value="accepted">
-              Accepted ({acceptedApps.length})
+            <TabsTrigger value="accepted" className="flex-1 min-w-[90px]">
+              <span className="hidden sm:inline">Accepted</span><span className="sm:hidden">Accept.</span> ({acceptedApps.length})
             </TabsTrigger>
-            <TabsTrigger value="rejected">
-              Rejected ({rejectedApps.length})
+            <TabsTrigger value="rejected" className="flex-1 min-w-[90px]">
+              <span className="hidden sm:inline">Rejected</span><span className="sm:hidden">Reject.</span> ({rejectedApps.length})
             </TabsTrigger>
           </TabsList>
 
@@ -160,7 +160,7 @@ export default function WorkerApplicationsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {pendingApps.map((app) => (
                   <ApplicationCard key={app.id} application={app} />
                 ))}
@@ -176,7 +176,7 @@ export default function WorkerApplicationsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {acceptedApps.map((app) => (
                   <ApplicationCard key={app.id} application={app} />
                 ))}
@@ -192,7 +192,7 @@ export default function WorkerApplicationsPage() {
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {rejectedApps.map((app) => (
                   <ApplicationCard key={app.id} application={app} />
                 ))}

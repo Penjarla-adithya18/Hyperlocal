@@ -26,7 +26,7 @@ import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, loading: authLoading } = useAuth();
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null);
   const [trustScore, setTrustScore] = useState<TrustScore | null>(null);
   const [recommendedJobs, setRecommendedJobs] = useState<Array<{ job: Job; matchScore: number }>>([]);
@@ -34,13 +34,14 @@ export default function WorkerDashboardPage() {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (authLoading) return;
     if (!user || user.role !== 'worker') {
-      router.push('/login');
+      router.replace('/login');
       return;
     }
 
     loadDashboardData();
-  }, [user, router]);
+  }, [user, authLoading, router]);
 
   const loadDashboardData = async () => {
     if (!user) return;
@@ -84,7 +85,7 @@ export default function WorkerDashboardPage() {
       )
     : 0;
 
-  if (loading) {
+  if (authLoading || loading) {
     return (
       <div className="app-surface">
         <WorkerNav />
@@ -107,14 +108,14 @@ export default function WorkerDashboardPage() {
       <main className="container mx-auto px-4 py-8 pb-24 space-y-8">
         {/* Welcome Section */}
         <div>
-          <h1 className="text-3xl font-bold mb-2">Welcome back, {user?.fullName}!</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold mb-2 break-words">Welcome back, {user?.fullName}!</h1>
           <p className="text-muted-foreground">Here's what's happening with your job search</p>
         </div>
 
         {/* Profile Completion Alert */}
         {profileCompleteness < 100 && (
           <Card className="border-accent/20 bg-accent/10 p-6 transition-all duration-200 hover:shadow-md">
-            <div className="flex items-start gap-4">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-5 h-5 text-accent" />
               </div>
@@ -143,44 +144,25 @@ export default function WorkerDashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <Briefcase className="w-8 h-8 text-primary" />
+          {[
+            { icon: Briefcase, label: 'Applications', value: applications.length, iconBg: 'bg-blue-500/10', iconColor: 'text-blue-600 dark:text-blue-400' },
+            { icon: Star, label: 'Trust Score', value: trustScore?.score || 50, iconBg: 'bg-amber-500/10', iconColor: 'text-amber-600 dark:text-amber-400' },
+            { icon: TrendingUp, label: 'Avg Rating', value: trustScore?.averageRating.toFixed(1) || 'N/A', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400' },
+            { icon: CheckCircle2, label: 'Completed Jobs', value: applications.filter(a => a.status === 'completed').length, iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-600 dark:text-indigo-400' },
+          ].map(({ icon: Icon, label, value, iconBg, iconColor }) => (
+            <div key={label} className="glass-card rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl">
+              <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl mb-3 ${iconBg}`}>
+                <Icon className={`w-5 h-5 ${iconColor}`} />
+              </div>
+              <div className="text-2xl font-extrabold">{value}</div>
+              <div className="text-sm text-muted-foreground mt-0.5">{label}</div>
             </div>
-            <div className="text-2xl font-bold">{applications.length}</div>
-            <div className="text-sm text-muted-foreground">Applications</div>
-          </Card>
-
-          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <Star className="w-8 h-8 text-accent" />
-            </div>
-            <div className="text-2xl font-bold">{trustScore?.score || 50}</div>
-            <div className="text-sm text-muted-foreground">Trust Score</div>
-          </Card>
-
-          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <TrendingUp className="w-8 h-8 text-primary" />
-            </div>
-            <div className="text-2xl font-bold">{trustScore?.averageRating.toFixed(1) || 'N/A'}</div>
-            <div className="text-sm text-muted-foreground">Average Rating</div>
-          </Card>
-
-          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
-            <div className="flex items-center justify-between mb-2">
-              <CheckCircle2 className="w-8 h-8 text-accent" />
-            </div>
-            <div className="text-2xl font-bold">
-              {applications.filter((a) => a.status === 'completed').length}
-            </div>
-            <div className="text-sm text-muted-foreground">Completed Jobs</div>
-          </Card>
+          ))}
         </div>
 
         {/* AI Recommendations */}
         <div>
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
             <div>
               <h2 className="text-2xl font-bold flex items-center gap-2">
                 <Sparkles className="w-6 h-6 text-primary" />
@@ -256,7 +238,7 @@ export default function WorkerDashboardPage() {
         {/* Recent Applications */}
         {applications.length > 0 && (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
               <h2 className="text-2xl font-bold">Recent Applications</h2>
               <Link href="/worker/applications">
                 <Button variant="outline" size="sm">

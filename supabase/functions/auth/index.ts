@@ -175,6 +175,30 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ success: true, message: 'Logged out' })
     }
 
+    if (action === 'refresh-session') {
+      const auth = await requireAuth(req, supabase)
+      if ('error' in auth) return auth.error
+
+      await revokeTokenHash(supabase, auth.tokenHash)
+      const session = await createSessionForUser(supabase, auth.user.id)
+
+      const { data: userRow, error: userErr } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', auth.user.id)
+        .maybeSingle()
+
+      if (userErr || !userRow) return errorResponse('Unauthorized', 401)
+
+      return jsonResponse({
+        success: true,
+        user: mapUser(userRow),
+        token: session.token,
+        expiresAt: session.expiresAt,
+        message: 'Session refreshed',
+      })
+    }
+
     // Unauthenticated password reset after OTP verification
     if (action === 'forgot-password') {
       const { phoneNumber, newPassword } = body

@@ -16,6 +16,7 @@ const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .filter(Boolean)
 
 let _keyIndex = 0
+let _rateLimitedUntil = 0
 
 function getNextKey(): string {
   if (GEMINI_KEYS.length === 0) {
@@ -70,38 +71,44 @@ const TTL = {
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
 async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Promise<string> {
-  const url = ENDPOINT[tier]
-  const key = getNextKey()
+  if (Date.now() < _rateLimitedUntil) {
+    throw new Error('Gemini temporarily rate-limited')
+  }
 
+  const url = ENDPOINT[tier]
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
     generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
   })
 
-  const res = await fetch(`${url}?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body,
-  })
+  const attempts = Math.max(1, Math.min(GEMINI_KEYS.length, 4))
+  let allRateLimited = true
+  let lastStatus = 0
 
-  if (!res.ok) {
-    // On rate-limit (429), retry once with the next key
-    if (res.status === 429) {
-      const retryKey = getNextKey()
-      const retry = await fetch(`${url}?key=${retryKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body,
-      })
-      if (!retry.ok) throw new Error(`Gemini ${tier} error: ${retry.status}`)
-      const d = await retry.json()
-      return d.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  for (let i = 0; i < attempts; i++) {
+    const key = getNextKey()
+    const res = await fetch(`${url}?key=${key}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+    })
+
+    if (res.ok) {
+      const data = await res.json()
+      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
     }
-    throw new Error(`Gemini ${tier} error: ${res.status}`)
+
+    lastStatus = res.status
+    if (res.status !== 429) {
+      allRateLimited = false
+      throw new Error(`Gemini ${tier} error: ${res.status}`)
+    }
   }
 
-  const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  if (allRateLimited) {
+    _rateLimitedUntil = Date.now() + 2 * 60 * 1000
+  }
+  throw new Error(`Gemini ${tier} error: ${lastStatus || 429}`)
 }
 
 /**

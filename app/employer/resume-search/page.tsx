@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockWorkerProfileOps, mockUserOps } from '@/lib/api'
+import { mockDb, mockWorkerProfileOps, mockUserOps, mockApplicationOps } from '@/lib/api'
 import { ragStore, ragSearch, parseRAGQuery, type RAGSearchResult } from '@/lib/ragEngine'
 import type { WorkerProfile, User } from '@/lib/types'
 import {
@@ -57,16 +57,7 @@ export default function ResumeSearchPage() {
 
       // Collect all worker IDs from applications
       for (const job of allJobs) {
-        const apps = await mockDb.getApplicationsByWorker(job.id).catch(() => [])
-        // Use findByJobId pattern instead (applications for the job)
-        const jobApps = await (async () => {
-          try {
-            const allApps = await mockDb.getAllApplications()
-            return allApps.filter(a => a.jobId === job.id)
-          } catch {
-            return []
-          }
-        })()
+        const jobApps = await mockApplicationOps.findByJobId(job.id).catch(() => [])
         for (const app of jobApps) {
           workerIds.add(app.workerId)
         }

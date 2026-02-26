@@ -142,10 +142,10 @@ export default function PostJobPage() {
     <div className="app-surface">
       <EmployerNav />
       
-      <main className="container mx-auto px-4 py-8 max-w-4xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Post a New Job</h1>
-          <p className="text-muted-foreground">Fill in the details to find the perfect match for your job</p>
+      <main className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
+        <div className="mb-6 md:mb-8">
+          <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Post a New Job</h1>
+          <p className="text-sm md:text-base text-muted-foreground">Fill in the details to find the perfect match for your job</p>
         </div>
 
         <form onSubmit={handleSubmit}>
