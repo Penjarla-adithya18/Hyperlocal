@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockWorkerProfileOps } from '@/lib/api'
+import { db, workerProfileOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User, WorkerProfile } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
@@ -48,9 +48,9 @@ export default function WorkerJobsPage() {
   const loadJobs = async () => {
     try {
       const [allJobs, profile, myApplications] = await Promise.all([
-        mockDb.getAllJobs(),
-        user ? mockWorkerProfileOps.findByUserId(user.id) : Promise.resolve(null),
-        user ? mockDb.getApplicationsByWorker(user.id) : Promise.resolve([]),
+        db.getAllJobs(),
+        user ? workerProfileOps.findByUserId(user.id) : Promise.resolve(null),
+        user ? db.getApplicationsByWorker(user.id) : Promise.resolve([]),
       ])
 
       const activeJobs = allJobs.filter((j) => j.status === 'active')
@@ -62,7 +62,7 @@ export default function WorkerJobsPage() {
         const matches = await matchJobs(
           user as User,
           activeJobs,
-          mockWorkerProfileOps.findByUserId
+          workerProfileOps.findByUserId
         )
         setMatchedJobs(matches)
       }
@@ -191,7 +191,7 @@ export default function WorkerJobsPage() {
   }
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
-    const employer = mockDb.getUserById(job.employerId)
+    const employer = db.getUserById(job.employerId)
     const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (

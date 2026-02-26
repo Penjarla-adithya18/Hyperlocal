@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
+import { db, userOps, reportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
 import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff, ChevronLeft } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -76,7 +76,7 @@ export default function WorkerChatPage() {
 
   const loadConversations = async () => {
     if (!user) return
-    const userConvs = await mockDb.getConversationsByUser(user.id)
+    const userConvs = await db.getConversationsByUser(user.id)
     setConversations(userConvs)
     const participantIds = [...new Set(
       userConvs
@@ -84,7 +84,7 @@ export default function WorkerChatPage() {
         .filter((participantId) => participantId !== user.id)
     )]
     if (participantIds.length > 0) {
-      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+      const fetchedUsers = await Promise.all(participantIds.map((id) => userOps.findById(id)))
       setUsersById((previous) => {
         const next = { ...previous }
         for (const fetched of fetchedUsers) {
@@ -99,7 +99,7 @@ export default function WorkerChatPage() {
     // Load jobs for all conversations (to check completion status)
     const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
     if (jobIds.length > 0) {
-      const allJobs = await mockDb.getAllJobs()
+      const allJobs = await db.getAllJobs()
       const jMap: Record<string, Job> = {}
       for (const j of allJobs) {
         if (jobIds.includes(j.id)) jMap[j.id] = j
@@ -109,7 +109,7 @@ export default function WorkerChatPage() {
   }
 
   const loadMessages = async (conversationId: string) => {
-    const convMessages = await mockDb.getMessagesByConversation(conversationId)
+    const convMessages = await db.getMessagesByConversation(conversationId)
     setMessages(convMessages)
     if (user) {
       setConversations((prev) =>
@@ -180,7 +180,7 @@ export default function WorkerChatPage() {
       setSelectedFile(null)
       scrollToBottom()
 
-      const message = await mockDb.sendMessage({
+      const message = await db.sendMessage({
         conversationId: selectedConversation.id,
         senderId: user.id,
         message: tempMessage.message,
@@ -218,7 +218,7 @@ export default function WorkerChatPage() {
     if (!otherUser) return
     setSubmittingReport(true)
     try {
-      await mockReportOps.create({
+      await reportOps.create({
         reporterId: user.id,
         reportedUserId: otherUser.id,
         type: 'chat_abuse',

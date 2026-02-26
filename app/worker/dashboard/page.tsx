@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { workerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
@@ -49,10 +49,10 @@ export default function WorkerDashboardPage() {
 
     try {
       const [profile, trust, apps, allJobs] = await Promise.all([
-        mockWorkerProfileOps.findByUserId(user.id),
-        mockTrustScoreOps.findByUserId(user.id),
-        mockApplicationOps.findByWorkerId(user.id),
-        mockJobOps.getAll({ status: 'active' }),
+        workerProfileOps.findByUserId(user.id),
+        trustScoreOps.findByUserId(user.id),
+        applicationOps.findByWorkerId(user.id),
+        jobOps.getAll({ status: 'active' }),
       ]);
 
       setWorkerProfile(profile);

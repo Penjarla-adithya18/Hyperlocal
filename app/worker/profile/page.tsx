@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
 import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera } from 'lucide-react';
-import { mockWorkerProfileOps, mockUserOps, mockDb } from '@/lib/api';
+import { workerProfileOps, userOps, db } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { VoiceInput } from '@/components/ui/voice-input';
@@ -54,7 +54,7 @@ export default function WorkerProfilePage() {
     if (!user) return;
 
     try {
-      const workerProfile = await mockWorkerProfileOps.findByUserId(user.id);
+      const workerProfile = await workerProfileOps.findByUserId(user.id);
       if (workerProfile) {
         setProfile(workerProfile);
         setFormData({
@@ -166,7 +166,7 @@ export default function WorkerProfilePage() {
     if (!window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
     setDeletingAccount(true);
     try {
-      await mockDb.deleteAccount(user.id);
+      await db.deleteAccount(user.id);
       logout();
       router.push('/login');
     } catch {
@@ -202,9 +202,9 @@ export default function WorkerProfilePage() {
       };
 
       if (profile) {
-        await mockWorkerProfileOps.update(user!.id, profileData);
+        await workerProfileOps.update(user!.id, profileData);
       } else {
-        await mockWorkerProfileOps.create(profileData);
+        await workerProfileOps.create(profileData);
       }
 
       // Update user profile completion status (bio is optional ï¿½ not counted)
@@ -215,7 +215,7 @@ export default function WorkerProfilePage() {
         formData.experience &&
         formData.location;
 
-      await mockUserOps.update(user!.id, { profileCompleted: !!isComplete });
+      await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
 
       toast({

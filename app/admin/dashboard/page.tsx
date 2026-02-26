@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import AdminNav from '@/components/admin/AdminNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/api'
+import { db } from '@/lib/api'
 import { Users, Briefcase, TrendingUp, AlertTriangle, IndianRupee, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -71,7 +71,7 @@ export default function AdminDashboardPage() {
     let cancelled = false
     async function loadStats() {
       try {
-        const data = await mockDb.getAdminStats()
+        const data = await db.getAdminStats()
         if (cancelled) return
         setStats({
           totalUsers: data.totalUsers ?? 0,

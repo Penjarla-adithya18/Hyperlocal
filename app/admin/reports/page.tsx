@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Textarea } from '@/components/ui/textarea'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockReportOps, mockUserOps } from '@/lib/api'
+import { reportOps, userOps } from '@/lib/api'
 import { Report, User } from '@/lib/types'
 import { AlertTriangle, CheckCircle, X } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -33,7 +33,7 @@ export default function AdminReportsPage() {
 
     async function loadReports() {
       try {
-        const allReports = await mockReportOps.getAll()
+        const allReports = await reportOps.getAll()
         if (cancelled) return
         setReports(allReports)
 
@@ -43,7 +43,7 @@ export default function AdminReportsPage() {
           if (r.reporterId) userIds.add(r.reporterId)
           if (r.reportedId || r.reportedUserId) userIds.add(r.reportedId || r.reportedUserId || '')
         }
-        const users = await Promise.all([...userIds].filter(Boolean).map((id) => mockUserOps.findById(id)))
+        const users = await Promise.all([...userIds].filter(Boolean).map((id) => userOps.findById(id)))
         if (cancelled) return
         const uMap: Record<string, User> = {}
         for (const u of users) { if (u) uMap[u.id] = u }
@@ -58,7 +58,7 @@ export default function AdminReportsPage() {
   }, [currentUser, router])
 
   const handleResolve = async (reportId: string, action: 'resolved' | 'dismissed') => {
-    const report = await mockReportOps.update(reportId, {
+    const report = await reportOps.update(reportId, {
       status: action,
       resolvedAt: new Date().toISOString(),
       resolution: resolution || `Report ${action} by admin`,

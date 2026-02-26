@@ -310,7 +310,7 @@ export function setUserPassword(phone: string, password: string): void {
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
-export const mockUserOps = {
+export const userOps = {
   getAll: async (): Promise<User[]> => {
     const res = await call<R<User[]>>('users')
     _usersCache = res.data || []
@@ -331,9 +331,9 @@ export const mockUserOps = {
   },
 }
 
-// ─── Worker Profiles ───────────────────────────────────────────────────────
+// ───Worker Profiles ───────────────────────────────────────────────────────
 
-export const mockWorkerProfileOps = {
+export const workerProfileOps = {
   findByUserId: async (userId: string): Promise<WorkerProfile | null> => {
     const res = await call<R<WorkerProfile | null>>('profiles', 'GET', { userId, role: 'worker' })
     return res.data
@@ -354,7 +354,7 @@ export const mockWorkerProfileOps = {
 
 // ─── Employer Profiles ─────────────────────────────────────────────────────
 
-export const mockEmployerProfileOps = {
+export const employerProfileOps = {
   findByUserId: async (userId: string): Promise<EmployerProfile | null> => {
     const res = await call<R<EmployerProfile | null>>('profiles', 'GET', { userId, role: 'employer' })
     return res.data
@@ -374,7 +374,7 @@ export const mockEmployerProfileOps = {
 
 // ─── Jobs ──────────────────────────────────────────────────────────────────
 
-export const mockJobOps = {
+export const jobOps = {
   findById: async (id: string): Promise<Job | null> => {
     const res = await call<R<Job | null>>('jobs', 'GET', { id })
     return res.data
@@ -407,7 +407,7 @@ export const mockJobOps = {
 
 // ─── Applications ──────────────────────────────────────────────────────────
 
-export const mockApplicationOps = {
+export const applicationOps = {
   /** Fetch a single application by ID (server-filtered, not client-side scan) */
   findById: async (id: string): Promise<Application | null> => {
     const res = await call<R<Application | null>>('applications', 'GET', { id })
@@ -433,7 +433,7 @@ export const mockApplicationOps = {
 
 // ─── Trust Scores ──────────────────────────────────────────────────────────
 
-export const mockTrustScoreOps = {
+export const trustScoreOps = {
   findByUserId: async (userId: string): Promise<TrustScore | null> => {
     const res = await call<R<TrustScore | null>>('trust-scores', 'GET', { userId })
     return res.data
@@ -446,7 +446,7 @@ export const mockTrustScoreOps = {
 
 // ─── Reports ───────────────────────────────────────────────────────────────
 
-export const mockReportOps = {
+export const reportOps = {
   create: async (report: Omit<Report, 'id' | 'createdAt'>): Promise<Report> => {
     const res = await call<R<Report>>('reports', 'POST', {}, report)
     return res.data
@@ -463,7 +463,7 @@ export const mockReportOps = {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export const mockNotificationOps = {
+export const notificationOps = {
   create: async (notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> => {
     const res = await call<R<Notification>>('notifications', 'POST', {}, notification)
     return res.data
@@ -484,7 +484,7 @@ export const mockNotificationOps = {
 
 // ─── Chat (session-based ops kept for backward compat) ─────────────────────
 
-export const mockChatOps = {
+export const chatOps = {
   findSessionsByUserId: async (userId: string) => {
     const res = await call<R<ChatConversation[]>>('chat', 'GET', { type: 'conversations', userId })
     return res.data
@@ -545,7 +545,7 @@ export const mockChatOps = {
 
 // ─── Escrow ────────────────────────────────────────────────────────────────
 
-export const mockEscrowOps = {
+export const escrowOps = {
   create: async (transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): Promise<EscrowTransaction> => {
     const res = await call<R<EscrowTransaction>>('escrow', 'POST', {}, transaction)
     return res.data
@@ -584,7 +584,7 @@ export interface Rating {
   createdAt: string
 }
 
-export const mockRatingOps = {
+export const ratingOps = {
   create: async (payload: {
     jobId: string
     applicationId?: string
@@ -620,13 +620,7 @@ export async function sendWATIAlert(
 }
 
 
-// ─── mockDb facade (drop-in replacement for the old mockDb export) ─────────
-
-// Local in-memory cache for users (used by getUserById which must be sync)
-let _usersCache: User[] = []
-let _applicationsCache: Application[] = []
-let _reportsCache: Report[] = []
-let _escrowCache: EscrowTransaction[] = []
+// ─── Database operations (Supabase-backed API) ────────────────────────────
 
 function upsertUserCache(user: User): void {
   const index = _usersCache.findIndex((item) => item.id === user.id)
@@ -634,9 +628,15 @@ function upsertUserCache(user: User): void {
   else _usersCache[index] = { ..._usersCache[index], ...user }
 }
 
-export const mockDb = {
+// Minimal cache for sync methods only
+let _usersCache: User[] = []
+let _applicationsCache: Application[] = []
+let _reportsCache: Report[] = []
+let _escrowCache: EscrowTransaction[] = []
+
+export const db = {
   async getAllUsers(): Promise<User[]> {
-    const users = await mockUserOps.getAll()
+    const users = await userOps.getAll()
     _usersCache = users
     return users
   },
@@ -646,31 +646,31 @@ export const mockDb = {
   },
 
   async updateUser(userId: string, updates: Partial<User>): Promise<User | null> {
-    return mockUserOps.update(userId, updates)
+    return userOps.update(userId, updates)
   },
 
   async getAllJobs(): Promise<Job[]> {
-    return mockJobOps.getAll()
+    return jobOps.getAll()
   },
 
   async getJobsByEmployer(employerId: string): Promise<Job[]> {
-    return mockJobOps.findByEmployerId(employerId)
+    return jobOps.findByEmployerId(employerId)
   },
 
   async getJobById(jobId: string): Promise<Job | null> {
-    return mockJobOps.findById(jobId)
+    return jobOps.findById(jobId)
   },
 
   async createJob(payload: Record<string, unknown>): Promise<Job> {
-    return mockJobOps.create(payload as unknown as Omit<Job, 'id' | 'createdAt' | 'updatedAt'>)
+    return jobOps.create(payload as unknown as Omit<Job, 'id' | 'createdAt' | 'updatedAt'>)
   },
 
   async deleteJob(jobId: string): Promise<boolean> {
-    return mockJobOps.delete(jobId)
+    return jobOps.delete(jobId)
   },
 
   async updateJob(jobId: string, updates: Partial<Job>): Promise<Job | null> {
-    return mockJobOps.update(jobId, updates)
+    return jobOps.update(jobId, updates)
   },
 
   async getAllApplications(): Promise<Application[]> {
@@ -685,11 +685,11 @@ export const mockDb = {
   },
 
   async getApplicationsByWorker(workerId: string): Promise<Application[]> {
-    return mockApplicationOps.findByWorkerId(workerId)
+    return applicationOps.findByWorkerId(workerId)
   },
 
   async createApplication(payload: Record<string, unknown>): Promise<Application> {
-    return mockApplicationOps.create(payload as unknown as Omit<Application, 'id' | 'createdAt' | 'updatedAt'>)
+    return applicationOps.create(payload as unknown as Omit<Application, 'id' | 'createdAt' | 'updatedAt'>)
   },
 
   async getConversationsByUser(userId: string): Promise<ChatConversation[]> {
@@ -752,7 +752,7 @@ export const mockDb = {
   },
 
   async getAllReports(): Promise<Report[]> {
-    const reports = await mockReportOps.getAll()
+    const reports = await reportOps.getAll()
     _reportsCache = reports || []
     return reports
   },
@@ -762,7 +762,7 @@ export const mockDb = {
   },
 
   async updateReport(reportId: string, updates: Partial<Report>): Promise<Report | null> {
-    return mockReportOps.update(reportId, updates)
+    return reportOps.update(reportId, updates)
   },
 
   /** Create escrow transaction — now properly async.

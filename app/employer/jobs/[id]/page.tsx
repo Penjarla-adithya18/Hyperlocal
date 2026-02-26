@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, sendWATIAlert } from '@/lib/api'
+import { db, escrowOps, applicationOps, ratingOps, userOps, sendWATIAlert } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Job, Application, EscrowTransaction } from '@/lib/types'
 import {
@@ -45,9 +45,9 @@ export default function EmployerJobDetailPage() {
     // Fetch job, its applications, and its escrow in parallel
     // FIX: Use findByJobId instead of fetching ALL escrow transactions
     const [jobData, allApps, escrowData] = await Promise.all([
-      mockDb.getJobById(jobId),
-      mockApplicationOps.findByJobId(jobId),
-      mockEscrowOps.findByJobId(jobId),
+      db.getJobById(jobId),
+      applicationOps.findByJobId(jobId),
+      escrowOps.findByJobId(jobId),
     ])
 
     setJob(jobData)
@@ -57,7 +57,7 @@ export default function EmployerJobDetailPage() {
     // Load worker details for trust badges
     if (allApps.length > 0) {
       const workerIds = [...new Set(allApps.map((a) => a.workerId))]
-      const workers = await Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null)))
+      const workers = await Promise.all(workerIds.map((id) => userOps.findById(id).catch(() => null)))
       const wMap: Record<string, import('@/lib/types').User> = {}
       for (const w of workers) {
         if (w) wMap[w.id] = w
@@ -93,7 +93,7 @@ export default function EmployerJobDetailPage() {
     }
     setActionLoading(true)
     try {
-      await mockRatingOps.create({ jobId, toUserId: acceptedApp.workerId, rating: ratingValue, feedback: ratingFeedback })
+      await ratingOps.create({ jobId, toUserId: acceptedApp.workerId, rating: ratingValue, feedback: ratingFeedback })
       toast({ title: 'Rating Submitted!', description: `You rated this worker ${ratingValue}/5 ⭐` })
       setRatingDone(true)
       setRatingOpen(false)
@@ -107,14 +107,14 @@ export default function EmployerJobDetailPage() {
     setActionLoading(true)
     try {
       await Promise.all([
-        mockEscrowOps.update(escrow.id, { status: 'released' }),
-        mockDb.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
+        escrowOps.update(escrow.id, { status: 'released' }),
+        db.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
       ])
       toast({ title: 'Payment Released', description: 'Net payout sent to worker.' })
       // Send WhatsApp notification to worker
       const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
       if (acceptedApp) {
-        const worker = await mockUserOps.findById(acceptedApp.workerId).catch(() => null)
+        const worker = await userOps.findById(acceptedApp.workerId).catch(() => null)
         if (worker) {
           const amount = job?.payAmount ?? job?.pay ?? 0
           sendWATIAlert('payment_released', worker.phoneNumber, { jobTitle: job?.title ?? '', amount: String(amount) })
@@ -130,8 +130,8 @@ export default function EmployerJobDetailPage() {
     setActionLoading(true)
     try {
       await Promise.all([
-        mockEscrowOps.update(escrow.id, { status: 'refunded' }),
-        mockDb.updateJob(jobId, { status: 'cancelled', paymentStatus: 'refunded' }),
+        escrowOps.update(escrow.id, { status: 'refunded' }),
+        db.updateJob(jobId, { status: 'cancelled', paymentStatus: 'refunded' }),
       ])
       toast({ title: 'Dispute Filed', description: 'Refund will be processed in 3–5 business days.' })
       setDisputeOpen(false)
@@ -143,7 +143,7 @@ export default function EmployerJobDetailPage() {
   const handleAcceptApplication = async (appId: string) => {
     setActionLoading(true)
     try {
-      await mockApplicationOps.update(appId, { status: 'accepted' })
+      await applicationOps.update(appId, { status: 'accepted' })
       toast({ title: 'Application Accepted!', description: 'The worker has been notified.' })
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
@@ -153,7 +153,7 @@ export default function EmployerJobDetailPage() {
   const handleRejectApplication = async (appId: string) => {
     setActionLoading(true)
     try {
-      await mockApplicationOps.update(appId, { status: 'rejected' })
+      await applicationOps.update(appId, { status: 'rejected' })
       toast({ title: 'Application Rejected', description: 'The worker has been notified.' })
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
@@ -163,15 +163,15 @@ export default function EmployerJobDetailPage() {
   const handleChatWithWorker = async (app: Application) => {
     if (!user || !job) return
     try {
-      let conv = await mockDb.findConversationByApplicationId(user.id, app.id).catch(() => null)
+      let conv = await db.findConversationByApplicationId(user.id, app.id).catch(() => null)
       if (!conv) {
-        const jobConv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
+        const jobConv = await db.findConversationByJob(user.id, job.id).catch(() => null)
         if (jobConv?.participants?.includes(app.workerId)) {
           conv = jobConv
         }
       }
       if (!conv) {
-        conv = await mockDb.createConversation({
+        conv = await db.createConversation({
           workerId: app.workerId,
           employerId: user.id,
           jobId: job.id,

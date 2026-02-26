@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
-import { mockDb } from '@/lib/api'
+import { db } from '@/lib/api'
 import { Job } from '@/lib/types'
 import {
   CheckCircle2,
@@ -42,13 +42,13 @@ export default function PaymentSuccessPage() {
 
   const activateJob = async () => {
     try {
-      const jobData = await mockDb.getJobById(jobId)
+      const jobData = await db.getJobById(jobId)
       if (!jobData) return
 
       // Lock payment at job level; transaction row is created when a worker is selected.
-      await mockDb.updateJob(jobId, { status: 'active', paymentStatus: 'locked' })
+      await db.updateJob(jobId, { status: 'active', paymentStatus: 'locked' })
 
-      const updatedJob = await mockDb.getJobById(jobId)
+      const updatedJob = await db.getJobById(jobId)
       setJob(updatedJob)
     } catch (err) {
       console.error('Failed to activate job', err)

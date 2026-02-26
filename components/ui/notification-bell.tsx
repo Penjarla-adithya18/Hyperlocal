@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { Separator } from '@/components/ui/separator'
 import { Bell, CheckCheck, Briefcase, MessageSquare, IndianRupee, Star, Info } from 'lucide-react'
-import { mockNotificationOps } from '@/lib/api'
+import { notificationOps } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Notification } from '@/lib/types'
 
@@ -32,7 +32,7 @@ export function NotificationBell() {
   const load = async () => {
     if (!user || document.visibilityState === 'hidden') return
     try {
-      const data = await mockNotificationOps.findByUserId(user.id)
+      const data = await notificationOps.findByUserId(user.id)
       setNotifications(data)
       setLoaded(true)
     } catch { /* silently fail */ }
@@ -65,7 +65,7 @@ export function NotificationBell() {
     if (isOpen && unreadCount > 0) {
       // Delay mark-all-read by 1.5s so user can see new ones
       setTimeout(async () => {
-        await mockNotificationOps.markAllRead().catch(() => {})
+        await notificationOps.markAllRead().catch(() => {})
         setNotifications(prev => prev.map(n => ({ ...n, isRead: true })))
       }, 1500)
     }
@@ -129,7 +129,7 @@ export function NotificationBell() {
           <>
             <Separator />
             <div className="px-4 py-2">
-              <Button variant="ghost" size="sm" className="w-full text-xs gap-1 h-8" onClick={async () => { await mockNotificationOps.markAllRead().catch(() => {}); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))) }}>
+              <Button variant="ghost" size="sm" className="w-full text-xs gap-1 h-8" onClick={async () => { await notificationOps.markAllRead().catch(() => {}); setNotifications(prev => prev.map(n => ({ ...n, isRead: true }))) }}>
                 <CheckCheck className="w-3.5 h-3.5" /> Mark all read
               </Button>
             </div>

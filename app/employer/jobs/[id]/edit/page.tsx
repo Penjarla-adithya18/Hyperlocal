@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/api'
+import { db } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { JOB_CATEGORIES } from '@/lib/aiMatching'
 import { LocationInput } from '@/components/ui/location-input'
@@ -66,7 +66,7 @@ export default function EmployerJobEditPage() {
     let cancelled = false
     async function load() {
       try {
-        const job = await mockDb.getJobById(jobId)
+        const job = await db.getJobById(jobId)
         if (!job || cancelled) return
         setSelectedSkills(job.requiredSkills ?? [])
         setForm({
@@ -117,7 +117,7 @@ export default function EmployerJobEditPage() {
     }
     setSaving(true)
     try {
-      const updated = await mockDb.updateJob(jobId, {
+      const updated = await db.updateJob(jobId, {
         title: form.title,
         description: form.description,
         category: form.category,

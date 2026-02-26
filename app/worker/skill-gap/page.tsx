@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
 import { useAuth } from '@/contexts/AuthContext'
 import { useI18n } from '@/contexts/I18nContext'
-import { mockWorkerProfileOps, mockJobOps } from '@/lib/api'
+import { workerProfileOps, jobOps } from '@/lib/api'
 import { analyzeSkillGap, SkillGapResult, SupportedLocale } from '@/lib/gemini'
 import { WorkerProfile, Job } from '@/lib/types'
 import {
@@ -47,8 +47,8 @@ export default function SkillGapPage() {
     ;(async () => {
       try {
         const [prof, allJobs] = await Promise.all([
-          mockWorkerProfileOps.findByUserId(user.id),
-          mockJobOps.getAll({ status: 'active' }),
+          workerProfileOps.findByUserId(user.id),
+          jobOps.getAll({ status: 'active' }),
         ])
         setProfile(prof)
 

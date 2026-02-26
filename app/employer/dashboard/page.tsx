@@ -20,7 +20,7 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { employerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
@@ -50,9 +50,9 @@ export default function EmployerDashboardPage() {
     async function loadDashboardData() {
       try {
         const [profile, trust, employerJobs] = await Promise.all([
-          mockEmployerProfileOps.findByUserId(user!.id),
-          mockTrustScoreOps.findByUserId(user!.id),
-          mockJobOps.findByEmployerId(user!.id),
+          employerProfileOps.findByUserId(user!.id),
+          trustScoreOps.findByUserId(user!.id),
+          jobOps.findByEmployerId(user!.id),
         ]);
         if (cancelled) return;
 
@@ -60,9 +60,9 @@ export default function EmployerDashboardPage() {
         setTrustScore(trust);
         setJobs(employerJobs);
 
-        // Fetch applications per job in parallel (N+1 � acceptable since no bulk endpoint exists)
+        // Fetch applications per job in parallel (N+1 – acceptable since no bulk endpoint exists)
         const jobIds = employerJobs.map((j) => j.id);
-        const allApps = await Promise.all(jobIds.map((id) => mockApplicationOps.findByJobId(id)));
+        const allApps = await Promise.all(jobIds.map((id) => applicationOps.findByJobId(id)));
         if (cancelled) return;
         const flatApps = allApps.flat();
         setApplications(flatApps);

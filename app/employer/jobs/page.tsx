@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockJobOps } from '@/lib/api'
+import { jobOps } from '@/lib/api'
 import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -26,7 +26,7 @@ export default function EmployerJobsPage() {
 
     async function loadJobs() {
       try {
-        const employerJobs = await mockJobOps.findByEmployerId(user!.id)
+        const employerJobs = await jobOps.findByEmployerId(user!.id)
         if (!cancelled) setJobs(employerJobs)
       } catch {
         toast({ title: 'Error', description: 'Failed to load jobs', variant: 'destructive' })
@@ -42,7 +42,7 @@ export default function EmployerJobsPage() {
   const handleDeleteJob = useCallback(async (jobId: string) => {
     if (!confirm('Are you sure you want to delete this job?')) return
     try {
-      await mockJobOps.delete(jobId)
+      await jobOps.delete(jobId)
       // Remove locally instead of full re-fetch
       setJobs((prev) => prev.filter((j) => j.id !== jobId))
       toast({ title: 'Success', description: 'Job deleted successfully' })

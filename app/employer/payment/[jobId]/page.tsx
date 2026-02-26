@@ -9,7 +9,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Separator } from '@/components/ui/separator'
-import { mockJobOps } from '@/lib/api'
+import { jobOps } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Job } from '@/lib/types'
 import {
@@ -57,7 +57,7 @@ export default function PaymentPage() {
     let cancelled = false
     async function load() {
       try {
-        const data = await mockJobOps.findById(jobId)
+        const data = await jobOps.findById(jobId)
         if (!cancelled) {
           setJob(data)
           setLoading(false)

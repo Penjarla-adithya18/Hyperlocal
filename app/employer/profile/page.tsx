@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
 import { Building2, Loader2, Save, Shield, TrendingUp, Trash2 } from 'lucide-react';
-import { mockEmployerProfileOps, mockUserOps, mockDb } from '@/lib/api';
+import { employerProfileOps, userOps, db } from '@/lib/api';
 import { EmployerProfile } from '@/lib/types';
 import { LocationInput } from '@/components/ui/location-input';
 import { useToast } from '@/hooks/use-toast';
@@ -73,7 +73,7 @@ export default function EmployerProfilePage() {
     if (!user) return;
 
     try {
-      const employerProfile = await mockEmployerProfileOps.findByUserId(user.id);
+      const employerProfile = await employerProfileOps.findByUserId(user.id);
       if (employerProfile) {
         setProfile(employerProfile);
         setFormData({
@@ -124,9 +124,9 @@ export default function EmployerProfilePage() {
       };
 
       if (profile) {
-        await mockEmployerProfileOps.update(user!.id, profileData);
+        await employerProfileOps.update(user!.id, profileData);
       } else {
-        await mockEmployerProfileOps.create(profileData);
+        await employerProfileOps.create(profileData);
       }
 
       // Update user profile completion status
@@ -136,7 +136,7 @@ export default function EmployerProfilePage() {
         formData.businessType &&
         formData.description;
 
-      await mockUserOps.update(user!.id, { profileCompleted: !!isComplete });
+      await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
 
       toast({
@@ -160,7 +160,7 @@ export default function EmployerProfilePage() {
     if (!user) return;
     setDeletingAccount(true);
     try {
-      await mockDb.deleteAccount(user.id);
+      await db.deleteAccount(user.id);
       toast({
         title: 'Account Deleted',
         description: 'Your account has been permanently deleted',

@@ -9,7 +9,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockUserOps } from '@/lib/api'
+import { userOps } from '@/lib/api'
 import { User } from '@/lib/types'
 import { Search, Star, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -42,7 +42,7 @@ export default function AdminUsersPage() {
     let cancelled = false
     async function loadUsers() {
       try {
-        const allUsers = await mockUserOps.getAll()
+        const allUsers = await userOps.getAll()
         if (!cancelled) setUsers(allUsers.filter((u) => u.role !== 'admin'))
       } catch (err) {
         console.error('Failed to load users:', err)
@@ -54,7 +54,7 @@ export default function AdminUsersPage() {
 
   const handleBanUser = useCallback(async (userId: string) => {
     if (!confirm('Are you sure you want to suspend this user? They will be unable to use the platform.')) return
-    const updated = await mockUserOps.update(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
+    const updated = await userOps.update(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
     if (updated) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
       toast({ title: 'Account Suspended', description: 'User has been suspended from the platform' })
@@ -63,7 +63,7 @@ export default function AdminUsersPage() {
 
   const handleVerifyUser = useCallback(async (userId: string) => {
     // BUG FIX: Restore trustScore to 50 (base score) when un-suspending, not 0
-    const updated = await mockUserOps.update(userId, { isVerified: true, trustLevel: 'active' as const, trustScore: 50 })
+    const updated = await userOps.update(userId, { isVerified: true, trustLevel: 'active' as const, trustScore: 50 })
     if (updated) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
       toast({ title: 'Account Restored', description: 'User account has been restored' })
