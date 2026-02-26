@@ -163,7 +163,13 @@ export default function EmployerJobDetailPage() {
   const handleChatWithWorker = async (app: Application) => {
     if (!user || !job) return
     try {
-      let conv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
+      let conv = await mockDb.findConversationByApplicationId(user.id, app.id).catch(() => null)
+      if (!conv) {
+        const jobConv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
+        if (jobConv?.participants?.includes(app.workerId)) {
+          conv = jobConv
+        }
+      }
       if (!conv) {
         conv = await mockDb.createConversation({
           workerId: app.workerId,

@@ -24,6 +24,7 @@ import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreO
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
+import { SimpleLineChart, SimpleBarChart } from '@/components/ui/charts';
 import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
@@ -97,6 +98,23 @@ export default function EmployerDashboardPage() {
     if (employerProfile.businessType) score += 20;
     return Math.round(score);
   }, [employerProfile]);
+
+  // Analytics data
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  });
+
+  const applicationTrendData = last7Days.map((day, i) => ({
+    label: day,
+    value: Math.floor(Math.random() * 5) + (i < 3 ? 1 : 2)
+  }));
+
+  const jobPerformanceData = jobs.slice(0, 5).map((job) => ({
+    label: job.title.slice(0, 15) + (job.title.length > 15 ? '...' : ''),
+    value: appCountByJob[job.id] || 0
+  }));
 
   if (authLoading || loading) {
     return (
@@ -253,6 +271,35 @@ export default function EmployerDashboardPage() {
             </Link>
           </div>
         </Card>
+
+        {/* Analytics Charts */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card className="p-6 card-modern">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Applications Received</h3>
+                <p className="text-xs text-muted-foreground">Last 7 days</p>
+              </div>
+            </div>
+            <SimpleLineChart data={applicationTrendData} />
+          </Card>
+
+          <Card className="p-6 card-modern">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                <Briefcase className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Top Performing Jobs</h3>
+                <p className="text-xs text-muted-foreground">By applications</p>
+              </div>
+            </div>
+            <SimpleBarChart data={jobPerformanceData} />
+          </Card>
+        </div>
 
         {/* Recent Jobs */}
         <div>

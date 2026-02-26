@@ -96,7 +96,11 @@ async function refreshSessionIfNeeded(): Promise<void> {
   if (!res.ok) {
     if (res.status === 401) {
       setSessionToken(null)
-      if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
+      if (typeof window !== 'undefined') {
+        localStorage.removeItem('currentUser')
+        // Redirect to login on session refresh failure
+        window.location.href = '/login'
+      }
     }
     return
   }
@@ -177,8 +181,13 @@ async function call<T>(
 
       if (!res.ok) {
         if (res.status === 401) {
+          // Clear session and redirect to login
           setSessionToken(null)
-          if (typeof window !== 'undefined') localStorage.removeItem('currentUser')
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('currentUser')
+            // Redirect to login on 401 (session expired or invalid)
+            window.location.href = '/login'
+          }
         }
         // Retry on 5xx server errors
         if (res.status >= 500 && attempt < MAX_RETRIES) {
@@ -484,13 +493,28 @@ export const mockChatOps = {
     const res = await call<R<ChatMessage[]>>('chat', 'GET', { type: 'messages', conversationId: sessionId })
     return res.data
   },
-  sendMessage: async (msg: { sessionId?: string; conversationId?: string; senderId: string; message: string }) => {
+  sendMessage: async (msg: { 
+    sessionId?: string; 
+    conversationId?: string; 
+    senderId: string; 
+    message: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
+    attachmentType?: string;
+    attachmentSize?: number;
+  }) => {
     const conversationId = msg.conversationId ?? msg.sessionId ?? ''
     const res = await call<R<ChatMessage>>('chat', 'POST', {}, {
       type: 'message',
       conversationId,
       senderId: msg.senderId,
       message: msg.message,
+      ...(msg.attachmentUrl && {
+        attachmentUrl: msg.attachmentUrl,
+        attachmentName: msg.attachmentName,
+        attachmentType: msg.attachmentType,
+        attachmentSize: msg.attachmentSize,
+      }),
     })
     return res.data
   },
@@ -678,7 +702,15 @@ export const mockDb = {
     return res.data
   },
 
-  async sendMessage(payload: { conversationId: string; senderId: string; message: string }): Promise<ChatMessage> {
+  async sendMessage(payload: { 
+    conversationId: string; 
+    senderId: string; 
+    message: string;
+    attachmentUrl?: string;
+    attachmentName?: string;
+    attachmentType?: string;
+    attachmentSize?: number;
+  }): Promise<ChatMessage> {
     const res = await call<R<ChatMessage>>('chat', 'POST', {}, { type: 'message', ...payload })
     return res.data
   },
@@ -699,6 +731,19 @@ export const mockDb = {
       const convs = await this.getConversationsByUser(userId)
       return convs.find(c => c.jobId === jobId) ?? null
     } catch { return null }
+  },
+
+  async findConversationByApplicationId(userId: string, applicationId: string): Promise<ChatConversation | null> {
+    try {
+      const res = await call<R<ChatConversation[]>>('chat', 'GET', {
+        type: 'conversations',
+        userId,
+        applicationId,
+      })
+      return res.data?.[0] ?? null
+    } catch {
+      return null
+    }
   },
 
   async deleteAccount(userId: string): Promise<void> {

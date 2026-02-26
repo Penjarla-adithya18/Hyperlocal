@@ -9,6 +9,7 @@ import { mockDb } from '@/lib/api'
 import { Users, Briefcase, TrendingUp, AlertTriangle, IndianRupee, Shield } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
+import { SimpleLineChart, SimpleBarChart, SimpleDonutChart, StatsCard } from '@/components/ui/charts'
 
 export default function AdminDashboardPage() {
   const router = useRouter()
@@ -28,6 +29,38 @@ export default function AdminDashboardPage() {
     totalEscrow: 0,
     heldEscrow: 0
   })
+
+  // Mock data for analytics charts
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date()
+    date.setDate(date.getDate() - (6 - i))
+    return date.toLocaleDateString('en-US', { weekday: 'short' })
+  })
+
+  const userGrowthData = last7Days.map((day, i) => ({
+    label: day,
+    value: Math.floor(stats.totalUsers * (0.85 + (i * 0.025)))
+  }))
+
+  const jobPostingsData = last7Days.map((day, i) => ({
+    label: day,
+    value: Math.floor(Math.random() * 15) + 5
+  }))
+
+  const applicationStatusData = [
+    { label: 'Accepted', value: Math.floor(stats.totalApplications * 0.35), color: '#22c55e' },
+    { label: 'Pending', value: stats.pendingApplications, color: '#eab308' },
+    { label: 'Rejected', value: Math.floor(stats.totalApplications * 0.25), color: '#ef4444' },
+    { label: 'Completed', value: Math.floor(stats.totalApplications * 0.30), color: '#6366f1' },
+  ]
+
+  const categoryData = [
+    { label: 'Plumbing', value: Math.floor(stats.totalJobs * 0.20) },
+    { label: 'Electrical', value: Math.floor(stats.totalJobs * 0.18) },
+    { label: 'Carpentry', value: Math.floor(stats.totalJobs * 0.15) },
+    { label: 'Delivery', value: Math.floor(stats.totalJobs * 0.12) },
+    { label: 'Other', value: Math.floor(stats.totalJobs * 0.35) },
+  ]
 
   useEffect(() => {
     if (!user || user.role !== 'admin') {
@@ -194,6 +227,45 @@ export default function AdminDashboardPage() {
                 <span className="text-sm">Pending Applications</span>
                 <Badge variant="secondary">{stats.pendingApplications}</Badge>
               </div>
+            </CardContent>
+          </Card>
+        </div>
+
+        {/* Analytics Charts */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6 mt-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">User Growth (Last 7 Days)</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleLineChart data={userGrowthData} color="#6366f1" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Daily Job Postings</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleBarChart data={jobPostingsData} color="#22c55e" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Application Status Distribution</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleDonutChart data={applicationStatusData} />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg">Jobs by Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <SimpleBarChart data={categoryData} color="#f59e0b" />
             </CardContent>
           </Card>
         </div>

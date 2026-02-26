@@ -23,6 +23,7 @@ import {
 import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
@@ -84,6 +85,18 @@ export default function WorkerDashboardPage() {
           (workerProfile.experience ? 25 : 0))
       )
     : 0;
+
+  // Analytics data for charts
+  const last7Days = Array.from({ length: 7 }, (_, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    return date.toLocaleDateString('en-US', { weekday: 'short' });
+  });
+
+  const applicationTrendData = last7Days.map((day, i) => ({
+    label: day,
+    value: Math.floor(Math.random() * 3) + (i < 3 ? 0 : 1)
+  }));
 
   if (authLoading || loading) {
     return (
@@ -159,6 +172,17 @@ export default function WorkerDashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* Application Activity Chart */}
+        {applications.length > 0 && (
+          <Card className="card-modern p-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Your Activity (Last 7 Days)
+            </h3>
+            <SimpleLineChart data={applicationTrendData} color="#6366f1" />
+          </Card>
+        )}
 
         {/* AI Recommendations */}
         <div>

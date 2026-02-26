@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, LogOut, Settings, Wallet, Target, Menu } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';

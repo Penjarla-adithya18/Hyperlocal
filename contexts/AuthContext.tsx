@@ -54,6 +54,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     logoutUser();
+    // Redirect to login page after logout
+    if (typeof window !== 'undefined') {
+      window.location.href = '/login';
+    }
   }, []);
 
   const updateUser = useCallback((updates: Partial<User>) => {
