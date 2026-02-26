@@ -58,10 +58,9 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
-        // Extract OTP from message (for demo purposes)
-        const otpMatch = result.message.match(/OTP is: (\d{6})/);
-        if (otpMatch) {
-          setGeneratedOtp(otpMatch[1]);
+        // Set the OTP from the response (for demo/dev display)
+        if (result.otp) {
+          setGeneratedOtp(result.otp);
         }
         toast({
           title: 'OTP Sent',

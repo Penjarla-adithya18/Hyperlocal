@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
@@ -34,7 +34,9 @@ export function EmployerNav() {
     { href: '/employer/resume-search', label: t('nav.employer.aiSearch'), icon: Sparkles, mobileLabel: 'AI', badge: undefined, highlight: false },
   ];
 
-  const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [];
+  const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [
+    { href: '/employer/profile', label: t('nav.profile'), icon: User },
+  ];
 
   return (
     <>
