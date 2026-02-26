@@ -403,7 +403,7 @@ export default function JobDetailsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8">
           <p className="text-center text-muted-foreground">Loading...</p>
@@ -414,7 +414,7 @@ export default function JobDetailsPage() {
 
   if (!job) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8">
           <Card>
@@ -431,7 +431,7 @@ export default function JobDetailsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <WorkerNav />
       
       <main className="container mx-auto px-4 py-8 max-w-5xl">

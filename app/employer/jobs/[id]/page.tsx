@@ -246,7 +246,7 @@ export default function EmployerJobDetailPage() {
   }
 
   if (loading) return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <EmployerNav />
       <div className="flex items-center justify-center h-64">
         <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
@@ -255,7 +255,7 @@ export default function EmployerJobDetailPage() {
   )
 
   if (!job) return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <EmployerNav />
       <main className="container mx-auto px-4 py-8">
         <Card><CardContent className="py-10 text-center text-muted-foreground">Job not found</CardContent></Card>
@@ -268,7 +268,7 @@ export default function EmployerJobDetailPage() {
   const netPayout = amount - commission
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <EmployerNav />
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
 

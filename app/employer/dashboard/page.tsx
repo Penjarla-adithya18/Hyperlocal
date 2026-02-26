@@ -111,7 +111,7 @@ export default function EmployerDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <EmployerNav />
         <div className="container mx-auto px-4 py-8 space-y-8">
           <div className="flex items-start justify-between">
@@ -166,7 +166,7 @@ export default function EmployerDashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Briefcase className="w-8 h-8 text-accent" />
             </div>
@@ -174,7 +174,7 @@ export default function EmployerDashboardPage() {
             <div className="text-sm text-muted-foreground">{t('employer.dash.activeJobs')}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Users className="w-8 h-8 text-primary" />
             </div>
@@ -182,7 +182,7 @@ export default function EmployerDashboardPage() {
             <div className="text-sm text-muted-foreground">{t('employer.dash.totalApps')}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Clock className="w-8 h-8 text-accent" />
             </div>
@@ -190,7 +190,7 @@ export default function EmployerDashboardPage() {
             <div className="text-sm text-muted-foreground">{t('employer.dash.pendingApps')}</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Star className="w-8 h-8 text-primary" />
             </div>
@@ -228,7 +228,7 @@ export default function EmployerDashboardPage() {
         )}
 
         {/* Quick Actions */}
-        <Card className="p-6">
+        <Card className="p-6 transition-all duration-200 hover:shadow-md">
           <h2 className="text-xl font-semibold mb-4">{t('employer.dash.quickActions')}</h2>
           <div className="grid md:grid-cols-3 gap-4">
             <Link href="/employer/jobs/post">
@@ -282,7 +282,7 @@ export default function EmployerDashboardPage() {
           </div>
 
           {jobs.length === 0 ? (
-            <Card className="p-12 text-center">
+            <Card className="p-12 text-center transition-all duration-200 hover:shadow-md">
               <div className="w-16 h-16 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                 <Briefcase className="w-8 h-8 text-accent" />
               </div>
@@ -365,7 +365,7 @@ export default function EmployerDashboardPage() {
 
         {/* Trust Score Info */}
         {trustScore && (
-          <Card className="p-6 bg-linear-to-br from-primary/5 to-accent/5">
+          <Card className="bg-linear-to-br from-primary/5 to-accent/5 p-6 transition-all duration-200 hover:shadow-md">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                 <Star className="w-6 h-6 text-primary" />

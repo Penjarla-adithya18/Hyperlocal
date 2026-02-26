@@ -48,6 +48,7 @@ function loadGoogleMaps(key: string): Promise<void> {
 /**
  * Smart location input:
  * - When NEXT_PUBLIC_GOOGLE_MAPS_API_KEY is set: uses Google Places Autocomplete
+ *   (all place types: cities, neighbourhoods, streets, landmarks, businesses)
  * - Otherwise: plain text input (still works fine)
  */
 export function LocationInput({ value, onChange, placeholder, id, required, className }: LocationInputProps) {
@@ -59,7 +60,6 @@ export function LocationInput({ value, onChange, placeholder, id, required, clas
     loadGoogleMaps(MAPS_API_KEY).then(() => {
       if (!inputRef.current || !window.google?.maps?.places) return
       const autocomplete = new window.google.maps.places.Autocomplete(inputRef.current, {
-        types: ['(cities)'],
         componentRestrictions: { country: 'in' },
         fields: ['formatted_address', 'geometry'],
       })

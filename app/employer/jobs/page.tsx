@@ -178,7 +178,7 @@ export default function EmployerJobsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <EmployerNav />
         <div className="container mx-auto px-4 py-8">
           <p className="text-center text-muted-foreground">Loading jobs...</p>
@@ -188,7 +188,7 @@ export default function EmployerJobsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <EmployerNav />
       
       <main className="container mx-auto px-4 py-8">

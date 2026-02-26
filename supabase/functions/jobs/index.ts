@@ -105,6 +105,8 @@ Deno.serve(async (req: Request) => {
         category: body.category || 'Other',
         required_skills: body.requiredSkills || [],
         location: body.location || '',
+        latitude: body.locationLat ?? null,
+        longitude: body.locationLng ?? null,
         pay,
         pay_amount: pay,
         pay_type: body.payType || 'hourly',

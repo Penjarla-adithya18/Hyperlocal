@@ -1,205 +1,231 @@
-'use client';
-
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
-import { Briefcase, Shield, Sparkles, MessageSquare, Clock, MapPin, Star, TrendingUp } from 'lucide-react';
+import {
+  BriefcaseBusiness,
+  Sparkles,
+  LineChart,
+  ShieldCheck,
+  MessageCircle,
+  Star,
+  MapPin,
+  Clock3,
+  Shield,
+  CheckCircle2,
+  TrendingUp,
+} from 'lucide-react';
 
 export default function LandingPage() {
   return (
-    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
-      {/* Header */}
-      <header className="border-b bg-background/80 backdrop-blur-sm sticky top-0 z-50">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-sky-50 text-slate-800 antialiased transition-colors duration-200 dark:bg-slate-900 dark:text-slate-100">
+      <nav className="sticky top-0 z-50 border-b border-gray-100 bg-white/80 backdrop-blur-md dark:border-gray-700 dark:bg-slate-800/90">
+        <div className="mx-auto flex h-20 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
           <div className="flex items-center gap-2">
-            <div className="w-10 h-10 rounded-xl bg-primary flex items-center justify-center">
-              <Briefcase className="w-6 h-6 text-primary-foreground" />
-            </div>
-            <span className="text-xl font-bold text-primary">HyperLocal Jobs</span>
+            <BriefcaseBusiness className="h-7 w-7 text-blue-500 dark:text-blue-400" />
+            <span className="text-xl font-bold text-blue-500 dark:text-white">HyperLocal Jobs</span>
           </div>
-          <nav className="hidden md:flex items-center gap-6">
-            <Link href="#features" className="text-sm font-medium hover:text-primary transition-colors">
+
+          <div className="hidden space-x-8 md:flex">
+            <Link className="text-gray-600 transition-colors hover:text-blue-500 dark:text-gray-300 dark:hover:text-emerald-400" href="#features">
               Features
             </Link>
-            <Link href="#how-it-works" className="text-sm font-medium hover:text-primary transition-colors">
+            <Link className="text-gray-600 transition-colors hover:text-blue-500 dark:text-gray-300 dark:hover:text-emerald-400" href="#how-it-works">
               How It Works
             </Link>
-            <Link href="#safety" className="text-sm font-medium hover:text-primary transition-colors">
+            <Link className="text-gray-600 transition-colors hover:text-blue-500 dark:text-gray-300 dark:hover:text-emerald-400" href="#safety">
               Safety
             </Link>
-          </nav>
-          <div className="flex items-center gap-3">
-            <Link href="/login">
-              <Button variant="ghost" size="sm">Log In</Button>
-            </Link>
-            <Link href="/signup">
-              <Button size="sm" className="bg-primary hover:bg-primary/90">Get Started</Button>
-            </Link>
+          </div>
+
+          <div className="flex items-center gap-5">
+            <Button asChild size="sm" className="hidden min-w-28 sm:inline-flex">
+              <Link href="/login">Log In</Link>
+            </Button>
+            <Button asChild size="sm" className="min-w-28">
+              <Link href="/signup">Get Started</Link>
+            </Button>
           </div>
         </div>
-      </header>
+      </nav>
 
-      {/* Hero Section */}
-      <section className="container mx-auto px-4 py-20 md:py-28">
-        <div className="max-w-4xl mx-auto text-center">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium mb-6">
-            <Sparkles className="w-4 h-4" />
+      <section className="relative overflow-hidden bg-[linear-gradient(120deg,#d8eee6_0%,#dbe9f8_38%,#d3e3f6_100%)] pb-24 pt-20 dark:bg-[linear-gradient(120deg,#0f172a_0%,#0f2238_45%,#0f2f2a_100%)] lg:pb-32 lg:pt-32">
+        <div className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute inset-0 bg-[radial-gradient(circle_at_15%_85%,rgba(16,185,129,0.24),transparent_42%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,0.2),transparent_44%)] dark:hidden" />
+          <div className="absolute inset-0 hidden bg-[radial-gradient(circle_at_14%_86%,rgba(16,185,129,0.14),transparent_45%),radial-gradient(circle_at_86%_12%,rgba(59,130,246,0.16),transparent_46%)] dark:block" />
+          <div className="absolute right-0 top-0 h-[620px] w-[620px] translate-x-1/3 -translate-y-1/4 rounded-full bg-blue-200/35 blur-3xl dark:bg-blue-800/20" />
+          <div className="absolute bottom-0 left-0 h-[620px] w-[620px] -translate-x-1/3 translate-y-1/4 rounded-full bg-green-200/35 blur-3xl dark:bg-emerald-800/20" />
+        </div>
+
+        <div className="mx-auto max-w-4xl px-4 text-center sm:px-6 lg:px-8">
+          <div className="mb-8 inline-flex items-center gap-2 rounded-full border border-blue-100 bg-blue-50 px-4 py-1.5 text-sm font-semibold text-blue-500 dark:border-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+            <Sparkles className="h-4 w-4" />
             AI-Powered Job Matching
           </div>
-          <h1 className="text-4xl md:text-6xl font-bold text-balance mb-6 bg-linear-to-r from-primary via-accent to-primary bg-clip-text text-transparent">
-            Find Local Jobs That Match Your Skills
+
+          <h1 className="mb-6 text-5xl font-extrabold leading-tight tracking-tight text-gray-900 dark:text-white md:text-6xl">
+            Find Local Jobs That <br className="hidden md:block" />
+            <span className="text-blue-500 dark:text-blue-400">Match Your Skills</span>
           </h1>
-          <p className="text-lg md:text-xl text-muted-foreground text-balance mb-10 leading-relaxed">
-            Connect with local employers for gig, part-time, and full-time opportunities. 
-            Secure payments, verified employers, and AI-powered matching ensure you find the perfect job.
+
+          <p className="mx-auto mb-10 max-w-2xl text-xl leading-relaxed text-gray-600 dark:text-gray-300">
+            Connect with local employers for gig, part-time, and full-time opportunities. Secure payments,
+            verified employers, and AI-powered matching ensure you find the perfect job.
           </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-            <Link href="/signup?role=worker">
-              <Button size="lg" className="w-full sm:w-auto bg-primary hover:bg-primary/90 text-lg px-8">
-                Find Jobs
-              </Button>
-            </Link>
-            <Link href="/signup?role=employer">
-              <Button size="lg" variant="outline" className="w-full sm:w-auto text-lg px-8">
-                Post a Job
-              </Button>
-            </Link>
+
+          <div className="mb-8 flex flex-col items-center justify-center gap-4 sm:flex-row">
+            <Button asChild size="lg" className="w-full sm:w-auto">
+              <Link href="/signup?role=worker">Find Jobs</Link>
+            </Button>
+            <Button asChild size="lg" className="w-full sm:w-auto">
+              <Link href="/signup?role=employer">Post a Job</Link>
+            </Button>
           </div>
-          <p className="text-sm text-muted-foreground mt-6">
-            Join 10,000+ workers and employers in your community
-          </p>
+
+          <p className="text-sm text-gray-500 dark:text-gray-400">Join 10,000+ workers and employers in your community</p>
         </div>
       </section>
 
-      {/* Stats Section */}
-      <section className="container mx-auto px-4 pb-20">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-4xl mx-auto">
-          {[
-            { value: '10,000+', label: 'Active Users' },
-            { value: '5,000+', label: 'Jobs Posted' },
-            { value: '95%', label: 'Payment Success' },
-            { value: '4.8/5', label: 'Average Rating' },
-          ].map((stat, i) => (
-            <Card key={i} className="p-6 text-center border-2 hover:border-primary/50 transition-colors">
-              <div className="text-3xl font-bold text-primary mb-1">{stat.value}</div>
-              <div className="text-sm text-muted-foreground">{stat.label}</div>
-            </Card>
-          ))}
+      <section className="border-y border-gray-100 bg-white py-12 dark:border-gray-800 dark:bg-slate-800/50">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="grid grid-cols-2 gap-6 md:grid-cols-4 md:gap-8">
+            {[['10,000+', 'Active Users', 'text-blue-500'], ['5,000+', 'Jobs Posted', 'text-blue-500'], ['95%', 'Payment Success', 'text-emerald-500'], ['4.8/5', 'Average Rating', 'text-emerald-500']].map(
+              ([value, label, tone]) => (
+                <div
+                  key={String(label)}
+                  className="rounded-2xl border border-gray-100 bg-white p-6 text-center shadow-sm dark:border-gray-700 dark:bg-slate-800"
+                >
+                  <div className={`mb-2 text-3xl font-bold md:text-4xl ${tone}`}>{value}</div>
+                  <div className="text-sm font-medium uppercase tracking-wide text-gray-500 dark:text-gray-400">{label}</div>
+                </div>
+              )
+            )}
+          </div>
         </div>
       </section>
 
-      {/* Features Section */}
-      <section id="features" className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Why Choose HyperLocal Jobs?</h2>
-            <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
-              Built for local communities with trust, safety, and convenience at the core
+      <section className="relative py-20 lg:py-28" id="features">
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_15%_20%,rgba(56,189,248,0.14),transparent_35%),radial-gradient(circle_at_86%_75%,rgba(16,185,129,0.14),transparent_35%)] dark:bg-[radial-gradient(circle_at_15%_20%,rgba(56,189,248,0.12),transparent_35%),radial-gradient(circle_at_86%_75%,rgba(16,185,129,0.1),transparent_35%)]" />
+
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 text-center lg:mb-14">
+            <span className="inline-flex items-center rounded-full border border-blue-200 bg-white px-4 py-1 text-xs font-bold uppercase tracking-[0.18em] text-blue-600 dark:border-blue-800 dark:bg-slate-800 dark:text-blue-300">
+              Core Benefits
+            </span>
+            <h2 className="mt-5 text-3xl font-black tracking-tight text-slate-900 dark:text-white sm:text-5xl">
+              Why Choose{' '}
+              <span className="bg-gradient-to-r from-blue-500 to-emerald-500 bg-clip-text text-transparent">HyperLocal Jobs?</span>
+            </h2>
+            <p className="mx-auto mt-4 max-w-2xl text-base leading-relaxed text-slate-600 dark:text-slate-300 sm:text-lg">
+              Built for local communities with trust, safety, and convenience at the core.
             </p>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-8 max-w-6xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-2 xl:grid-cols-3">
             {[
               {
-                icon: Sparkles,
+                icon: LineChart,
                 title: 'AI-Powered Matching',
-                description: 'Get personalized job recommendations based on your skills, experience, and availability.',
-                color: 'text-primary',
+                desc: 'Get personalized job recommendations based on your skills, experience, and availability.',
+                stripe: 'from-blue-500 to-cyan-500',
+                tone: 'text-blue-500 dark:text-blue-300',
               },
               {
-                icon: Shield,
-                title: 'Secure Escrow Payments',
-                description: 'Payments held securely until job completion. No fraud, no payment worries.',
-                color: 'text-accent',
+                icon: ShieldCheck,
+                title: 'Secure Escrow',
+                desc: 'Payments held securely until job completion. No fraud, no payment worries.',
+                stripe: 'from-emerald-500 to-teal-500',
+                tone: 'text-emerald-500 dark:text-emerald-300',
               },
               {
-                icon: MessageSquare,
-                title: 'Safe In-App Chat',
-                description: 'Communicate securely without sharing personal contact information.',
-                color: 'text-primary',
+                icon: MessageCircle,
+                title: 'Instant Chat',
+                desc: 'Communicate securely without sharing personal contact information.',
+                stripe: 'from-violet-500 to-indigo-500',
+                tone: 'text-violet-500 dark:text-violet-300',
               },
               {
                 icon: Star,
                 title: 'Trust Score System',
-                description: 'Build your reputation through ratings and successful job completions.',
-                color: 'text-accent',
+                desc: 'Build your reputation through ratings and successful job completions.',
+                stripe: 'from-amber-500 to-orange-500',
+                tone: 'text-amber-500 dark:text-amber-300',
               },
               {
                 icon: MapPin,
                 title: 'Hyperlocal Focus',
-                description: 'Find opportunities right in your neighborhood or nearby areas.',
-                color: 'text-primary',
+                desc: 'Find opportunities right in your neighborhood or nearby areas.',
+                stripe: 'from-orange-500 to-rose-500',
+                tone: 'text-orange-500 dark:text-orange-300',
               },
               {
-                icon: Clock,
+                icon: Clock3,
                 title: 'Flexible Work',
-                description: 'Part-time, full-time, gig work - choose what fits your schedule.',
-                color: 'text-accent',
+                desc: 'Part-time, full-time, gig work - choose what fits your schedule.',
+                stripe: 'from-cyan-500 to-sky-500',
+                tone: 'text-cyan-500 dark:text-cyan-300',
               },
-            ].map((feature, i) => (
-              <Card key={i} className="p-6 hover:shadow-lg transition-all hover:scale-105 hover:border-primary/50">
-                <div className={`w-12 h-12 rounded-xl bg-primary/10 flex items-center justify-center mb-4 ${feature.color}`}>
-                  <feature.icon className="w-6 h-6" />
+            ].map((feature) => (
+              <div
+                key={feature.title}
+                className="group overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm transition-all hover:-translate-y-1 hover:shadow-md dark:border-slate-700 dark:bg-slate-800"
+              >
+                <div className={`h-1.5 w-full bg-gradient-to-r ${feature.stripe}`} />
+                <div className="p-7">
+                  <div className={`mb-5 inline-flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 dark:bg-slate-700/70 ${feature.tone}`}>
+                    <feature.icon className="h-5 w-5" />
+                  </div>
+                  <h3 className="mb-2 text-xl font-bold text-slate-900 dark:text-white">{feature.title}</h3>
+                  <p className="text-sm leading-relaxed text-slate-600 dark:text-slate-300">{feature.desc}</p>
                 </div>
-                <h3 className="text-xl font-semibold mb-2">{feature.title}</h3>
-                <p className="text-muted-foreground leading-relaxed">{feature.description}</p>
-              </Card>
+              </div>
             ))}
           </div>
         </div>
       </section>
 
-      {/* How It Works */}
-      <section id="how-it-works" className="py-20">
-        <div className="container mx-auto px-4">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">How It Works</h2>
-            <p className="text-lg text-muted-foreground">Simple steps to get started</p>
+      <section className="border-y border-gray-100 bg-white py-20 dark:border-gray-800 dark:bg-slate-800/50 lg:py-32" id="how-it-works">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-16 text-center">
+            <h2 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white md:text-4xl">How It Works</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">Simple steps to get started</p>
           </div>
 
-          <div className="grid md:grid-cols-2 gap-12 max-w-5xl mx-auto">
-            {/* For Workers */}
+          <div className="grid gap-16 lg:grid-cols-2 lg:gap-24">
             <div>
-              <h3 className="text-2xl font-bold mb-6 text-primary">For Workers</h3>
-              <div className="space-y-6">
+              <h3 className="mb-8 text-2xl font-bold text-blue-500 dark:text-blue-400">For Workers</h3>
+              <div className="space-y-8">
                 {[
-                  { step: '1', title: 'Sign Up', desc: 'Create your account with phone verification' },
-                  { step: '2', title: 'Complete Profile', desc: 'Add your skills and availability for better matches' },
-                  { step: '3', title: 'Browse Jobs', desc: 'Get AI-powered recommendations or search manually' },
-                  { step: '4', title: 'Apply & Chat', desc: 'Apply to jobs and chat securely with employers' },
-                  { step: '5', title: 'Get Paid', desc: 'Complete the job and receive secure payment' },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="shrink-0 w-10 h-10 rounded-full bg-primary text-primary-foreground flex items-center justify-center font-bold">
-                      {item.step}
-                    </div>
+                  ['1', 'Sign Up', 'Create your account with phone verification'],
+                  ['2', 'Complete Profile', 'Add your skills and availability for better matches'],
+                  ['3', 'Browse Jobs', 'Get AI-powered recommendations or search manually'],
+                  ['4', 'Apply & Chat', 'Apply to jobs and chat securely with employers'],
+                  ['5', 'Get Paid', 'Complete the job and receive secure payment'],
+                ].map(([step, title, desc]) => (
+                  <div key={String(step)} className="flex gap-4">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-blue-500 text-lg font-bold text-white">{step}</div>
                     <div>
-                      <h4 className="font-semibold mb-1">{item.title}</h4>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      <h4 className="mb-1 text-lg font-bold text-gray-900 dark:text-white">{title}</h4>
+                      <p className="text-gray-600 dark:text-gray-400">{desc}</p>
                     </div>
                   </div>
                 ))}
               </div>
             </div>
 
-            {/* For Employers */}
             <div>
-              <h3 className="text-2xl font-bold mb-6 text-accent">For Employers</h3>
-              <div className="space-y-6">
+              <h3 className="mb-8 text-2xl font-bold text-emerald-500 dark:text-green-400">For Employers</h3>
+              <div className="space-y-8">
                 {[
-                  { step: '1', title: 'Register', desc: 'Create your business account with verification' },
-                  { step: '2', title: 'Post a Job', desc: 'Describe your job requirements and pay' },
-                  { step: '3', title: 'Deposit Escrow', desc: 'Secure payment to make job visible to workers' },
-                  { step: '4', title: 'Review Applications', desc: 'See matched candidates with AI scores' },
-                  { step: '5', title: 'Hire & Complete', desc: 'Chat, select worker, and confirm completion' },
-                ].map((item, i) => (
-                  <div key={i} className="flex gap-4">
-                    <div className="shrink-0 w-10 h-10 rounded-full bg-accent text-accent-foreground flex items-center justify-center font-bold">
-                      {item.step}
-                    </div>
+                  ['1', 'Register', 'Create your business account with verification'],
+                  ['2', 'Post a Job', 'Describe your job requirements and pay'],
+                  ['3', 'Deposit Escrow', 'Secure payment to make job visible to workers'],
+                  ['4', 'Review Applications', 'See matched candidates with AI scores'],
+                  ['5', 'Hire & Complete', 'Chat, select worker, and confirm completion'],
+                ].map(([step, title, desc]) => (
+                  <div key={String(step)} className="flex gap-4">
+                    <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-emerald-500 text-lg font-bold text-white">{step}</div>
                     <div>
-                      <h4 className="font-semibold mb-1">{item.title}</h4>
-                      <p className="text-sm text-muted-foreground">{item.desc}</p>
+                      <h4 className="mb-1 text-lg font-bold text-gray-900 dark:text-white">{title}</h4>
+                      <p className="text-gray-600 dark:text-gray-400">{desc}</p>
                     </div>
                   </div>
                 ))}
@@ -209,128 +235,105 @@ export default function LandingPage() {
         </div>
       </section>
 
-      {/* Safety Section */}
-      <section id="safety" className="py-20 bg-muted/30">
-        <div className="container mx-auto px-4">
-          <div className="max-w-4xl mx-auto">
-            <div className="text-center mb-12">
-              <div className="w-16 h-16 rounded-2xl bg-primary/10 flex items-center justify-center mx-auto mb-4">
-                <Shield className="w-8 h-8 text-primary" />
+      <section className="py-20 lg:py-32" id="safety">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-16 text-center">
+            <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full bg-green-100 text-emerald-500 dark:bg-green-900/30">
+              <Shield className="h-8 w-8" />
+            </div>
+            <h2 className="mb-4 text-3xl font-bold text-gray-900 dark:text-white md:text-4xl">Your Safety is Our Priority</h2>
+            <p className="text-lg text-gray-600 dark:text-gray-400">Multiple layers of protection ensure a safe experience for everyone</p>
+          </div>
+
+          <div className="grid gap-6 md:grid-cols-2">
+            {[
+              ['Escrow Payment Protection', 'Money is held securely and only released after job completion', 'blue'],
+              ['Phone Verification', 'All users verified with OTP to prevent fake accounts', 'green'],
+              ['Trust Score System', 'Behavioral tracking ensures reliable users get priority', 'blue'],
+              ['Fraud Detection', 'AI-powered detection of scams and suspicious activity', 'green'],
+              ['Report & Support', 'Easy reporting system for issues and 24/7 support', 'blue'],
+              ['Rating & Reviews', 'Community feedback helps identify trustworthy users', 'green'],
+            ].map(([title, desc, tone]) => (
+              <div key={String(title)} className="flex items-start gap-4 rounded-2xl border border-gray-100 bg-white p-6 shadow-sm dark:border-gray-700 dark:bg-slate-800">
+                <CheckCircle2 className={`mt-1 h-5 w-5 ${tone === 'blue' ? 'text-blue-500 dark:text-blue-400' : 'text-emerald-500 dark:text-green-400'}`} />
+                <div>
+                  <h4 className="mb-2 text-lg font-bold text-gray-900 dark:text-white">{title}</h4>
+                  <p className="text-sm text-gray-600 dark:text-gray-400">{desc}</p>
+                </div>
               </div>
-              <h2 className="text-3xl md:text-4xl font-bold mb-4">Your Safety is Our Priority</h2>
-              <p className="text-lg text-muted-foreground">
-                Multiple layers of protection ensure a safe experience for everyone
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="py-20 lg:py-32">
+        <div className="mx-auto max-w-4xl px-4 sm:px-6 lg:px-8">
+          <div className="relative overflow-hidden rounded-3xl border border-gray-100 bg-white p-10 text-center shadow-xl dark:border-gray-700 dark:bg-slate-800 md:p-16">
+            <div className="absolute right-0 top-0 h-64 w-64 translate-x-1/2 -translate-y-1/2 rounded-full bg-green-100 blur-2xl dark:bg-green-900/10" />
+            <div className="absolute bottom-0 left-0 h-64 w-64 -translate-x-1/2 translate-y-1/2 rounded-full bg-blue-100 blur-2xl dark:bg-blue-900/10" />
+            <div className="relative z-10">
+              <TrendingUp className="mx-auto mb-6 h-12 w-12 text-emerald-500" />
+              <h2 className="mb-6 text-3xl font-bold text-gray-900 dark:text-white md:text-4xl">Ready to Get Started?</h2>
+              <p className="mx-auto mb-10 max-w-lg text-lg text-gray-600 dark:text-gray-300">
+                Join thousands of workers and employers finding opportunities in their local community
               </p>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-6">
-              {[
-                {
-                  title: 'Escrow Payment Protection',
-                  desc: 'Money is held securely and only released after job completion',
-                },
-                {
-                  title: 'Phone Verification',
-                  desc: 'All users verified with OTP to prevent fake accounts',
-                },
-                {
-                  title: 'Trust Score System',
-                  desc: 'Behavioral tracking ensures reliable users get priority',
-                },
-                {
-                  title: 'Fraud Detection',
-                  desc: 'AI-powered detection of scams and suspicious activity',
-                },
-                {
-                  title: 'Report & Support',
-                  desc: 'Easy reporting system for issues and 24/7 support',
-                },
-                {
-                  title: 'Rating & Reviews',
-                  desc: 'Community feedback helps identify trustworthy users',
-                },
-              ].map((item, i) => (
-                <div key={i} className="flex gap-4 p-4 rounded-lg bg-background">
-                  <div className="shrink-0 w-2 h-2 rounded-full bg-primary mt-2" />
-                  <div>
-                    <h4 className="font-semibold mb-1">{item.title}</h4>
-                    <p className="text-sm text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-              ))}
+              <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
+                <Button asChild size="lg" className="w-full sm:w-auto">
+                  <Link href="/signup?role=worker">Sign Up as Worker</Link>
+                </Button>
+                <Button asChild size="lg" className="w-full sm:w-auto">
+                  <Link href="/signup?role=employer">Sign Up as Employer</Link>
+                </Button>
+              </div>
             </div>
           </div>
         </div>
       </section>
 
-      {/* CTA Section */}
-      <section className="py-20">
-        <div className="container mx-auto px-4">
-          <Card className="max-w-4xl mx-auto p-10 md:p-16 text-center bg-linear-to-br from-primary/10 via-accent/10 to-primary/10 border-2 border-primary/20">
-            <TrendingUp className="w-16 h-16 text-primary mx-auto mb-6" />
-            <h2 className="text-3xl md:text-4xl font-bold mb-4">Ready to Get Started?</h2>
-            <p className="text-lg text-muted-foreground mb-8 max-w-2xl mx-auto">
-              Join thousands of workers and employers finding opportunities in their local community
-            </p>
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link href="/signup?role=worker">
-                <Button size="lg" className="w-full sm:w-auto bg-primary hover:bg-primary/90">
-                  Sign Up as Worker
-                </Button>
-              </Link>
-              <Link href="/signup?role=employer">
-                <Button size="lg" variant="outline" className="w-full sm:w-auto">
-                  Sign Up as Employer
-                </Button>
-              </Link>
-            </div>
-          </Card>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="border-t bg-muted/30 py-12">
-        <div className="container mx-auto px-4">
-          <div className="grid md:grid-cols-4 gap-8 mb-8">
-            <div>
-              <div className="flex items-center gap-2 mb-4">
-                <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-                  <Briefcase className="w-5 h-5 text-primary-foreground" />
-                </div>
-                <span className="font-bold text-primary">HyperLocal Jobs</span>
+      <footer className="border-t border-gray-100 bg-white pb-8 pt-16 dark:border-gray-800 dark:bg-slate-800">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
+          <div className="mb-12 grid grid-cols-2 gap-8 md:grid-cols-4">
+            <div className="col-span-2 md:col-span-1">
+              <div className="mb-4 flex items-center gap-2">
+                <BriefcaseBusiness className="h-6 w-6 text-blue-500" />
+                <span className="text-lg font-bold text-blue-500 dark:text-white">HyperLocal Jobs</span>
               </div>
-              <p className="text-sm text-muted-foreground">
+              <p className="text-sm leading-relaxed text-gray-500 dark:text-gray-400">
                 AI-powered local job matching platform connecting workers and employers.
               </p>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">For Workers</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/signup?role=worker" className="hover:text-primary transition-colors">Find Jobs</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">How It Works</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Safety Tips</Link></li>
+              <h4 className="mb-4 font-bold text-gray-900 dark:text-white">For Workers</h4>
+              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <li><Link className="transition-colors hover:text-emerald-500" href="/signup?role=worker">Find Jobs</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="#how-it-works">How It Works</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="#safety">Safety Tips</Link></li>
               </ul>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">For Employers</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="/signup?role=employer" className="hover:text-primary transition-colors">Post Jobs</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Pricing</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Guidelines</Link></li>
+              <h4 className="mb-4 font-bold text-gray-900 dark:text-white">For Employers</h4>
+              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <li><Link className="transition-colors hover:text-emerald-500" href="/signup?role=employer">Post Jobs</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/pricing">Pricing</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/guidelines">Guidelines</Link></li>
               </ul>
             </div>
+
             <div>
-              <h4 className="font-semibold mb-4">Support</h4>
-              <ul className="space-y-2 text-sm text-muted-foreground">
-                <li><Link href="#" className="hover:text-primary transition-colors">Help Center</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Contact Us</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Terms of Service</Link></li>
-                <li><Link href="#" className="hover:text-primary transition-colors">Privacy Policy</Link></li>
+              <h4 className="mb-4 font-bold text-gray-900 dark:text-white">Support</h4>
+              <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-400">
+                <li><Link className="transition-colors hover:text-emerald-500" href="/help-center">Help Center</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/contact">Contact Us</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/terms">Terms of Service</Link></li>
+                <li><Link className="transition-colors hover:text-emerald-500" href="/privacy">Privacy Policy</Link></li>
               </ul>
             </div>
           </div>
-          <div className="border-t pt-8 text-center text-sm text-muted-foreground">
-            <p>&copy; 2026 HyperLocal Jobs. All rights reserved. Built for local communities.</p>
+
+          <div className="border-t border-gray-100 pt-8 text-center dark:border-gray-800">
+            <p className="text-sm text-gray-500 dark:text-gray-500">© 2024 HyperLocal Jobs. All rights reserved. Built for local communities.</p>
           </div>
         </div>
       </footer>
