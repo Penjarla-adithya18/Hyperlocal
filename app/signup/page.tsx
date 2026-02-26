@@ -4,6 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { User, Briefcase, Loader2, Phone, ShieldCheck, Lock, Building2, Store } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendOTP, verifyOTP, registerUser, setUserPassword } from '@/lib/auth';
@@ -33,6 +34,7 @@ function SignupPageContent() {
 
   const [otpSent, setOtpSent] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState('');
+  const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
@@ -118,6 +120,15 @@ function SignupPageContent() {
     e.preventDefault();
 
     // Validation
+    if (!agreeToTerms) {
+      toast({
+        title: 'Terms Required',
+        description: 'Please accept the Terms and Conditions to continue',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (!formData.fullName || formData.fullName.length < 3) {
       toast({
         title: 'Invalid Name',
@@ -468,9 +479,28 @@ function SignupPageContent() {
                   </div>
                 </div>
 
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    id="terms"
+                    checked={agreeToTerms}
+                    onCheckedChange={(checked) => setAgreeToTerms(checked === true)}
+                    className="mt-1"
+                  />
+                  <label htmlFor="terms" className="text-sm text-gray-600 dark:text-slate-400 leading-relaxed cursor-pointer">
+                    I agree to the{' '}
+                    <Link href="/terms" target="_blank" className="text-emerald-500 hover:text-emerald-600 font-medium underline">
+                      Terms and Conditions
+                    </Link>{' '}
+                    and{' '}
+                    <Link href="/privacy" target="_blank" className="text-emerald-500 hover:text-emerald-600 font-medium underline">
+                      Privacy Policy
+                    </Link>
+                  </label>
+                </div>
+
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || !agreeToTerms}
                   className="group relative flex w-full transform justify-center rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-4 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:from-emerald-600 hover:to-blue-600 hover:shadow-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
                 >
                   {loading ? (

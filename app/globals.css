@@ -3,6 +3,69 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* Professional Mobile-First SaaS Utilities */
+@layer utilities {
+  /* Touch-friendly targets */
+  .touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Modern card styles */
+  .card-modern {
+    @apply rounded-2xl border border-border/50 bg-card shadow-sm;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  .card-modern:hover {
+    @apply shadow-md -translate-y-0.5 border-border;
+  }
+  
+  /* Professional shadows */
+  .shadow-soft {
+    box-shadow: 0 2px 8px -2px rgba(0, 0, 0, 0.08);
+  }
+  
+  .shadow-soft-lg {
+    box-shadow: 0 8px 24px -4px rgba(0, 0, 0, 0.12);
+  }
+  
+  /* Smooth transitions */
+  .transition-smooth {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  
+  /* Mobile-optimized text */
+  .text-mobile-heading {
+    @apply text-xl font-bold tracking-tight;
+  }
+  
+  .text-mobile-body {
+    @apply text-sm leading-relaxed;
+  }
+  
+  /* Status badges */
+  .badge-status {
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium;
+  }
+  
+  /* Bottom nav safe area */
+  .pb-safe {
+    padding-bottom: max(1.5rem, env(safe-area-inset-bottom));
+  }
+  
+  /* Glass morphism */
+  .glass {
+    @apply bg-background/80 backdrop-blur-xl border border-border/50;
+  }
+  
+  /* Smooth scroll */
+  .smooth-scroll {
+    scroll-behavior: smooth;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
 :root {
   --background: oklch(0.97 0.015 230);
   --foreground: oklch(0.22 0.03 245);

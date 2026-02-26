@@ -89,7 +89,7 @@ export default function WorkerDashboardPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-24">
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
           <div className="flex items-center justify-center h-64">
             <div className="text-center">
               <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
@@ -105,7 +105,7 @@ export default function WorkerDashboardPage() {
     <div className="app-surface">
       <WorkerNav />
 
-      <main className="container mx-auto px-4 py-8 pb-24 space-y-8">
+      <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-8">
         {/* Welcome Section */}
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold mb-2 break-words">Welcome back, {user?.fullName}!</h1>
@@ -150,7 +150,7 @@ export default function WorkerDashboardPage() {
             { icon: TrendingUp, label: 'Avg Rating', value: trustScore?.averageRating.toFixed(1) || 'N/A', iconBg: 'bg-emerald-500/10', iconColor: 'text-emerald-600 dark:text-emerald-400' },
             { icon: CheckCircle2, label: 'Completed Jobs', value: applications.filter(a => a.status === 'completed').length, iconBg: 'bg-indigo-500/10', iconColor: 'text-indigo-600 dark:text-indigo-400' },
           ].map(({ icon: Icon, label, value, iconBg, iconColor }) => (
-            <div key={label} className="glass-card rounded-2xl p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-xl">
+            <div key={label} className="card-modern p-5 transition-smooth hover:-translate-y-0.5 hover:shadow-soft-lg">
               <div className={`inline-flex h-10 w-10 items-center justify-center rounded-xl mb-3 ${iconBg}`}>
                 <Icon className={`w-5 h-5 ${iconColor}`} />
               </div>
@@ -193,7 +193,7 @@ export default function WorkerDashboardPage() {
               </Card>
             ) : (
               recommendedJobs.map(({ job, matchScore }) => (
-                <Card key={job.id} className="p-6 hover:shadow-lg transition-all hover:border-primary/50">
+                <Card key={job.id} className="card-modern p-6 hover:shadow-soft-lg transition-smooth hover:border-primary/50">
                   <div className="flex items-start justify-between mb-4">
                     <div>
                       <h3 className="font-semibold mb-1 text-balance">{job.title}</h3>
@@ -250,7 +250,7 @@ export default function WorkerDashboardPage() {
 
             <div className="grid gap-4">
               {applications.slice(0, 3).map((app) => (
-                <Card key={app.id} className="p-6">
+                <Card key={app.id} className="card-modern p-6">
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold mb-1">Application #{app.id.slice(-8)}</h3>

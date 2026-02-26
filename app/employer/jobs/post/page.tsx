@@ -43,8 +43,8 @@ export default function PostJobPage() {
     description: '',
     category: '',
     location: '',
-    locationLat: undefined as number | undefined,
-    locationLng: undefined as number | undefined,
+    latitude: undefined as number | undefined,
+    longitude: undefined as number | undefined,
     payAmount: '',
     payType: 'hourly' as 'hourly' | 'fixed',
     duration: '',
@@ -142,7 +142,7 @@ export default function PostJobPage() {
     <div className="app-surface">
       <EmployerNav />
       
-      <main className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8 max-w-4xl">
         <div className="mb-6 md:mb-8">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Post a New Job</h1>
           <p className="text-sm md:text-base text-muted-foreground">Fill in the details to find the perfect match for your job</p>
@@ -202,7 +202,7 @@ export default function PostJobPage() {
                   <LocationInput
                     id="location"
                     value={formData.location}
-                    onChange={(val, latLng) => setFormData({ ...formData, location: val, locationLat: latLng?.lat, locationLng: latLng?.lng })}
+                    onChange={(val, latLng) => setFormData({ ...formData, location: val, latitude: latLng?.lat, longitude: latLng?.lng })}
                     placeholder="City, Area"
                     required
                   />

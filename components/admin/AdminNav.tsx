@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationBell } from '@/components/ui/notification-bell'
+import { cn } from '@/lib/utils'
 
 export default function AdminNav() {
   const router = useRouter()
@@ -28,12 +29,15 @@ export default function AdminNav() {
   ]
 
   return (
-    <nav className="bg-card border-b border-border sticky top-0 z-50">
+    <nav className="glass border-b sticky top-0 z-50 shadow-soft">
       <div className="container mx-auto px-4">
-        <div className="flex justify-between items-center h-16">
+        <div className="flex justify-between items-center h-14">
           <div className="flex items-center gap-8">
-            <button onClick={() => router.push('/admin/dashboard')} className="text-xl font-bold text-primary">
-              HyperLocal Admin
+            <button onClick={() => router.push('/admin/dashboard')} className="text-lg font-bold text-primary touch-target flex items-center gap-2">
+              <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-sm">
+                <LayoutDashboard className="w-4 h-4 text-primary-foreground" />
+              </div>
+              <span className="hidden sm:inline">HyperLocal Admin</span>
             </button>
             <div className="hidden md:flex gap-1">
               {navItems.map((item) => (
@@ -41,7 +45,7 @@ export default function AdminNav() {
                   key={item.path}
                   variant="ghost"
                   onClick={() => router.push(item.path)}
-                  className="gap-2"
+                  className="gap-2 touch-target transition-smooth"
                 >
                   <item.icon className="h-4 w-4" />
                   {item.label}
@@ -50,20 +54,20 @@ export default function AdminNav() {
             </div>
           </div>
 
-          <div className="hidden md:flex items-center gap-4">
-            <div className="text-sm text-muted-foreground">
-              Admin: {user?.fullName}
+          <div className="hidden md:flex items-center gap-2">
+            <div className="text-sm text-muted-foreground px-3 py-1.5 bg-muted/50 rounded-lg">
+              {user?.fullName}
             </div>
             <NotificationBell />
-            <Button variant="outline" onClick={handleLogout} className="gap-2 h-9 w-9 p-0 sm:w-auto sm:px-3">
+            <Button variant="outline" onClick={handleLogout} className="gap-2 touch-target transition-smooth">
               <LogOut className="h-4 w-4" />
-              <span className="hidden sm:inline">Logout</span>
+              Logout
             </Button>
           </div>
 
           <Button
             variant="ghost"
-            className="md:hidden"
+            className="md:hidden touch-target"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
           >
             {mobileMenuOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
@@ -80,7 +84,7 @@ export default function AdminNav() {
                   router.push(item.path)
                   setMobileMenuOpen(false)
                 }}
-                className="w-full justify-start gap-2"
+                className="w-full justify-start gap-2 touch-target"
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
@@ -92,7 +96,7 @@ export default function AdminNav() {
             <Button
               variant="outline"
               onClick={handleLogout}
-              className="w-full justify-start gap-2"
+              className="w-full justify-start gap-2 touch-target"
             >
               <LogOut className="h-4 w-4" />
               Logout

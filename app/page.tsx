@@ -227,32 +227,37 @@ export default function LandingPage() {
       </section>
 
       {/* FOOTER */}
-      <footer className="glass-nav border-t py-12">
+      <footer className="glass-nav border-t py-8 md:py-12">
         <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-10 grid grid-cols-2 gap-8 md:grid-cols-4">
-            <div className="col-span-2 md:col-span-1">
+          <div className="mb-8 md:mb-10">
+            {/* Logo and Tagline - Full Width on Mobile */}
+            <div className="mb-6 md:mb-8">
               <div className="mb-3 flex items-center gap-2">
                 <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-gradient-to-br from-emerald-500 to-blue-600">
                   <BriefcaseBusiness className="h-4 w-4 text-white" />
                 </div>
                 <span className="font-bold gradient-text">HyperLocal Jobs</span>
               </div>
-              <p className="text-sm leading-relaxed text-foreground/50">AI-powered local job matching platform connecting workers and employers.</p>
+              <p className="text-sm leading-relaxed text-foreground/50 max-w-md">AI-powered local job matching platform connecting workers and employers.</p>
             </div>
-            {([
-              ['For Workers',[['Find Jobs','/signup?role=worker'],['How It Works','#how-it-works'],['Safety Tips','#safety']]],
-              ['For Employers',[['Post Jobs','/signup?role=employer'],['Pricing','/pricing'],['Guidelines','/guidelines']]],
-              ['Support',[['Help Center','/help-center'],['Contact Us','/contact'],['Terms','/terms'],['Privacy','/privacy']]],
-            ] as [string,[string,string][]][]).map(([heading,links]) => (
-              <div key={heading}>
-                <h4 className="mb-3 text-sm font-bold">{heading}</h4>
-                <ul className="space-y-2">
-                  {links.map(([label,href]) => (
-                    <li key={label}><Link href={href} className="text-sm text-foreground/50 transition-colors hover:text-primary">{label}</Link></li>
-                  ))}
-                </ul>
-              </div>
-            ))}
+            
+            {/* Links Grid - Better Mobile Layout */}
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-3 md:gap-8">
+              {([
+                ['For Workers',[['Find Jobs','/signup?role=worker'],['How It Works','#how-it-works'],['Safety Tips','#safety']]],
+                ['For Employers',[['Post Jobs','/signup?role=employer'],['Pricing','/pricing'],['Guidelines','/guidelines']]],
+                ['Support',[['Help Center','/help-center'],['Contact Us','/contact'],['Terms','/terms'],['Privacy','/privacy']]],
+              ] as [string,[string,string][]][]).map(([heading,links]) => (
+                <div key={heading}>
+                  <h4 className="mb-3 text-sm font-bold">{heading}</h4>
+                  <ul className="space-y-2">
+                    {links.map(([label,href]) => (
+                      <li key={label}><Link href={href} className="text-sm text-foreground/50 transition-colors hover:text-primary">{label}</Link></li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
           </div>
           <div className="border-t border-border/40 pt-6 text-center">
             <p className="text-xs text-foreground/35">© 2026 HyperLocal Jobs. All rights reserved. Built for local communities.</p>

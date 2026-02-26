@@ -16,7 +16,7 @@ import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } 
 import { translateDynamic, SupportedLocale } from '@/lib/gemini'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
-  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag
+  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag, MessageCircle
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -477,6 +477,14 @@ export default function JobDetailsPage() {
                       </div>
                     </div>
                   )}
+                  <Button
+                    className="w-full mt-4"
+                    variant="outline"
+                    onClick={() => router.push('/worker/chat')}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    Message Employer
+                  </Button>
                 </CardContent>
               </Card>
             ) : showApplicationForm ? (

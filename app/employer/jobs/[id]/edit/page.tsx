@@ -150,7 +150,7 @@ export default function EmployerJobEditPage() {
     return (
       <div className="app-surface">
         <EmployerNav />
-        <main className="container mx-auto px-4 py-8 max-w-4xl space-y-4">
+        <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl space-y-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-lg" />)}
         </main>
       </div>
@@ -160,7 +160,7 @@ export default function EmployerJobEditPage() {
   return (
     <div className="app-surface">
       <EmployerNav />
-      <main className="container mx-auto px-4 py-6 md:py-8 max-w-4xl">
+      <main className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8 max-w-4xl">
         <div className="mb-6 flex items-center gap-3">
           <Link href={`/employer/jobs/${jobId}`}>
             <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>

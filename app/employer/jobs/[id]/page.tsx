@@ -190,7 +190,7 @@ export default function EmployerJobDetailPage() {
   if (!job) return (
     <div className="app-surface">
       <EmployerNav />
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 pb-28 md:pb-8">
         <Card><CardContent className="py-10 text-center text-muted-foreground">Job not found</CardContent></Card>
       </main>
     </div>
@@ -203,7 +203,7 @@ export default function EmployerJobDetailPage() {
   return (
     <div className="app-surface">
       <EmployerNav />
-      <main className="container mx-auto px-4 py-8 max-w-4xl space-y-6">
+      <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl space-y-6">
 
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">

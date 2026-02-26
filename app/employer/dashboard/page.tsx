@@ -18,9 +18,11 @@ import {
   Eye,
   Clock,
   CheckCircle2,
+  AlertCircle,
 } from 'lucide-react';
 import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Progress } from '@/components/ui/progress';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { useI18n } from '@/contexts/I18nContext';
 
@@ -85,6 +87,17 @@ export default function EmployerDashboardPage() {
   const totalApplications = applications.length;
   const pendingApplications = useMemo(() => applications.filter((a) => a.status === 'pending').length, [applications]);
 
+  // Calculate employer profile completeness
+  const profileCompleteness = useMemo(() => {
+    if (!employerProfile) return 0;
+    let score = 0;
+    if (employerProfile.businessName) score += 30;
+    if (employerProfile.location) score += 25;
+    if (employerProfile.description && employerProfile.description.length > 20) score += 25;
+    if (employerProfile.businessType) score += 20;
+    return Math.round(score);
+  }, [employerProfile]);
+
   if (authLoading || loading) {
     return (
       <div className="app-surface">
@@ -125,7 +138,7 @@ export default function EmployerDashboardPage() {
     <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
       <EmployerNav />
 
-      <div className="container mx-auto px-4 py-8 space-y-8">
+      <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-8">
         {/* Welcome Section */}
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div>
@@ -139,6 +152,30 @@ export default function EmployerDashboardPage() {
             </Button>
           </Link>
         </div>
+
+        {/* Profile Completion Alert */}
+        {profileCompleteness < 100 && (
+          <Card className="border-accent/20 bg-accent/10 p-6 transition-all duration-200 hover:shadow-md">
+            <div className="flex flex-col sm:flex-row items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
+                <AlertCircle className="w-5 h-5 text-accent" />
+              </div>
+              <div className="flex-1">
+                <h3 className="font-semibold mb-1">Complete Your Business Profile</h3>
+                <p className="text-sm text-muted-foreground mb-3">
+                  A complete profile builds trust with workers and improves application quality
+                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-muted-foreground">Profile Completeness</span>
+                    <span className="font-semibold">{profileCompleteness}%</span>
+                  </div>
+                  <Progress value={profileCompleteness} className="h-2" />
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -248,7 +285,7 @@ export default function EmployerDashboardPage() {
           ) : (
             <div className="grid md:grid-cols-2 gap-6">
               {jobs.slice(0, 4).map((job) => (
-                <Card key={job.id} className="p-6 hover:shadow-lg transition-all hover:border-accent/50">
+                <Card key={job.id} className="card-modern p-6 hover:shadow-soft-lg transition-smooth hover:border-accent/50">
                   <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
                       <h3 className="font-semibold mb-1 text-balance">{job.title}</h3>

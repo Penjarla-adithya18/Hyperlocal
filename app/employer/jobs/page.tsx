@@ -168,7 +168,7 @@ export default function EmployerJobsPage() {
     return (
       <div className="app-surface">
         <EmployerNav />
-        <div className="container mx-auto px-4 py-8">
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
           <p className="text-center text-muted-foreground">Loading jobs...</p>
         </div>
       </div>
@@ -179,7 +179,7 @@ export default function EmployerJobsPage() {
     <div className="app-surface">
       <EmployerNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto px-4 py-8 pb-28 md:pb-8">
         <div className="flex justify-between items-center mb-8">
           <div>
             <h1 className="text-3xl font-bold text-foreground mb-2">My Jobs</h1>
