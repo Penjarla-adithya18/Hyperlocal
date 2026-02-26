@@ -66,7 +66,7 @@ export default function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <AdminNav />
         <div className="container mx-auto px-4 py-8">
           <Skeleton className="h-8 w-48 mb-2" />
@@ -82,7 +82,7 @@ export default function AdminDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <AdminNav />
       
       <main className="container mx-auto px-4 py-8">
@@ -92,7 +92,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/admin/users')}>
+          <Card className="cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-md" onClick={() => router.push('/admin/users')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Total Users</CardTitle>
               <Users className="h-4 w-4 text-muted-foreground" />
@@ -106,7 +106,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-md" onClick={() => router.push('/admin/dashboard')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Jobs Posted</CardTitle>
               <Briefcase className="h-4 w-4 text-muted-foreground" />
@@ -120,7 +120,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Applications</CardTitle>
               <TrendingUp className="h-4 w-4 text-muted-foreground" />
@@ -133,7 +133,7 @@ export default function AdminDashboardPage() {
             </CardContent>
           </Card>
 
-          <Card className="hover:border-primary transition-colors cursor-pointer" onClick={() => router.push('/admin/reports')}>
+          <Card className="cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:border-primary hover:shadow-md" onClick={() => router.push('/admin/reports')}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
               <CardTitle className="text-sm font-medium">Reports</CardTitle>
               <AlertTriangle className="h-4 w-4 text-muted-foreground" />
@@ -153,7 +153,7 @@ export default function AdminDashboardPage() {
         </div>
 
         <div className="grid md:grid-cols-2 gap-6">
-          <Card>
+          <Card className="transition-all duration-200 hover:shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <IndianRupee className="h-5 w-5" />
@@ -163,16 +163,16 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Escrow Volume</p>
-                <p className="text-2xl font-bold">₹{stats.totalEscrow.toLocaleString()}</p>
+                <p className="text-2xl font-bold">â‚¹{stats.totalEscrow.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Currently Held in Escrow</p>
-                <p className="text-xl font-semibold text-primary">₹{stats.heldEscrow.toLocaleString()}</p>
+                <p className="text-xl font-semibold text-primary">â‚¹{stats.heldEscrow.toLocaleString()}</p>
               </div>
             </CardContent>
           </Card>
 
-          <Card>
+          <Card className="transition-all duration-200 hover:shadow-md">
             <CardHeader>
               <CardTitle className="flex items-center gap-2">
                 <Shield className="h-5 w-5" />
@@ -201,3 +201,8 @@ export default function AdminDashboardPage() {
     </div>
   )
 }
+
+
+
+
+

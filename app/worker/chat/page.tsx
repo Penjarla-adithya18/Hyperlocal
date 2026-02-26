@@ -10,11 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
-import { Send, Search, MessageCircle, Flag, AlertCircle, Languages, Loader2 } from 'lucide-react'
+import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
-import { translateChatMessage, type SupportedLocale } from '@/lib/gemini'
-import { useI18n } from '@/contexts/I18nContext'
 import {
   Dialog,
   DialogContent,
@@ -26,10 +24,12 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function WorkerChatPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { locale } = useI18n()
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -41,10 +41,10 @@ export default function WorkerChatPage() {
   const [reportReason, setReportReason] = useState('spam')
   const [reportDescription, setReportDescription] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
-  const [translatedMessages, setTranslatedMessages] = useState<Record<string, string>>({})
-  const [translatingId, setTranslatingId] = useState<string | null>(null)
+  const [voiceListening, setVoiceListening] = useState(false)
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
-  const { locale } = useI18n()
 
   useEffect(() => {
     if (user) {
@@ -71,50 +71,41 @@ export default function WorkerChatPage() {
 
   const loadConversations = async () => {
     if (!user) return
-    try {
-      const userConvs = await mockDb.getConversationsByUser(user.id)
-      setConversations(userConvs)
-      const participantIds = [...new Set(
-        userConvs
-          .flatMap((conversation) => conversation.participants)
-          .filter((participantId) => participantId !== user.id)
-      )]
-      if (participantIds.length > 0) {
-        const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
-        setUsersById((previous) => {
-          const next = { ...previous }
-          for (const fetched of fetchedUsers) {
-            if (fetched) next[fetched.id] = fetched
-          }
-          return next
-        })
-      }
-      if (userConvs.length > 0 && !selectedConversation) {
-        setSelectedConversation(userConvs[0])
-      }
-      // Load jobs for all conversations (to check completion status)
-      const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
-      if (jobIds.length > 0) {
-        const allJobs = await mockDb.getAllJobs()
-        const jMap: Record<string, Job> = {}
-        for (const j of allJobs) {
-          if (jobIds.includes(j.id)) jMap[j.id] = j
+    const userConvs = await mockDb.getConversationsByUser(user.id)
+    setConversations(userConvs)
+    const participantIds = [...new Set(
+      userConvs
+        .flatMap((conversation) => conversation.participants)
+        .filter((participantId) => participantId !== user.id)
+    )]
+    if (participantIds.length > 0) {
+      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+      setUsersById((previous) => {
+        const next = { ...previous }
+        for (const fetched of fetchedUsers) {
+          if (fetched) next[fetched.id] = fetched
         }
-        setJobsById(jMap)
+        return next
+      })
+    }
+    if (userConvs.length > 0 && !selectedConversation) {
+      setSelectedConversation(userConvs[0])
+    }
+    // Load jobs for all conversations (to check completion status)
+    const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
+    if (jobIds.length > 0) {
+      const allJobs = await mockDb.getAllJobs()
+      const jMap: Record<string, Job> = {}
+      for (const j of allJobs) {
+        if (jobIds.includes(j.id)) jMap[j.id] = j
       }
-    } catch (error) {
-      console.error('Failed to load conversations:', error)
-      toast({ title: 'Connection Error', description: 'Unable to load conversations. Please check your connection and try again.', variant: 'destructive' })
+      setJobsById(jMap)
     }
   }
 
   const loadMessages = async (conversationId: string) => {
-    try {
-      const convMessages = await mockDb.getMessagesByConversation(conversationId)
-      setMessages(convMessages)
-    } catch (error) {
-      console.error('Failed to load messages:', error)
-    }
+    const convMessages = await mockDb.getMessagesByConversation(conversationId)
+    setMessages(convMessages)
   }
 
   const handleSendMessage = async () => {
@@ -171,6 +162,51 @@ export default function WorkerChatPage() {
     }
   }
 
+  const toggleVoiceInput = () => {
+    if (voiceListening) {
+      recognitionRef.current?.stop()
+      setVoiceListening(false)
+      return
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const win = window as any
+    const SpeechRecognitionAPI = win.SpeechRecognition ?? win.webkitSpeechRecognition
+
+    if (!SpeechRecognitionAPI) {
+      toast({ title: 'Voice input not supported in this browser', variant: 'destructive' })
+      return
+    }
+
+    const recognition = new SpeechRecognitionAPI()
+    const localeToSpeechLang: Record<string, string> = {
+      en: 'en-IN',
+      hi: 'hi-IN',
+      te: 'te-IN',
+    }
+    recognition.lang = localeToSpeechLang[locale] ?? 'en-IN'
+    recognition.continuous = false
+    recognition.interimResults = false
+    recognition.maxAlternatives = 1
+
+    recognition.onstart = () => setVoiceListening(true)
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    recognition.onresult = (event: any) => {
+      const transcript = event.results[0]?.[0]?.transcript ?? ''
+      if (transcript) {
+        setNewMessage((prev: string) => (prev ? prev + ' ' + transcript : transcript))
+      }
+      setVoiceListening(false)
+    }
+
+    recognition.onerror = () => setVoiceListening(false)
+    recognition.onend = () => setVoiceListening(false)
+
+    recognitionRef.current = recognition
+    recognition.start()
+  }
+
   const getOtherUser = (conversation: ChatConversation): User | null => {
     if (!user) return null
     const otherUserId = conversation.participants.find(id => id !== user.id)
@@ -187,17 +223,17 @@ export default function WorkerChatPage() {
   })
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface flex flex-col">
       <WorkerNav />
       
-      <main className="container mx-auto px-4 py-8">
+      <main className="container mx-auto flex-1 px-4 py-8 pb-24">
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-foreground mb-2">Messages</h1>
           <p className="text-muted-foreground">Chat with employers about job opportunities</p>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-250px)]">
-          <Card className="lg:col-span-1">
+        <div className="grid gap-6 lg:grid-cols-3 lg:h-[calc(100dvh-14rem)] lg:min-h-[540px]">
+          <Card className="lg:col-span-1 flex flex-col min-h-0">
             <CardHeader>
               <div className="relative">
                 <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -209,7 +245,7 @@ export default function WorkerChatPage() {
                 />
               </div>
             </CardHeader>
-            <ScrollArea className="h-[calc(100vh-380px)]">
+            <ScrollArea className="flex-1 min-h-0">
               <CardContent className="space-y-2">
                 {filteredConversations.length === 0 ? (
                   <div className="text-center py-8">
@@ -263,7 +299,7 @@ export default function WorkerChatPage() {
             </ScrollArea>
           </Card>
 
-          <Card className="lg:col-span-2 flex flex-col">
+          <Card className="lg:col-span-2 flex flex-col min-h-0">
             {selectedConversation ? (
               <>
                 <CardHeader className="border-b">
@@ -292,7 +328,7 @@ export default function WorkerChatPage() {
                     </Button>
                   </div>
                 </CardHeader>
-                <ScrollArea className="flex-1 p-6">
+                <ScrollArea className="flex-1 min-h-0 p-6">
                   <div className="space-y-4">
                     {messages.length === 0 ? (
                       <div className="text-center py-8">
@@ -301,7 +337,6 @@ export default function WorkerChatPage() {
                     ) : (
                       messages.map((message) => {
                         const isSent = message.senderId === user?.id
-                        const translated = translatedMessages[message.id]
                         return (
                           <div
                             key={message.id}
@@ -315,33 +350,14 @@ export default function WorkerChatPage() {
                               }`}
                             >
                               <p className="text-sm">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
-                              {translated && (
-                                <p className={`text-sm mt-1 pt-1 border-t ${isSent ? 'border-primary-foreground/20 text-primary-foreground/80' : 'border-border text-muted-foreground'} italic`}>
-                                  {translated}
-                                </p>
-                              )}
-                              <div className={`flex items-center gap-1 mt-1 ${isSent ? 'justify-end' : 'justify-between'}`}>
-                                <p className={`text-xs ${isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                                  {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                </p>
-                                {!translated && (
-                                  <button
-                                    className={`text-xs flex items-center gap-0.5 hover:underline ${isSent ? 'text-primary-foreground/60 hover:text-primary-foreground/90' : 'text-muted-foreground hover:text-foreground'}`}
-                                    onClick={async () => {
-                                      setTranslatingId(message.id)
-                                      try {
-                                        const result = await translateChatMessage(message.message, locale as SupportedLocale)
-                                        setTranslatedMessages(prev => ({ ...prev, [message.id]: result }))
-                                      } catch { /* ignore */ }
-                                      setTranslatingId(null)
-                                    }}
-                                    disabled={translatingId === message.id}
-                                  >
-                                    {translatingId === message.id ? <Loader2 className="h-3 w-3 animate-spin" /> : <Languages className="h-3 w-3" />}
-                                    Translate
-                                  </button>
-                                )}
-                              </div>
+                              <p className={`text-xs mt-1 ${
+                                isSent ? 'text-primary-foreground/70' : 'text-muted-foreground'
+                              }`}>
+                                {new Date(message.createdAt).toLocaleTimeString([], {
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </p>
                             </div>
                           </div>
                         )
@@ -359,11 +375,20 @@ export default function WorkerChatPage() {
                   ) : (
                     <div className="flex gap-2">
                       <Input
-                        placeholder="Type a message..."
+                        placeholder="Type a message… or use 🎤"
                         value={newMessage}
                         onChange={(e) => setNewMessage(e.target.value)}
                         onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
                       />
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        onClick={toggleVoiceInput}
+                        title={voiceListening ? 'Stop recording' : 'Voice input (default app language)'}
+                        className={voiceListening ? 'border-red-400 text-red-500 animate-pulse' : ''}
+                      >
+                        {voiceListening ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}
+                      </Button>
                       <Button onClick={handleSendMessage}>
                         <Send className="h-4 w-4" />
                       </Button>

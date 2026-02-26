@@ -11,16 +11,12 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, mockWorkerProfileOps, sendWATIAlert } from '@/lib/api'
+import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, sendWATIAlert } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Job, Application, EscrowTransaction } from '@/lib/types'
-import { calculateMatchScore } from '@/lib/aiMatching'
-import { rankCandidates } from '@/lib/gemini'
-import type { CandidateRanking } from '@/lib/gemini'
 import {
   ArrowLeft, Lock, Unlock, RefreshCcw, MapPin, Clock, IndianRupee, Users,
   Briefcase, CheckCircle2, AlertCircle, Edit, Shield, Star, MessageSquare,
-  Sparkles, Loader2, Trophy, ChevronDown, ChevronUp,
 } from 'lucide-react'
 
 const COMMISSION_RATE = 0.10
@@ -45,67 +41,46 @@ export default function EmployerJobDetailPage() {
   const [ratingFeedback, setRatingFeedback] = useState('')
   const [ratingDone, setRatingDone] = useState(false)
 
-  // AI Candidate Ranking
-  const [aiRanking, setAiRanking] = useState<CandidateRanking | null>(null)
-  const [rankingLoading, setRankingLoading] = useState(false)
-  const [rankingExpanded, setRankingExpanded] = useState(true)
-
   const loadData = useCallback(async () => {
-    try {
-      // Fetch job, its applications, and its escrow in parallel
-      const [jobData, allApps, escrowData] = await Promise.all([
-        mockDb.getJobById(jobId),
-        mockApplicationOps.findByJobId(jobId),
-        mockEscrowOps.findByJobId(jobId),
-      ])
+    // Fetch job, its applications, and its escrow in parallel
+    // FIX: Use findByJobId instead of fetching ALL escrow transactions
+    const [jobData, allApps, escrowData] = await Promise.all([
+      mockDb.getJobById(jobId),
+      mockApplicationOps.findByJobId(jobId),
+      mockEscrowOps.findByJobId(jobId),
+    ])
 
-      setJob(jobData)
-      setEscrow(escrowData)
+    setJob(jobData)
+    setApplications(allApps)
+    setEscrow(escrowData)
 
-      // Load worker details for trust badges
-      if (allApps.length > 0) {
-        const workerIds = [...new Set(allApps.map((a) => a.workerId))]
-        const workers = await Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null)))
-        const wMap: Record<string, import('@/lib/types').User> = {}
-        for (const w of workers) { if (w) wMap[w.id] = w }
-        setWorkersById(wMap)
-
-        // Recalculate matchScores that are 0 (legacy apps created before score storage)
-        if (jobData) {
-          const enriched = await Promise.all(
-            allApps.map(async (app) => {
-              if (app.matchScore > 0) return app
-              try {
-                const profile = await mockWorkerProfileOps.findByUserId(app.workerId)
-                if (profile) {
-                  const score = calculateMatchScore(profile, jobData)
-                  return { ...app, matchScore: score }
-                }
-              } catch { /* ignore */ }
-              return app
-            })
-          )
-          setApplications(enriched)
-        } else {
-          setApplications(allApps)
-        }
-      } else {
-        setApplications(allApps)
+    // Load worker details for trust badges
+    if (allApps.length > 0) {
+      const workerIds = [...new Set(allApps.map((a) => a.workerId))]
+      const workers = await Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null)))
+      const wMap: Record<string, import('@/lib/types').User> = {}
+      for (const w of workers) {
+        if (w) wMap[w.id] = w
       }
-    } catch (err) { console.error(err) }
+      setWorkersById(wMap)
+    } else {
+      setWorkersById({})
+    }
   }, [jobId])
 
   useEffect(() => {
     if (!jobId) return
     let cancelled = false
 
-    loadData().then(() => {
-      if (!cancelled) setLoading(false)
-    }).catch((err) => {
-      console.error(err)
-      if (!cancelled) setLoading(false)
-    })
+    async function load() {
+      try {
+        await loadData()
+        if (cancelled) return
+      } catch (err) { console.error(err) }
+      finally { if (!cancelled) setLoading(false) }
+    }
 
+    load()
     return () => { cancelled = true }
   }, [jobId, loadData])
 
@@ -185,52 +160,10 @@ export default function EmployerJobDetailPage() {
     finally { setActionLoading(false) }
   }
 
-  const handleAIRanking = async () => {
-    if (!job || applications.length < 2 || rankingLoading) return
-    const cacheKey = `ai_rank_${jobId}`
-    const cached = sessionStorage.getItem(cacheKey)
-    if (cached) {
-      try { setAiRanking(JSON.parse(cached)); return } catch { /* fall through */ }
-    }
-    setRankingLoading(true)
-    try {
-      const candidates = applications.map((app) => {
-        const w = workersById[app.workerId]
-        return {
-          id: app.workerId,
-          name: w?.fullName || 'Worker',
-          skills: [] as string[],  // populated from profile
-          experience: '',
-          matchScore: app.matchScore || 0,
-          rating: w?.trustScore ?? 3,
-        }
-      })
-      // Enrich with profile data
-      for (const c of candidates) {
-        try {
-          const profile = await mockWorkerProfileOps.findByUserId(c.id)
-          if (profile) {
-            c.skills = profile.skills || []
-            c.experience = profile.experience || ''
-          }
-        } catch { /* ignore */ }
-      }
-      const ranking = await rankCandidates(job.title, job.requiredSkills, job.description, candidates)
-      setAiRanking(ranking)
-      sessionStorage.setItem(cacheKey, JSON.stringify(ranking))
-    } catch (e) {
-      console.error('AI ranking failed', e)
-    } finally {
-      setRankingLoading(false)
-    }
-  }
-
   const handleChatWithWorker = async (app: Application) => {
     if (!user || !job) return
     try {
-      // Find an existing conversation between this employer and the specific worker for this job
-      const allConvs = await mockDb.getConversationsByUser(user.id)
-      let conv = allConvs.find(c => c.jobId === job.id && c.participants.includes(app.workerId)) ?? null
+      let conv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
       if (!conv) {
         conv = await mockDb.createConversation({
           workerId: app.workerId,
@@ -327,78 +260,6 @@ export default function EmployerJobDetailPage() {
                 {job.requirements && <div><p className="text-sm font-medium mb-1">Requirements</p><p className="text-sm text-muted-foreground">{job.requirements}</p></div>}
               </CardContent>
             </Card>
-
-            {/* AI Candidate Ranking Panel */}
-            {applications.length >= 2 && (
-              <Card className="border-primary/20 overflow-hidden">
-                <CardHeader
-                  className="cursor-pointer hover:bg-muted/50 transition-colors pb-3"
-                  onClick={() => setRankingExpanded((v) => !v)}
-                >
-                  <CardTitle className="flex items-center justify-between text-base">
-                    <span className="flex items-center gap-2">
-                      <span className="relative flex h-5 w-5">
-                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary/40 opacity-75" />
-                        <Trophy className="relative h-5 w-5 text-primary" />
-                      </span>
-                      AI Candidate Insights
-                    </span>
-                    {rankingExpanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-                  </CardTitle>
-                </CardHeader>
-                {rankingExpanded && (
-                  <CardContent className="pt-0">
-                    {!aiRanking && !rankingLoading ? (
-                      <div className="text-center py-4">
-                        <p className="text-sm text-muted-foreground mb-3">
-                          Let AI analyze all {applications.length} candidates and recommend the best fit
-                        </p>
-                        <Button size="sm" onClick={handleAIRanking} className="gap-2">
-                          <Sparkles className="h-3.5 w-3.5" /> Rank Candidates with AI
-                        </Button>
-                      </div>
-                    ) : rankingLoading ? (
-                      <div className="flex flex-col items-center py-6 gap-2">
-                        <Loader2 className="h-6 w-6 animate-spin text-primary" />
-                        <p className="text-xs text-muted-foreground animate-pulse">AI is evaluating candidates...</p>
-                      </div>
-                    ) : aiRanking ? (
-                      <div className="space-y-3">
-                        <p className="text-sm text-muted-foreground border-l-2 border-primary/30 pl-3">
-                          {aiRanking.summary}
-                        </p>
-                        <div className="space-y-2">
-                          {aiRanking.rankings.map((r) => {
-                            const worker = workersById[r.workerId]
-                            return (
-                              <div key={r.workerId} className={`p-3 border rounded-lg ${r.rank === 1 ? 'border-primary/40 bg-primary/5' : ''}`}>
-                                <div className="flex items-center justify-between mb-1">
-                                  <div className="flex items-center gap-2">
-                                    <span className={`text-sm font-bold ${r.rank === 1 ? 'text-primary' : 'text-muted-foreground'}`}>#{r.rank}</span>
-                                    <span className="text-sm font-medium">{worker?.fullName || 'Worker'}</span>
-                                    {r.rank === 1 && <Badge className="bg-primary/10 text-primary text-xs">Best Match</Badge>}
-                                  </div>
-                                  <Badge variant="outline" className="text-xs">{r.score}%</Badge>
-                                </div>
-                                <p className="text-xs text-muted-foreground mb-1">{r.reasoning}</p>
-                                <div className="flex flex-wrap gap-1">
-                                  {r.strengths.map((s, i) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] bg-green-50 text-green-700 border-green-200">{s}</Badge>
-                                  ))}
-                                  {r.concerns.map((c, i) => (
-                                    <Badge key={i} variant="outline" className="text-[10px] bg-orange-50 text-orange-700 border-orange-200">{c}</Badge>
-                                  ))}
-                                </div>
-                              </div>
-                            )
-                          })}
-                        </div>
-                      </div>
-                    ) : null}
-                  </CardContent>
-                )}
-              </Card>
-            )}
 
             <Card>
               <CardHeader>

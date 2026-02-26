@@ -1,10 +1,10 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, MessageSquare, Settings, LogOut, Search } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, Settings, LogOut, Sparkles } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
@@ -12,20 +12,14 @@ import { NotificationBell } from '@/components/ui/notification-bell';
 
 export function EmployerNav() {
   const pathname = usePathname();
-  const router = useRouter();
   const { user, logout } = useAuth();
   const { t } = useI18n();
-
-  const handleLogout = () => {
-    logout();
-    router.push('/login');
-  };
 
   const navItems = [
     { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home },
     { href: '/employer/jobs/post', label: t('nav.employer.postJob'), icon: PlusCircle },
     { href: '/employer/jobs', label: t('nav.employer.myJobs'), icon: Briefcase },
-    { href: '/employer/resume-search', label: 'AI Search', icon: Search },
+    { href: '/employer/resume-search', label: t('AiSearch'), icon: Sparkles },
     { href: '/employer/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0 },
   ];
 
@@ -73,7 +67,7 @@ export function EmployerNav() {
                 <Settings className="w-4 h-4" />
               </Button>
             </Link>
-            <Button variant="ghost" size="sm" onClick={handleLogout} className="gap-2">
+            <Button variant="ghost" size="sm" onClick={logout} className="gap-2">
               <LogOut className="w-4 h-4" />
               <span className="hidden sm:inline">{t('nav.logout')}</span>
             </Button>

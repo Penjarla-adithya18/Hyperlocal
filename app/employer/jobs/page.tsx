@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockJobOps, mockApplicationOps } from '@/lib/api'
+import { mockJobOps } from '@/lib/api'
 import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -18,7 +18,6 @@ export default function EmployerJobsPage() {
   const { user } = useAuth()
   const { toast } = useToast()
   const [jobs, setJobs] = useState<Job[]>([])
-  const [appCounts, setAppCounts] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -29,18 +28,6 @@ export default function EmployerJobsPage() {
       try {
         const employerJobs = await mockJobOps.findByEmployerId(user!.id)
         if (!cancelled) setJobs(employerJobs)
-
-        // Dynamically fetch real application counts per job
-        const counts: Record<string, number> = {}
-        await Promise.all(
-          employerJobs.map(async (j) => {
-            try {
-              const apps = await mockApplicationOps.findByJobId(j.id)
-              counts[j.id] = apps.length
-            } catch { counts[j.id] = j.applicationCount ?? 0 }
-          })
-        )
-        if (!cancelled) setAppCounts(counts)
       } catch {
         toast({ title: 'Error', description: 'Failed to load jobs', variant: 'destructive' })
       } finally {
@@ -71,7 +58,7 @@ export default function EmployerJobsPage() {
   const cancelledJobs = useMemo(() => jobs.filter((j) => j.status === 'cancelled'), [jobs])
 
   const JobCard = ({ job }: { job: Job }) => {
-    const applicationsCount = appCounts[job.id] ?? job.applicationCount ?? 0
+    const applicationsCount = job.applicationCount ?? 0
 
     return (
       <Card className="hover:border-primary transition-colors">

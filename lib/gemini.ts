@@ -38,6 +38,11 @@ const ENDPOINT = {
 
 type ModelTier = keyof typeof ENDPOINT
 
+interface GenerateWithGeminiOptions {
+  tier?: ModelTier
+  maxTokens?: number
+}
+
 // ── TTL in-memory cache ───────────────────────────────────────────────────────
 // Prevents duplicate API calls for identical prompts within the session.
 // 30-minute TTL for translations/summaries; 5-minute TTL for intent extraction.
@@ -97,6 +102,24 @@ async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Pro
 
   const data = await res.json()
   return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+}
+
+/**
+ * Backward-compatible generic Gemini caller used by older modules.
+ * Returns null on failure so callers can gracefully fall back.
+ */
+export async function generateWithGemini(
+  prompt: string,
+  options: GenerateWithGeminiOptions = {},
+): Promise<string | null> {
+  const tier = options.tier ?? 'lite'
+  const maxTokens = options.maxTokens ?? 512
+  try {
+    const text = await _callModel(prompt, tier, maxTokens)
+    return text?.trim() || null
+  } catch {
+    return null
+  }
 }
 
 // ── Local-first language detection (NO API cost) ──────────────────────────────

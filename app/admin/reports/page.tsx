@@ -105,12 +105,12 @@ export default function AdminReportsPage() {
         <CardContent className="space-y-4">
           <div>
             <p className="text-sm font-medium mb-1">Reported By:</p>
-            <p className="text-sm text-muted-foreground">{reporter?.fullName ?? 'Unknown User'} ({reporter?.role ?? 'N/A'})</p>
+            <p className="text-sm text-muted-foreground">{reporter?.fullName} ({reporter?.role})</p>
           </div>
 
           <div>
             <p className="text-sm font-medium mb-1">Reported User:</p>
-            <p className="text-sm text-muted-foreground">{reported?.fullName ?? 'Unknown User'} ({reported?.role ?? 'N/A'})</p>
+            <p className="text-sm text-muted-foreground">{reported?.fullName} ({reported?.role})</p>
           </div>
 
           <div>
@@ -234,27 +234,19 @@ export default function AdminReportsPage() {
           </TabsContent>
 
           <TabsContent value="resolved">
-            {resolvedReports.length === 0 ? (
-              <Card><CardContent className="py-12 text-center text-muted-foreground">No resolved reports yet</CardContent></Card>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {resolvedReports.map((report) => (
-                  <ReportCard key={report.id} report={report} />
-                ))}
-              </div>
-            )}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {resolvedReports.map((report) => (
+                <ReportCard key={report.id} report={report} />
+              ))}
+            </div>
           </TabsContent>
 
           <TabsContent value="dismissed">
-            {dismissedReports.length === 0 ? (
-              <Card><CardContent className="py-12 text-center text-muted-foreground">No dismissed reports yet</CardContent></Card>
-            ) : (
-              <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {dismissedReports.map((report) => (
-                  <ReportCard key={report.id} report={report} />
-                ))}
-              </div>
-            )}
+            <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {dismissedReports.map((report) => (
+                <ReportCard key={report.id} report={report} />
+              ))}
+            </div>
           </TabsContent>
         </Tabs>
       </main>

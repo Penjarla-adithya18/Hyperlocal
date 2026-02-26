@@ -114,7 +114,7 @@ export default function AdminUsersPage() {
             <div className="flex items-center gap-4 mt-3">
               <div className="flex items-center gap-1 text-sm">
                 <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
-                <span>{(user.trustScore ?? 0).toFixed(1)}</span>
+                <span>{user.trustScore.toFixed(1)}</span>
               </div>
               <Badge variant={user.role === 'worker' ? 'default' : 'outline'}>
                 {user.role}
