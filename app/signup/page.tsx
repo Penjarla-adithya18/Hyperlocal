@@ -211,9 +211,9 @@ function SignupPageContent() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-[linear-gradient(120deg,#d8eee6_0%,#dbe9f8_45%,#d3e3f6_100%)] p-4 dark:bg-[linear-gradient(120deg,#0f172a_0%,#10253a_50%,#0f2f2a_100%)] md:p-6">
-      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-[#eef5fb]/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
-        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-[#e8f4ea] p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:p-6">
+      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-blue-50/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
               H
@@ -360,9 +360,11 @@ function SignupPageContent() {
                       </div>
 
                       {generatedOtp && (
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          Demo OTP: <span className="font-mono font-bold text-emerald-500">{generatedOtp}</span>
-                        </p>
+                        <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/30 p-4 text-center">
+                          <p className="text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Development Mode - OTP Code:</p>
+                          <p className="text-3xl font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-widest">{generatedOtp}</p>
+                          <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">Copy this code to the input above</p>
+                        </div>
                       )}
 
                       <button
