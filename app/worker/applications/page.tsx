@@ -115,7 +115,7 @@ export default function WorkerApplicationsPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8 pb-24">
           <p className="text-center text-muted-foreground">Loading applications...</p>
@@ -125,7 +125,7 @@ export default function WorkerApplicationsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <WorkerNav />
       
       <main className="container mx-auto px-4 py-8 pb-24">

@@ -36,7 +36,7 @@ export default function LandingPage() {
             </Link>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center gap-5">
             <Button asChild size="sm" className="hidden min-w-28 sm:inline-flex">
               <Link href="/login">Log In</Link>
             </Button>

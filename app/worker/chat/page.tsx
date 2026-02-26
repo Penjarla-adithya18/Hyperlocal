@@ -223,7 +223,7 @@ export default function WorkerChatPage() {
   })
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
+    <div className="app-surface flex flex-col">
       <WorkerNav />
       
       <main className="container mx-auto flex-1 px-4 py-8 pb-24">

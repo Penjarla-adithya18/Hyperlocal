@@ -246,7 +246,7 @@ export default function WorkerProfilePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8 pb-24">
           <div className="flex items-center justify-center h-64">
@@ -258,7 +258,7 @@ export default function WorkerProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-linear-to-b from-background to-secondary/20">
+    <div className="app-surface">
       <WorkerNav />
 
       <main className="container mx-auto px-4 py-8 pb-24 max-w-4xl">
@@ -268,7 +268,7 @@ export default function WorkerProfilePage() {
             {t('profile.subtitle')}
           </p>
           {/* Live Profile Completeness */}
-          <div className="mt-4 p-4 rounded-lg border bg-card">
+          <div className="mt-4 rounded-lg border bg-card p-4 transition-all duration-200 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <span className="text-sm font-medium">{t('profile.completeness')}</span>
               <span className="text-sm font-bold text-primary">{profileCompleteness}%</span>
@@ -284,7 +284,7 @@ export default function WorkerProfilePage() {
 
         <form onSubmit={handleSave} className="space-y-6">
           {/* Personal Information */}
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <User className="w-5 h-5 text-primary" />
@@ -298,7 +298,7 @@ export default function WorkerProfilePage() {
             <div className="space-y-4">
               {/* Profile Photo */}
               <div className="flex items-center gap-4">
-                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center overflow-hidden border-2 border-border shrink-0">
+                <div className="h-20 w-20 shrink-0 overflow-hidden rounded-full border-2 border-border bg-muted transition-all duration-200 hover:scale-[1.03] hover:shadow-md flex items-center justify-center">
                   {formData.profileImage ? (
                     <img src={formData.profileImage} className="w-full h-full object-cover" alt="Profile" />
                   ) : (
@@ -338,7 +338,7 @@ export default function WorkerProfilePage() {
 
               <div className="space-y-2">              {/* Trust Score Banner */}
               {user && (
-                <div className={`flex items-center gap-3 p-3 rounded-lg border ${
+                <div className={`flex items-center gap-3 rounded-lg border p-3 transition-all duration-200 hover:shadow-sm ${
                   user.trustLevel === 'trusted' ? 'bg-green-50 border-green-200 dark:bg-green-950/30 dark:border-green-800' :
                   user.trustLevel === 'active' ? 'bg-blue-50 border-blue-200 dark:bg-blue-950/30 dark:border-blue-800' :
                   'bg-amber-50 border-amber-200 dark:bg-amber-950/30 dark:border-amber-800'
@@ -382,7 +382,7 @@ export default function WorkerProfilePage() {
           </Card>
 
           {/* Job Categories */}
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Star className="w-5 h-5 text-primary" />
@@ -398,7 +398,7 @@ export default function WorkerProfilePage() {
                 <Badge
                   key={category}
                   variant={formData.categories.includes(category) ? 'default' : 'outline'}
-                  className="cursor-pointer hover:bg-primary/90 transition-colors"
+                  className="cursor-pointer transition-all duration-200 hover:-translate-y-0.5 hover:bg-primary/90"
                   onClick={() => toggleCategory(category)}
                 >
                   {category}
@@ -409,7 +409,7 @@ export default function WorkerProfilePage() {
           </Card>
 
           {/* Work Experience & Skills */}
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
                 <Sparkles className="w-5 h-5 text-primary" />
@@ -494,7 +494,7 @@ export default function WorkerProfilePage() {
           </Card>
 
           {/* Availability */}
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="mb-6">
               <h2 className="text-xl font-semibold mb-2">Availability</h2>
               <p className="text-sm text-muted-foreground">When are you available to work?</p>
@@ -541,7 +541,7 @@ export default function WorkerProfilePage() {
           </div>
 
           {/* Danger Zone */}
-          <Card className="p-6 border-destructive/40">
+          <Card className="border-destructive/40 p-6 transition-all duration-200 hover:shadow-md">
             <div className="flex items-center gap-3 mb-3">
               <Trash2 className="w-5 h-5 text-destructive" />
               <h2 className="text-xl font-semibold text-destructive">Danger Zone</h2>

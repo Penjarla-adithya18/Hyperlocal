@@ -148,7 +148,7 @@ export default function EmployerJobEditPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <EmployerNav />
         <main className="container mx-auto px-4 py-8 max-w-4xl space-y-4">
           {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-40 w-full rounded-lg" />)}
@@ -158,7 +158,7 @@ export default function EmployerJobEditPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="app-surface">
       <EmployerNav />
       <main className="container mx-auto px-4 py-8 max-w-4xl">
         <div className="mb-6 flex items-center gap-3">

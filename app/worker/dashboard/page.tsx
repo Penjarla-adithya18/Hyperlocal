@@ -86,7 +86,7 @@ export default function WorkerDashboardPage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8 pb-24">
           <div className="flex items-center justify-center h-64">
@@ -101,7 +101,7 @@ export default function WorkerDashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-background to-secondary/20">
+    <div className="app-surface">
       <WorkerNav />
 
       <main className="container mx-auto px-4 py-8 pb-24 space-y-8">
@@ -113,7 +113,7 @@ export default function WorkerDashboardPage() {
 
         {/* Profile Completion Alert */}
         {profileCompleteness < 100 && (
-          <Card className="p-6 bg-accent/10 border-accent/20">
+          <Card className="border-accent/20 bg-accent/10 p-6 transition-all duration-200 hover:shadow-md">
             <div className="flex items-start gap-4">
               <div className="w-10 h-10 rounded-full bg-accent/20 flex items-center justify-center flex-shrink-0">
                 <AlertCircle className="w-5 h-5 text-accent" />
@@ -143,7 +143,7 @@ export default function WorkerDashboardPage() {
 
         {/* Stats Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Briefcase className="w-8 h-8 text-primary" />
             </div>
@@ -151,7 +151,7 @@ export default function WorkerDashboardPage() {
             <div className="text-sm text-muted-foreground">Applications</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <Star className="w-8 h-8 text-accent" />
             </div>
@@ -159,7 +159,7 @@ export default function WorkerDashboardPage() {
             <div className="text-sm text-muted-foreground">Trust Score</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <TrendingUp className="w-8 h-8 text-primary" />
             </div>
@@ -167,7 +167,7 @@ export default function WorkerDashboardPage() {
             <div className="text-sm text-muted-foreground">Average Rating</div>
           </Card>
 
-          <Card className="p-6">
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
             <div className="flex items-center justify-between mb-2">
               <CheckCircle2 className="w-8 h-8 text-accent" />
             </div>
