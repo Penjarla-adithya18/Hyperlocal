@@ -331,10 +331,21 @@ Previous output:\n${raw.slice(0, 4000)}`
       p = JSON.parse(cleanedRetry)
     }
 
-    const techSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).technical) ? ((p.skills as Record<string, unknown>).technical as string[]).filter(Boolean) : []
-    const softSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).soft) ? ((p.skills as Record<string, unknown>).soft as string[]).filter(Boolean) : []
-    const domainSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).domain) ? ((p.skills as Record<string, unknown>).domain as string[]).filter(Boolean) : []
-    const toolSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).tools) ? ((p.skills as Record<string, unknown>).tools as string[]).filter(Boolean) : []
+    const techSkills: string[] = []
+    const softSkills: string[] = []
+    const domainSkills: string[] = []
+    const toolSkills: string[] = []
+
+    if (Array.isArray(p.skills)) {
+      // LLM returned a flat array — treat everything as technical/generic skills
+      techSkills.push(...(p.skills as string[]).filter((s) => s && typeof s === 'string'))
+    } else if (p.skills && typeof p.skills === 'object') {
+      const s = p.skills as Record<string, unknown>
+      techSkills.push(...(Array.isArray(s.technical) ? (s.technical as string[]).filter(Boolean) : []))
+      softSkills.push(...(Array.isArray(s.soft) ? (s.soft as string[]).filter(Boolean) : []))
+      domainSkills.push(...(Array.isArray(s.domain) ? (s.domain as string[]).filter(Boolean) : []))
+      toolSkills.push(...(Array.isArray(s.tools) ? (s.tools as string[]).filter(Boolean) : []))
+    }
     const projectTech = ((p.projects as Array<{ technologies?: string[] }>) ?? []).flatMap((pr) => pr.technologies ?? [])
     const allSkills = [...new Set([...techSkills, ...softSkills, ...domainSkills, ...toolSkills, ...projectTech])].filter(Boolean)
 

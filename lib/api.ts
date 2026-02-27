@@ -501,6 +501,15 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
   return res.data
 }
 
+export async function getUserByEmail(email: string): Promise<User | null> {
+  try {
+    const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-email', email })
+    return res.data
+  } catch {
+    return null
+  }
+}
+
 // ─── Session helpers (localStorage, unchanged) ─────────────────────────────
 
 export function getCurrentUser(): User | null {
@@ -571,9 +580,14 @@ export const workerProfileOps = {
     const res = await call<R<WorkerProfile | null>>('profiles', 'PATCH', { userId, role: 'worker' }, updates)
     return res.data
   },
+  /** Fetch all worker profiles on the platform (employer-accessible) */
   getAll: async (): Promise<WorkerProfile[]> => {
-    // Not needed server-side; return empty list
-    return []
+    try {
+      const res = await call<R<WorkerProfile[]>>('profiles', 'GET', { role: 'worker' })
+      return res.data || []
+    } catch {
+      return []
+    }
   },
 }
 

@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
 import { applicationOps, db, jobOps, reportOps, notificationOps, userOps, workerProfileOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
+import { processResumeFile } from '@/lib/resumeParser'
 import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
 import { translateDynamic, SupportedLocale } from '@/lib/gemini'
 import { 
@@ -179,11 +180,56 @@ export default function JobDetailsPage() {
     }
 
     setApplying(true)
+
+    // ── Parse & save resume so RAG engine can index this worker ──────────────
+    let attachedResumeUrl: string | undefined = workerProfile?.resumeUrl
+    if (resumeFile) {
+      setResumeUploading(true)
+      try {
+        const { text, parsed } = await processResumeFile(resumeFile)
+        const resumeMarker = `resume_app_${Date.now()}`
+        const profileUpdates: Partial<WorkerProfile> = {
+          resumeText: text,
+          resumeParsed: parsed,
+          resumeUrl: resumeMarker,
+          // Also propagate parsed skills back to profile if empty
+          skills: workerProfile?.skills?.length
+            ? workerProfile.skills
+            : (parsed.skills ?? []),
+        }
+        if (workerProfile) {
+          await workerProfileOps.update(user.id, profileUpdates)
+          setWorkerProfile((prev) => prev ? { ...prev, ...profileUpdates } : prev)
+        } else {
+          await workerProfileOps.create({
+            userId: user.id,
+            skills: parsed.skills ?? [],
+            bio: parsed.summary ?? '',
+            categories: [],
+            experience: '',
+            location: '',
+            availability: '',
+            ...profileUpdates,
+          })
+        }
+        attachedResumeUrl = resumeMarker
+      } catch (parseErr) {
+        console.warn('Resume parse error (non-fatal):', parseErr)
+        toast({
+          title: 'Resume note',
+          description: 'Resume could not be fully parsed, but your application will still be submitted.',
+        })
+      } finally {
+        setResumeUploading(false)
+      }
+    }
+
     try {
       const newApplication = await db.createApplication({
         jobId: job.id,
         workerId: user.id,
         coverLetter: coverLetter.trim() || undefined,
+        resumeUrl: attachedResumeUrl,
         status: 'pending',
         matchScore: matchScore ?? 0,
       })
@@ -633,10 +679,11 @@ export default function JobDetailsPage() {
                     <Button
                       className="w-full sm:flex-1"
                       onClick={handleApply}
-                      disabled={applying}
+                      disabled={applying || resumeUploading}
                     >
-                      <Send className="h-4 w-4 mr-2" />
-                      {applying ? 'Submitting...' : 'Submit Application'}
+                      {(applying || resumeUploading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {!applying && !resumeUploading && <Send className="h-4 w-4 mr-2" />}
+                      {resumeUploading ? 'Parsing Resume…' : applying ? 'Submitting…' : 'Submit Application'}
                     </Button>
                     <Button
                       variant="outline"

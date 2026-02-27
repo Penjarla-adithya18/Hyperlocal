@@ -51,26 +51,43 @@ export default function ResumeSearchPage() {
   const indexWorkerResumes = async () => {
     setIndexing(true)
     try {
-      // Index ALL workers on the platform (not just applicants to this employer's jobs)
-      const allUsers = await userOps.getAll()
-      const workerUsers = allUsers.filter((u) => u.role === 'worker')
+      // Profiles-first approach: get all worker profiles (employer-accessible endpoint),
+      // then fetch user name/phone per profile in parallel — avoids the admin-only GET /users.
+      const allProfiles = await workerProfileOps.getAll()
+
+      // Also try userOps.getAll() as a fallback to get richer user data, but don't block on 403
+      let userMap: Map<string, { fullName: string; phoneNumber: string }> = new Map()
+      try {
+        const allUsers = await userOps.getAll()
+        allUsers.filter((u) => u.role === 'worker').forEach((u) => {
+          userMap.set(u.id, { fullName: u.fullName, phoneNumber: u.phoneNumber })
+        })
+      } catch {
+        // 403 for non-admins is expected — we'll look up names individually below
+      }
 
       let count = 0
-      // Process in small parallel batches to avoid overloading the API
       const BATCH = 6
-      for (let i = 0; i < workerUsers.length; i += BATCH) {
+      for (let i = 0; i < allProfiles.length; i += BATCH) {
         await Promise.all(
-          workerUsers.slice(i, i + BATCH).map(async (wUser) => {
+          allProfiles.slice(i, i + BATCH).map(async (profile) => {
             try {
-              const profile = await workerProfileOps.findByUserId(wUser.id)
-              if (!profile) return
+              // Get user info (name / phone) — either from bulk cache or individual lookup
+              let workerName = userMap.get(profile.userId)?.fullName
+              let phone = userMap.get(profile.userId)?.phoneNumber
+              if (!workerName) {
+                const wUser = await userOps.findById(profile.userId).catch(() => null)
+                if (!wUser) return
+                workerName = wUser.fullName
+                phone = wUser.phoneNumber
+              }
 
               if (profile.resumeText && profile.resumeParsed) {
                 // Full resume indexing
                 ragStore.index({
-                  workerId: wUser.id,
-                  workerName: wUser.fullName,
-                  phone: wUser.phoneNumber,
+                  workerId: profile.userId,
+                  workerName,
+                  phone,
                   text: profile.resumeText,
                   parsed: profile.resumeParsed,
                 })
@@ -95,9 +112,9 @@ export default function ResumeSearchPage() {
                 }
 
                 ragStore.index({
-                  workerId: wUser.id,
-                  workerName: wUser.fullName,
-                  phone: wUser.phoneNumber,
+                  workerId: profile.userId,
+                  workerName,
+                  phone,
                   text: syntheticText,
                   parsed: syntheticParsed,
                 })

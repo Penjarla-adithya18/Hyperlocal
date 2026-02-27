@@ -14,7 +14,7 @@ import { Progress } from '@/components/ui/progress';
 import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { SkillAssessment, SkillResult } from '@/components/ui/skill-assessment';
 import { workerProfileOps, userOps, db, loginUser } from '@/lib/api';
-import { resetPassword, sendOTP, verifyOTP } from '@/lib/auth';
+import { resetPassword, sendOTP, verifyOTP, sendEmailOtp, verifyEmailOtp } from '@/lib/auth';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
 import { extractTextFromFile, parseResume, type ParsedResume } from '@/lib/resumeParser';
@@ -69,6 +69,9 @@ export default function WorkerProfilePage() {
   const [otpSent, setOtpSent] = useState(false);
   const [displayOtp, setDisplayOtp] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
+  const [emailForm, setEmailForm] = useState({ email: user?.email ?? '', otp: '' });
+  const [emailOtpSent, setEmailOtpSent] = useState(false);
+  const [emailLoading, setEmailLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [assessmentOpen, setAssessmentOpen] = useState(false);
   const [verifiedSkills, setVerifiedSkills] = useState<string[]>([]);
@@ -388,6 +391,53 @@ export default function WorkerProfilePage() {
     }
   };
 
+  const handleSendEmailOtp = async () => {
+    if (!emailForm.email.includes('@')) {
+      toast({ title: 'Enter a valid email address', variant: 'destructive' });
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const res = await sendEmailOtp(emailForm.email, 'phone-change');
+      if (res.success) {
+        setEmailOtpSent(true);
+        toast({ title: 'OTP sent', description: 'Check your email for the verification code.' });
+      } else {
+        toast({ title: res.message || 'Failed to send OTP', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Failed to send OTP. Try again.', variant: 'destructive' });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
+  const handleVerifyAndUpdateEmail = async () => {
+    if (emailForm.otp.length !== 6) {
+      toast({ title: 'Enter the 6-digit OTP', variant: 'destructive' });
+      return;
+    }
+    setEmailLoading(true);
+    try {
+      const verifyData = await verifyEmailOtp(emailForm.email, emailForm.otp);
+      if (!verifyData.success) {
+        toast({ title: verifyData.message ?? 'Invalid OTP', variant: 'destructive' });
+        return;
+      }
+      const result = await userOps.update(user!.id, { email: emailForm.email });
+      if (result) {
+        updateUser({ email: emailForm.email });
+        toast({ title: 'Email address updated' });
+        setEmailOtpSent(false);
+        setEmailForm((prev) => ({ ...prev, otp: '' }));
+      }
+    } catch {
+      toast({ title: 'Update failed. Try again.', variant: 'destructive' });
+    } finally {
+      setEmailLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     logout();
     router.push('/login');
@@ -526,31 +576,31 @@ export default function WorkerProfilePage() {
       <div className="app-surface">
         <WorkerNav />
         <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl">
-          <div className="mb-6 space-y-2">
-            <Skeleton className="h-8 w-40" />
-            <Skeleton className="h-4 w-56" />
+          <div className="mb-8 space-y-2">
+            <Skeleton className="h-7 w-36 opacity-40" />
+            <Skeleton className="h-3.5 w-48 opacity-30" />
           </div>
-          <div className="space-y-6">
+          <div className="space-y-4">
             {[...Array(4)].map((_, i) => (
-              <Card key={i} className="p-6 space-y-4">
-                <Skeleton className="h-5 w-32" />
-                <div className="grid sm:grid-cols-2 gap-4">
+              <div key={i} className="rounded-xl border border-border/40 bg-card/40 p-5 space-y-4">
+                <Skeleton className="h-4 w-28 opacity-40" />
+                <div className="grid sm:grid-cols-2 gap-3">
                   <div className="space-y-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-10 w-full rounded-md" />
+                    <Skeleton className="h-3 w-16 opacity-30" />
+                    <Skeleton className="h-9 w-full rounded-md opacity-30" />
                   </div>
                   <div className="space-y-2">
-                    <Skeleton className="h-4 w-20" />
-                    <Skeleton className="h-10 w-full rounded-md" />
+                    <Skeleton className="h-3 w-16 opacity-30" />
+                    <Skeleton className="h-9 w-full rounded-md opacity-30" />
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Skeleton className="h-4 w-24" />
-                  <Skeleton className="h-20 w-full rounded-md" />
+                  <Skeleton className="h-3 w-20 opacity-30" />
+                  <Skeleton className="h-16 w-full rounded-md opacity-25" />
                 </div>
-              </Card>
+              </div>
             ))}
-            <Skeleton className="h-11 w-full rounded-md" />
+            <Skeleton className="h-10 w-40 rounded-lg opacity-35" />
           </div>
         </div>
       </div>
@@ -1101,9 +1151,9 @@ export default function WorkerProfilePage() {
 
           {/* Account & Security — outside the profile form to prevent interference */}
           <Card className="border-destructive/40 p-6 transition-all duration-200 hover:shadow-md mt-6">
-            <div className="mb-6 space-y-6 border-b border-destructive/20 pb-6">
+            <div className="mb-6 space-y-8 border-b border-destructive/20 pb-6">
               <div>
-                <h2 className="text-xl font-semibold mb-2">Language & Region</h2>
+                <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide mb-3">Language & Region</h2>
                 <div className="grid grid-cols-3 gap-2">
                   {(locales as readonly SupportedLocale[]).map((code) => {
                     const [flag, ...rest] = localeLabels[code].split(' ');
@@ -1127,8 +1177,8 @@ export default function WorkerProfilePage() {
               </div>
 
               <div>
-                <h2 className="text-xl font-semibold mb-2">{t('settings.changePw')}</h2>
-                <div className="space-y-3">
+                <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide mb-3">{t('settings.changePw')}</h2>
+                <div className="rounded-lg bg-muted/30 p-4 space-y-3">
                   <Input
                     type="password"
                     placeholder={t('settings.currentPw')}
@@ -1150,15 +1200,15 @@ export default function WorkerProfilePage() {
                     onChange={(e) => setPwForm((p) => ({ ...p, confirm: e.target.value }))}
                     autoComplete="new-password"
                   />
-                  <Button type="button" onClick={handleChangePassword} disabled={pwLoading}>
+                  <Button type="button" size="sm" onClick={handleChangePassword} disabled={pwLoading}>
                     {pwLoading ? 'Updating...' : t('settings.updatePw')}
                   </Button>
                 </div>
               </div>
 
               <div>
-                <h2 className="text-xl font-semibold mb-2">Update Phone Number</h2>
-                <div className="space-y-3">
+                <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide mb-3">Update Phone Number</h2>
+                <div className="rounded-lg bg-muted/30 p-4 space-y-3">
                   <div className="flex gap-2">
                     <Input
                       type="tel"
@@ -1166,23 +1216,58 @@ export default function WorkerProfilePage() {
                       value={phoneForm.phone}
                       onChange={(e) => setPhoneForm((p) => ({ ...p, phone: e.target.value }))}
                       placeholder="9876543210"
+                      className="min-w-0"
                     />
-                    <Button type="button" variant="outline" onClick={handleSendOtp} disabled={phoneLoading}>
-                      {otpSent ? 'Resend OTP' : 'Send OTP'}
+                    <Button type="button" variant="outline" size="sm" onClick={handleSendOtp} disabled={phoneLoading} className="shrink-0">
+                      {otpSent ? 'Resend' : 'Send OTP'}
                     </Button>
                   </div>
-                  {displayOtp && <p className="text-sm text-muted-foreground">OTP: {displayOtp}</p>}
+                  {displayOtp && <p className="text-xs text-muted-foreground">OTP: {displayOtp}</p>}
                   {otpSent && (
                     <>
                       <Input
                         type="text"
+                        inputMode="numeric"
                         maxLength={6}
                         value={phoneForm.otp}
                         onChange={(e) => setPhoneForm((p) => ({ ...p, otp: e.target.value }))}
-                        placeholder="123456"
+                        placeholder="6-digit code"
                       />
-                      <Button type="button" onClick={handleVerifyAndUpdatePhone} disabled={phoneLoading}>
+                      <Button type="button" size="sm" onClick={handleVerifyAndUpdatePhone} disabled={phoneLoading}>
                         {phoneLoading ? 'Verifying...' : 'Verify & Update'}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide mb-3">Update Email Address</h2>
+                <div className="rounded-lg bg-muted/30 p-4 space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      type="email"
+                      value={emailForm.email}
+                      onChange={(e) => setEmailForm((p) => ({ ...p, email: e.target.value.trim() }))}
+                      placeholder="your@email.com"
+                      className="min-w-0"
+                    />
+                    <Button type="button" variant="outline" size="sm" onClick={handleSendEmailOtp} disabled={emailLoading} className="shrink-0">
+                      {emailOtpSent ? 'Resend' : 'Send Code'}
+                    </Button>
+                  </div>
+                  {emailOtpSent && (
+                    <>
+                      <Input
+                        type="text"
+                        inputMode="numeric"
+                        maxLength={6}
+                        value={emailForm.otp}
+                        onChange={(e) => setEmailForm((p) => ({ ...p, otp: e.target.value.replace(/\D/g, '').slice(0, 6) }))}
+                        placeholder="6-digit code"
+                      />
+                      <Button type="button" size="sm" onClick={handleVerifyAndUpdateEmail} disabled={emailLoading}>
+                        {emailLoading ? 'Verifying...' : 'Verify & Update'}
                       </Button>
                     </>
                   )}
@@ -1190,9 +1275,9 @@ export default function WorkerProfilePage() {
               </div>
             </div>
 
-            <div className="flex items-center gap-3 mb-3">
-              <Trash2 className="w-5 h-5 text-destructive" />
-              <h2 className="text-xl font-semibold text-destructive">Danger Zone</h2>
+            <div className="flex items-center gap-2 mb-3">
+              <Trash2 className="w-4 h-4 text-destructive" />
+              <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide text-destructive">Danger Zone</h2>
             </div>
             <p className="text-sm text-muted-foreground mb-4">{t('profile.deleteDesc')}</p>
             <Button type="button" variant="outline" onClick={handleLogout} className="mr-2">
