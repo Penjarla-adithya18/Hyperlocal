@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SYSTEM_PROMPTS } from '@/lib/gemini'
 
 type Tier = 'lite' | 'flash'
 
@@ -29,6 +30,9 @@ export async function POST(req: NextRequest) {
     const prompt = typeof body?.prompt === 'string' ? body.prompt : ''
     const tier: Tier = body?.tier === 'lite' ? 'lite' : 'flash'
     const maxTokens = typeof body?.maxTokens === 'number' ? Math.min(Math.max(body.maxTokens, 16), 1024) : 512
+    const systemInstruction = typeof body?.systemInstruction === 'string' && body.systemInstruction.trim()
+      ? body.systemInstruction.trim()
+      : SYSTEM_PROMPTS.API_PROXY_DEFAULT
 
     if (!prompt.trim()) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
@@ -43,6 +47,7 @@ export async function POST(req: NextRequest) {
     const payload = JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
       generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+      systemInstruction: { parts: [{ text: systemInstruction }] },
     })
 
     const run = async (apiKey: string) =>

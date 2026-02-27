@@ -14,6 +14,7 @@
  */
 
 import type { ResumeData } from './types'
+import { SYSTEM_PROMPTS } from './gemini'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -223,21 +224,24 @@ const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
 
 let _keyIdx = 0
 
-async function callGeminiForRAG(prompt: string): Promise<string> {
+async function callGeminiForRAG(prompt: string, systemInstruction: string): Promise<string> {
   if (GEMINI_KEYS.length === 0) return ''
   const key = GEMINI_KEYS[_keyIdx % GEMINI_KEYS.length]
   _keyIdx++
 
   try {
+    const payload = JSON.stringify({
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
+      systemInstruction: { parts: [{ text: systemInstruction }] },
+    })
+
     const res = await fetch(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
-        }),
+        body: payload,
       }
     )
     if (!res.ok) return ''
@@ -292,9 +296,27 @@ Rules:
 - No markdown, only JSON array`
 
   try {
-    const raw = await callGeminiForRAG(prompt)
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
-    const rankings = JSON.parse(cleaned) as Array<{ index: number; relevance: number; reason: string }>
+    const parseRankings = (rawText: string): Array<{ index: number; relevance: number; reason: string }> => {
+      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
+      const parsed = JSON.parse(cleaned) as Array<{ index: number; relevance: number; reason: string }>
+      if (!Array.isArray(parsed)) throw new Error('Rankings is not an array')
+      return parsed.filter((item) =>
+        Number.isInteger(item?.index) &&
+        typeof item?.relevance === 'number' &&
+        typeof item?.reason === 'string'
+      )
+    }
+
+    const raw = await callGeminiForRAG(prompt, SYSTEM_PROMPTS.RAG_RERANKER)
+    let rankings: Array<{ index: number; relevance: number; reason: string }>
+
+    try {
+      rankings = parseRankings(raw)
+    } catch {
+      const retryPrompt = `Return ONLY valid JSON array with objects: {"index":number,"relevance":number,"reason":string}.\nPrevious output:\n${raw.slice(0, 3000)}`
+      const repaired = await callGeminiForRAG(retryPrompt, SYSTEM_PROMPTS.RAG_RERANKER)
+      rankings = parseRankings(repaired)
+    }
 
     // Map back to results with AI explanations
     const reranked: RAGSearchResult[] = []
@@ -340,9 +362,26 @@ Examples:
 - "experienced plumber who knows pipe fitting" → {"keywords":"plumber pipe fitting","skills":["Plumbing","Pipe Fitting"],"minExperience":null}`
 
   try {
-    const raw = await callGeminiForRAG(prompt)
-    const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
-    const parsed = JSON.parse(cleaned) as { keywords: string; skills: string[]; minExperience: number | null }
+    const parseQueryResult = (rawText: string): { keywords: string; skills: string[]; minExperience: number | null } => {
+      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
+      const parsed = JSON.parse(cleaned) as { keywords: string; skills: string[]; minExperience: number | null }
+      return {
+        keywords: typeof parsed?.keywords === 'string' ? parsed.keywords : naturalQuery,
+        skills: Array.isArray(parsed?.skills) ? parsed.skills.filter((s) => typeof s === 'string' && s.trim()) : [],
+        minExperience: typeof parsed?.minExperience === 'number' ? parsed.minExperience : null,
+      }
+    }
+
+    const raw = await callGeminiForRAG(prompt, SYSTEM_PROMPTS.RAG_QUERY_PARSER)
+    let parsed: { keywords: string; skills: string[]; minExperience: number | null }
+
+    try {
+      parsed = parseQueryResult(raw)
+    } catch {
+      const retryPrompt = `Return ONLY valid JSON: {"keywords":"...","skills":["..."],"minExperience":number|null}.\nPrevious output:\n${raw.slice(0, 2000)}`
+      const repaired = await callGeminiForRAG(retryPrompt, SYSTEM_PROMPTS.RAG_QUERY_PARSER)
+      parsed = parseQueryResult(repaired)
+    }
 
     return {
       text: parsed.keywords || naturalQuery,
