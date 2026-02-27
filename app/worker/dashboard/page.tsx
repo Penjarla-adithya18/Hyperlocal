@@ -23,6 +23,7 @@ import {
 import { workerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { getWorkerProfileCompletion } from '@/lib/profileCompletion';
 import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
 
 export default function WorkerDashboardPage() {
@@ -48,8 +49,13 @@ export default function WorkerDashboardPage() {
     if (!user) return;
 
     try {
+      const findWorkerProfileByUserId = workerProfileOps?.findByUserId;
+      if (!findWorkerProfileByUserId) {
+        throw new Error('Worker profile API is unavailable. Please refresh and try again.');
+      }
+
       const [profile, trust, apps, allJobs] = await Promise.all([
-        workerProfileOps.findByUserId(user.id),
+        findWorkerProfileByUserId(user.id),
         trustScoreOps.findByUserId(user.id),
         applicationOps.findByWorkerId(user.id),
         jobOps.getAll({ status: 'active' }),
@@ -77,14 +83,7 @@ export default function WorkerDashboardPage() {
     }
   };
 
-  const profileCompleteness = workerProfile
-    ? Math.round(
-        ((workerProfile.skills.length > 0 ? 25 : 0) +
-          (workerProfile.availability ? 25 : 0) +
-          (workerProfile.categories.length > 0 ? 25 : 0) +
-          (workerProfile.experience ? 25 : 0))
-      )
-    : 0;
+  const profileCompleteness = workerProfile ? getWorkerProfileCompletion(workerProfile) : 0;
 
   // Analytics data for charts
   const last7Days = Array.from({ length: 7 }, (_, i) => {

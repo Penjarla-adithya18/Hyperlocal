@@ -25,6 +25,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { SimpleLineChart, SimpleBarChart } from '@/components/ui/charts';
+import { getEmployerProfileCompletion } from '@/lib/profileCompletion';
 import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
@@ -49,8 +50,13 @@ export default function EmployerDashboardPage() {
 
     async function loadDashboardData() {
       try {
+        const findEmployerProfileByUserId = employerProfileOps?.findByUserId;
+        if (!findEmployerProfileByUserId) {
+          throw new Error('Employer profile API is unavailable. Please refresh and try again.');
+        }
+
         const [profile, trust, employerJobs] = await Promise.all([
-          employerProfileOps.findByUserId(user!.id),
+          findEmployerProfileByUserId(user!.id),
           trustScoreOps.findByUserId(user!.id),
           jobOps.findByEmployerId(user!.id),
         ]);
@@ -91,12 +97,7 @@ export default function EmployerDashboardPage() {
   // Calculate employer profile completeness
   const profileCompleteness = useMemo(() => {
     if (!employerProfile) return 0;
-    let score = 0;
-    if (employerProfile.businessName) score += 30;
-    if (employerProfile.location) score += 25;
-    if (employerProfile.description && employerProfile.description.length > 20) score += 25;
-    if (employerProfile.businessType) score += 20;
-    return Math.round(score);
+    return getEmployerProfileCompletion(employerProfile);
   }, [employerProfile]);
 
   // Analytics data

@@ -15,6 +15,7 @@ import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Cam
 import { workerProfileOps, userOps, db } from '@/lib/api';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
+import { getWorkerProfileCompletion, isWorkerProfileComplete } from '@/lib/profileCompletion';
 import { VoiceInput } from '@/components/ui/voice-input';
 import { LocationInput } from '@/components/ui/location-input';
 import { useToast } from '@/hooks/use-toast';
@@ -54,7 +55,12 @@ export default function WorkerProfilePage() {
     if (!user) return;
 
     try {
-      const workerProfile = await workerProfileOps.findByUserId(user.id);
+      const findByUserId = workerProfileOps?.findByUserId;
+      if (!findByUserId) {
+        throw new Error('Worker profile API is unavailable. Please refresh and try again.');
+      }
+
+      const workerProfile = await findByUserId(user.id);
       if (workerProfile) {
         setProfile(workerProfile);
         setFormData({
@@ -208,12 +214,7 @@ export default function WorkerProfilePage() {
       }
 
       // Update user profile completion status (bio is optional ï¿½ not counted)
-      const isComplete =
-        formData.skills.length > 0 &&
-        formData.availability &&
-        formData.categories.length > 0 &&
-        formData.experience &&
-        formData.location;
+      const isComplete = isWorkerProfileComplete(formData);
 
       await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
@@ -236,13 +237,10 @@ export default function WorkerProfilePage() {
   };
 
   // -- Live profile completeness: must be above early-return to satisfy Rules of Hooks --
-  const profileCompleteness = useMemo(() => Math.round(
-    (formData.skills.length > 0 ? 25 : 0) +
-    (formData.categories.length > 0 ? 25 : 0) +
-    (formData.availability ? 20 : 0) +
-    (formData.experience ? 20 : 0) +
-    (formData.location ? 10 : 0)
-  ), [formData.skills, formData.categories, formData.availability, formData.experience, formData.location]);
+  const profileCompleteness = useMemo(
+    () => getWorkerProfileCompletion(formData),
+    [formData.skills, formData.categories, formData.availability, formData.experience, formData.location],
+  );
 
   if (loading) {
     return (

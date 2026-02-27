@@ -13,6 +13,7 @@ import { Progress } from '@/components/ui/progress';
 import { Building2, Loader2, Save, Shield, TrendingUp, Trash2 } from 'lucide-react';
 import { employerProfileOps, userOps, db } from '@/lib/api';
 import { EmployerProfile } from '@/lib/types';
+import { getEmployerProfileCompletion, isEmployerProfileComplete } from '@/lib/profileCompletion';
 import { LocationInput } from '@/components/ui/location-input';
 import { useToast } from '@/hooks/use-toast';
 import { useI18n } from '@/contexts/I18nContext';
@@ -73,7 +74,12 @@ export default function EmployerProfilePage() {
     if (!user) return;
 
     try {
-      const employerProfile = await employerProfileOps.findByUserId(user.id);
+      const findByUserId = employerProfileOps?.findByUserId;
+      if (!findByUserId) {
+        throw new Error('Employer profile API is unavailable. Please refresh and try again.');
+      }
+
+      const employerProfile = await findByUserId(user.id);
       if (employerProfile) {
         setProfile(employerProfile);
         setFormData({
@@ -130,11 +136,7 @@ export default function EmployerProfilePage() {
       }
 
       // Update user profile completion status
-      const isComplete =
-        formData.businessName &&
-        formData.location &&
-        formData.businessType &&
-        formData.description;
+      const isComplete = isEmployerProfileComplete(formData);
 
       await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
@@ -179,12 +181,10 @@ export default function EmployerProfilePage() {
   };
 
   // Live profile completeness
-  const profileCompleteness = useMemo(() => Math.round(
-    (formData.businessName ? 30 : 0) +
-    (formData.location ? 25 : 0) +
-    (formData.businessType ? 20 : 0) +
-    (formData.description && formData.description.length > 20 ? 25 : 0)
-  ), [formData.businessName, formData.location, formData.businessType, formData.description]);
+  const profileCompleteness = useMemo(
+    () => getEmployerProfileCompletion(formData),
+    [formData.businessName, formData.location, formData.businessType, formData.description],
+  );
 
   if (loading) {
     return (
