@@ -11,13 +11,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
-import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { SkillAssessment, SkillResult } from '@/components/ui/skill-assessment';
 import { workerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { resetPassword, sendOTP, verifyOTP, sendEmailOtp, verifyEmailOtp } from '@/lib/auth';
 import { WorkerProfile } from '@/lib/types';
 import { extractSkills, extractSkillsWithAI, JOB_CATEGORIES } from '@/lib/aiMatching';
-import { extractTextFromFile, parseResume, type ParsedResume } from '@/lib/resumeParser';
 import { getWorkerProfileCompletion, isWorkerProfileComplete } from '@/lib/profileCompletion';
 import { VoiceInput } from '@/components/ui/voice-input';
 import { LocationInput } from '@/components/ui/location-input';
@@ -59,10 +58,6 @@ export default function WorkerProfilePage() {
     resumeFileName: '',
   });
   const [resumeUploading, setResumeUploading] = useState(false);
-  const [extractedFromResume, setExtractedFromResume] = useState<ParsedResume | null>(null);
-  const [resumeRawText, setResumeRawText] = useState<string>('');
-  const [selectedExtracted, setSelectedExtracted] = useState<Set<string>>(new Set());
-  const [showAllCategories, setShowAllCategories] = useState<Record<string, boolean>>({});
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
   const [pwLoading, setPwLoading] = useState(false);
   const [phoneForm, setPhoneForm] = useState({ phone: user?.phoneNumber ?? '', otp: '' });
@@ -114,13 +109,6 @@ export default function WorkerProfilePage() {
         const existingSkills = workerProfile.skills || [];
         const storedVerified = JSON.parse(localStorage.getItem(`verifiedSkills_${user.id}`) || '[]') as string[];
         setVerifiedSkills([...new Set([...existingSkills, ...storedVerified])]);
-        // Restore resume data if available
-        if (workerProfile.resumeText) {
-          setResumeRawText(workerProfile.resumeText);
-        }
-        if (workerProfile.resumeParsed) {
-          setExtractedFromResume(workerProfile.resumeParsed);
-        }
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -203,43 +191,12 @@ export default function WorkerProfilePage() {
     }
 
     setResumeUploading(true);
-    setExtractedFromResume(null);
-    setResumeRawText('');
-    setSelectedExtracted(new Set());
-
     try {
-      // Extract text and parse in parallel with FileReader
-      const [text] = await Promise.all([extractTextFromFile(file)]);
-
       const reader = new FileReader();
-      reader.onload = async (ev) => {
+      reader.onload = (ev) => {
         const dataUrl = ev.target?.result as string;
         setFormData(prev => ({ ...prev, resumeUrl: dataUrl, resumeFileName: file.name }));
-
-        if (text && text.trim().length > 50) {
-          setResumeRawText(text);
-          try {
-            const parsed = await parseResume(text);
-            if (parsed.skills && parsed.skills.length > 0) {
-              setExtractedFromResume(parsed);
-              setSelectedExtracted(new Set(parsed.skills));
-              toast({
-                title: 'Resume Parsed Successfully',
-                description: `AI identified ${parsed.skills.length} skill${parsed.skills.length !== 1 ? 's' : ''} — review them below`,
-              });
-            } else {
-              toast({ title: 'Resume Uploaded', description: 'No skills detected — try adding them manually' });
-            }
-          } catch {
-            toast({ title: 'Resume Uploaded', description: 'Could not AI-parse skills. Try extracting manually.' });
-          }
-        } else {
-          toast({
-            title: 'Resume Uploaded',
-            description: 'Very little text found — the file may be image-based',
-            variant: 'default',
-          });
-        }
+        toast({ title: 'Resume Uploaded', description: `${file.name} has been attached to your profile.` });
         setResumeUploading(false);
       };
       reader.onerror = () => {
@@ -247,29 +204,10 @@ export default function WorkerProfilePage() {
         toast({ title: 'Upload Failed', description: 'Could not read resume file', variant: 'destructive' });
       };
       reader.readAsDataURL(file);
-    } catch (err) {
+    } catch {
       toast({ title: 'Upload Failed', description: 'Could not process resume file', variant: 'destructive' });
       setResumeUploading(false);
     }
-  };
-
-  /** Merge selected extracted skills into profile skills (keep extracted data in state) */
-  const handleAddExtractedSkills = (all = false) => {
-    const toAdd = all
-      ? (extractedFromResume?.skills ?? [])
-      : Array.from(selectedExtracted);
-    const merged = [...new Set([...formData.skills, ...toAdd])];
-    setFormData(prev => ({ ...prev, skills: merged }));
-    setSelectedExtracted(new Set());
-    toast({ title: 'Skills Added', description: `${toAdd.length} skill(s) added to your profile` });
-  };
-
-  const toggleExtractedSkill = (skill: string) => {
-    setSelectedExtracted(prev => {
-      const next = new Set(prev);
-      next.has(skill) ? next.delete(skill) : next.add(skill);
-      return next;
-    });
   };
 
   const addSkill = () => {
@@ -497,15 +435,6 @@ export default function WorkerProfilePage() {
         bio: formData.bio,
         profilePictureUrl: formData.profileImage || undefined,
         resumeUrl: formData.resumeUrl || undefined,
-        resumeText: resumeRawText || undefined,
-        resumeParsed: extractedFromResume ? {
-          summary: extractedFromResume.summary || '',
-          skills: extractedFromResume.skills || [],
-          experience: extractedFromResume.experience || [],
-          education: extractedFromResume.education || [],
-          projects: extractedFromResume.projects || [],
-          certifications: extractedFromResume.certifications || [],
-        } : undefined,
         profileCompleted: !!isComplete,
       };
 
@@ -517,10 +446,6 @@ export default function WorkerProfilePage() {
 
       await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
-
-      setExtractedFromResume(null);
-      setResumeRawText('');
-      setSelectedExtracted(new Set());
 
       toast({
         title: 'Profile Updated',
@@ -732,194 +657,7 @@ export default function WorkerProfilePage() {
                 )}
               </div>
 
-              {/* ── AI Extracted Skills Panel ─────────────────────────── */}
-              {extractedFromResume && (extractedFromResume.skills?.length ?? 0) > 0 && (
-                <div className="rounded-lg border-2 border-primary/30 bg-primary/5 p-4 space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                  {/* Header */}
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <Sparkles className="w-5 h-5 text-primary shrink-0" />
-                      <div>
-                        <p className="text-sm font-semibold text-primary">
-                          AI found {extractedFromResume.skills.length} skills in your resume
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          Select the skills you want to add to your profile
-                        </p>
-                      </div>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => { setSelectedExtracted(new Set()); }}
-                      className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
-                      aria-label="Dismiss"
-                    >
-                      <X className="w-4 h-4" />
-                    </button>
-                  </div>
 
-                  {/* Categorized skills */}
-                  {extractedFromResume.categorizedSkills && (() => {
-                    const cats = [
-                      { key: 'technical', label: 'Technical', color: 'bg-blue-100 text-blue-800 dark:bg-blue-900/40 dark:text-blue-300 border-blue-200 dark:border-blue-700' },
-                      { key: 'tools', label: 'Tools & Software', color: 'bg-orange-100 text-orange-800 dark:bg-orange-900/40 dark:text-orange-300 border-orange-200 dark:border-orange-700' },
-                      { key: 'domain', label: 'Domain / Industry', color: 'bg-green-100 text-green-800 dark:bg-green-900/40 dark:text-green-300 border-green-200 dark:border-green-700' },
-                      { key: 'soft', label: 'Soft Skills', color: 'bg-purple-100 text-purple-800 dark:bg-purple-900/40 dark:text-purple-300 border-purple-200 dark:border-purple-700' },
-                    ] as const;
-
-                    const cs = extractedFromResume.categorizedSkills!;
-
-                    return (
-                      <div className="space-y-3">
-                        {cats.map(({ key, label, color }) => {
-                          const skills = cs[key] ?? [];
-                          if (skills.length === 0) return null;
-                          const isExpanded = showAllCategories[key] ?? true;
-                          const shown = isExpanded ? skills : skills.slice(0, 8);
-                          return (
-                            <div key={key} className="space-y-1.5">
-                              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</p>
-                              <div className="flex flex-wrap gap-1.5">
-                                {shown.map(skill => {
-                                  const isSelected = selectedExtracted.has(skill);
-                                  const alreadyHave = formData.skills.includes(skill);
-                                  return (
-                                    <button
-                                      key={skill}
-                                      type="button"
-                                      disabled={alreadyHave}
-                                      onClick={() => !alreadyHave && toggleExtractedSkill(skill)}
-                                      className={[
-                                        'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-all duration-150',
-                                        alreadyHave
-                                          ? 'opacity-40 cursor-not-allowed bg-muted text-muted-foreground border-border'
-                                          : isSelected
-                                            ? `${color} cursor-pointer shadow-sm scale-[1.02]`
-                                            : 'bg-background text-muted-foreground border-border hover:border-primary/50 cursor-pointer',
-                                      ].join(' ')}
-                                    >
-                                      {isSelected && !alreadyHave && <Check className="w-3 h-3 shrink-0" />}
-                                      {skill}
-                                      {alreadyHave && <span className="ml-0.5 text-[10px]">✓</span>}
-                                    </button>
-                                  );
-                                })}
-                                {skills.length > 8 && (
-                                  <button
-                                    type="button"
-                                    onClick={() => setShowAllCategories(prev => ({ ...prev, [key]: !isExpanded }))}
-                                    className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-primary/50 px-2.5 py-0.5 text-xs text-primary hover:bg-primary/5 transition-colors"
-                                  >
-                                    {isExpanded ? (
-                                      <><ChevronUp className="w-3 h-3" />Show less</>
-                                    ) : (
-                                      <><ChevronDown className="w-3 h-3" />+{skills.length - 8} more</>
-                                    )}
-                                  </button>
-                                )}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  })()}
-
-                  {/* If no categorized (fallback), show flat list */}
-                  {!extractedFromResume.categorizedSkills && (
-                    <div className="flex flex-wrap gap-1.5">
-                      {extractedFromResume.skills.map(skill => {
-                        const isSelected = selectedExtracted.has(skill);
-                        const alreadyHave = formData.skills.includes(skill);
-                        return (
-                          <button
-                            key={skill}
-                            type="button"
-                            disabled={alreadyHave}
-                            onClick={() => !alreadyHave && toggleExtractedSkill(skill)}
-                            className={[
-                              'inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-xs font-medium transition-all duration-150',
-                              alreadyHave ? 'opacity-40 cursor-not-allowed bg-muted border-border' : isSelected
-                                ? 'bg-primary/10 text-primary border-primary/40 cursor-pointer'
-                                : 'bg-background text-muted-foreground border-border hover:border-primary/50 cursor-pointer',
-                            ].join(' ')}
-                          >
-                            {isSelected && !alreadyHave && <Check className="w-3 h-3" />}
-                            {skill}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {/* Actions */}
-                  <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-primary/20">
-                    <span className="text-xs text-muted-foreground flex-1">
-                      {selectedExtracted.size} of {extractedFromResume.skills.length} selected
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedExtracted(new Set())}
-                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                    >
-                      Deselect all
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setSelectedExtracted(new Set(extractedFromResume.skills))}
-                      className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 transition-colors"
-                    >
-                      Select all
-                    </button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="h-7 text-xs"
-                      disabled={selectedExtracted.size === 0}
-                      onClick={() => handleAddExtractedSkills(false)}
-                    >
-                      Add Selected ({selectedExtracted.size})
-                    </Button>
-                    <Button
-                      type="button"
-                      size="sm"
-                      className="h-7 text-xs"
-                      onClick={() => handleAddExtractedSkills(true)}
-                    >
-                      <Sparkles className="w-3 h-3 mr-1" />
-                      Add All {extractedFromResume.skills.length}
-                    </Button>
-                  </div>
-
-                  {/* Extracted info preview (experience/education) */}
-                  {((extractedFromResume.experience?.length ?? 0) > 0 ||
-                    (extractedFromResume.education?.length ?? 0) > 0) && (
-                    <details className="group">
-                      <summary className="text-xs text-primary cursor-pointer select-none list-none flex items-center gap-1 hover:underline">
-                        <ChevronDown className="w-3 h-3 group-open:rotate-180 transition-transform" />
-                        View extracted experience & education
-                      </summary>
-                      <div className="mt-2 space-y-2 text-xs text-muted-foreground border-t border-primary/20 pt-2">
-                        {extractedFromResume.experience?.slice(0, 3).map((exp, i) => (
-                          <div key={i}>
-                            <span className="font-medium text-foreground">{exp.title}</span>
-                            {exp.company && <span> @ {exp.company}</span>}
-                            {exp.duration && <span className="ml-1 text-muted-foreground/70">({exp.duration})</span>}
-                          </div>
-                        ))}
-                        {extractedFromResume.education?.slice(0, 2).map((edu, i) => (
-                          <div key={i}>
-                            <span className="font-medium text-foreground">{edu.degree}</span>
-                            {edu.institution && <span> — {edu.institution}</span>}
-                            {edu.year && <span className="ml-1 text-muted-foreground/70">({edu.year})</span>}
-                          </div>
-                        ))}
-                      </div>
-                    </details>
-                  )}
-                </div>
-              )}
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
