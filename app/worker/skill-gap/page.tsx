@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Progress } from '@/components/ui/progress'
 import { useAuth } from '@/contexts/AuthContext'
 import { useI18n } from '@/contexts/I18nContext'
-import { mockWorkerProfileOps, mockJobOps, mockTrustScoreOps } from '@/lib/api'
+import { workerProfileOps, jobOps, trustScoreOps } from '@/lib/api'
 import {
   analyzeSkillGap,
   generateLearningPlan,
@@ -21,7 +21,7 @@ import {
   AssessmentQuestion,
   SupportedLocale,
 } from '@/lib/gemini'
-import { WorkerProfile } from '@/lib/types'
+import { WorkerProfile, Job } from '@/lib/types'
 import {
   Sparkles,
   CheckCircle2,
@@ -87,8 +87,8 @@ export default function SkillGapPage() {
     ;(async () => {
       try {
         const [prof, allJobs] = await Promise.all([
-          mockWorkerProfileOps.findByUserId(user.id),
-          mockJobOps.getAll({ status: 'active' }),
+          workerProfileOps.findByUserId(user.id),
+          jobOps.getAll({ status: 'active' }),
         ])
         setProfile(prof)
 
@@ -233,16 +233,16 @@ export default function SkillGapPage() {
         const alreadyHas = currentSkills.some((s) => s.toLowerCase() === skillLower)
         if (!alreadyHas) {
           const newSkills = [...currentSkills, assessment.skill]
-          const updatedProfile = await mockWorkerProfileOps.update(user.id, { skills: newSkills })
+          const updatedProfile = await workerProfileOps.update(user.id, { skills: newSkills })
           if (updatedProfile) setProfile(updatedProfile)
           else setProfile({ ...profile, skills: newSkills })
         }
         try {
-          const trust = await mockTrustScoreOps.findByUserId(user.id)
+          const trust = await trustScoreOps.findByUserId(user.id)
           if (trust) {
             const newRating = Math.min(5, (trust.averageRating || 4) + 0.1)
             const newScore = Math.min(100, (trust.score || 50) + 2)
-            await mockTrustScoreOps.update(user.id, {
+            await trustScoreOps.update(user.id, {
               averageRating: Math.round(newRating * 10) / 10,
               score: Math.round(newScore),
               totalRatings: (trust.totalRatings || 0) + 1,

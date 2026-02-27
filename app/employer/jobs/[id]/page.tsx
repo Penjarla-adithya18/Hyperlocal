@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, mockWorkerProfileOps, mockNotificationOps, sendWATIAlert } from '@/lib/api'
+import { db, escrowOps, applicationOps, ratingOps, userOps, workerProfileOps, notificationOps, sendWATIAlert } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { Job, Application, EscrowTransaction, WorkerProfile } from '@/lib/types'
 import {
@@ -47,9 +47,9 @@ export default function EmployerJobDetailPage() {
     // Fetch job, its applications, and its escrow in parallel
     // FIX: Use findByJobId instead of fetching ALL escrow transactions
     const [jobData, allApps, escrowData] = await Promise.all([
-      mockDb.getJobById(jobId),
-      mockApplicationOps.findByJobId(jobId),
-      mockEscrowOps.findByJobId(jobId),
+      db.getJobById(jobId),
+      applicationOps.findByJobId(jobId),
+      escrowOps.findByJobId(jobId),
     ])
 
     setJob(jobData)
@@ -60,8 +60,8 @@ export default function EmployerJobDetailPage() {
     if (allApps.length > 0) {
       const workerIds = [...new Set(allApps.map((a) => a.workerId))]
       const [workers, profiles] = await Promise.all([
-        Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null))),
-        Promise.all(workerIds.map((id) => mockWorkerProfileOps.findByUserId(id).catch(() => null))),
+        Promise.all(workerIds.map((id) => userOps.findById(id).catch(() => null))),
+        Promise.all(workerIds.map((id) => workerProfileOps.findByUserId(id).catch(() => null))),
       ])
       const wMap: Record<string, import('@/lib/types').User> = {}
       const pMap: Record<string, WorkerProfile> = {}
@@ -100,7 +100,7 @@ export default function EmployerJobDetailPage() {
     }
     setActionLoading(true)
     try {
-      await mockRatingOps.create({ jobId, toUserId: acceptedApp.workerId, rating: ratingValue, feedback: ratingFeedback })
+      await ratingOps.create({ jobId, toUserId: acceptedApp.workerId, rating: ratingValue, feedback: ratingFeedback })
       toast({ title: 'Rating Submitted!', description: `You rated this worker ${ratingValue}/5 ⭐` })
       setRatingDone(true)
       setRatingOpen(false)
@@ -115,22 +115,22 @@ export default function EmployerJobDetailPage() {
     try {
       const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
       await Promise.all([
-        mockEscrowOps.update(escrow.id, { status: 'released', releasedAt: new Date().toISOString() }),
-        mockDb.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
+        escrowOps.update(escrow.id, { status: 'released', releasedAt: new Date().toISOString() }),
+        db.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
         // Mark application as completed
-        ...(acceptedApp ? [mockApplicationOps.update(acceptedApp.id, { status: 'completed' })] : []),
+        ...(acceptedApp ? [applicationOps.update(acceptedApp.id, { status: 'completed' })] : []),
       ])
       toast({ title: 'Payment Released', description: 'Net payout sent to worker.' })
       // Send notifications + WhatsApp
       if (acceptedApp) {
-        const worker = await mockUserOps.findById(acceptedApp.workerId).catch(() => null)
+        const worker = await userOps.findById(acceptedApp.workerId).catch(() => null)
         const amount = job?.payAmount ?? job?.pay ?? 0
         if (worker) {
           sendWATIAlert('payment_released', worker.phoneNumber, { jobTitle: job?.title ?? '', amount: String(amount) })
         }
         // In-app notification
         try {
-          await mockNotificationOps.create({
+          await notificationOps.create({
             userId: acceptedApp.workerId,
             type: 'payment',
             title: 'Payment Received! 💰',
@@ -150,8 +150,8 @@ export default function EmployerJobDetailPage() {
     setActionLoading(true)
     try {
       await Promise.all([
-        mockEscrowOps.update(escrow.id, { status: 'refunded' }),
-        mockDb.updateJob(jobId, { status: 'cancelled', paymentStatus: 'refunded' }),
+        escrowOps.update(escrow.id, { status: 'refunded' }),
+        db.updateJob(jobId, { status: 'cancelled', paymentStatus: 'refunded' }),
       ])
       toast({ title: 'Dispute Filed', description: 'Refund will be processed in 3–5 business days.' })
       setDisputeOpen(false)
@@ -164,14 +164,14 @@ export default function EmployerJobDetailPage() {
     setActionLoading(true)
     try {
       const app = applications.find(a => a.id === appId)
-      await mockApplicationOps.update(appId, { status: 'accepted' })
+      await applicationOps.update(appId, { status: 'accepted' })
 
       // Create escrow transaction for this worker
       if (job && app) {
         const amount = job.payAmount ?? job.pay ?? 0
         const commission = Math.round(amount * COMMISSION_RATE)
         try {
-          await mockEscrowOps.create({
+          await escrowOps.create({
             jobId: job.id,
             employerId: job.employerId,
             workerId: app.workerId,
@@ -183,7 +183,7 @@ export default function EmployerJobDetailPage() {
 
         // Send in-app notification to worker
         try {
-          await mockNotificationOps.create({
+          await notificationOps.create({
             userId: app.workerId,
             type: 'application',
             title: 'Application Accepted! 🎉',
@@ -194,7 +194,7 @@ export default function EmployerJobDetailPage() {
         } catch (e) { console.error('Notification failed', e) }
 
         // Send WhatsApp alert
-        const worker = await mockUserOps.findById(app.workerId).catch(() => null)
+        const worker = await userOps.findById(app.workerId).catch(() => null)
         if (worker) {
           sendWATIAlert('application_accepted', worker.phoneNumber, { jobTitle: job.title })
         }
@@ -210,12 +210,12 @@ export default function EmployerJobDetailPage() {
     setActionLoading(true)
     try {
       const app = applications.find(a => a.id === appId)
-      await mockApplicationOps.update(appId, { status: 'rejected' })
+      await applicationOps.update(appId, { status: 'rejected' })
 
       // Send in-app notification to worker
       if (job && app) {
         try {
-          await mockNotificationOps.create({
+          await notificationOps.create({
             userId: app.workerId,
             type: 'application',
             title: 'Application Update',
@@ -236,10 +236,10 @@ export default function EmployerJobDetailPage() {
     if (!user || !job) return
     try {
       // Step 1: find existing conv for this specific application
-      let conv = await mockDb.findConversationByApplicationId(user.id, app.id).catch(() => null)
+      let conv = await db.findConversationByApplicationId(user.id, app.id).catch(() => null)
       // Step 2: search existing convs by worker + job
       if (!conv) {
-        const allConvs = await mockDb.getConversationsByUser(user.id).catch(() => [])
+        const allConvs = await db.getConversationsByUser(user.id).catch(() => [])
         conv = allConvs.find(c =>
           c.participants.includes(app.workerId) &&
           (c.jobId === job.id || c.applicationId === app.id)
@@ -247,7 +247,7 @@ export default function EmployerJobDetailPage() {
       }
       // Step 3: create new conversation
       if (!conv) {
-        conv = await mockDb.createConversation({
+        conv = await db.createConversation({
           workerId: app.workerId,
           employerId: user.id,
           jobId: job.id,
@@ -485,11 +485,11 @@ export default function EmployerJobDetailPage() {
             <Card className={`border-2 ${(escrow?.status === 'held' || job.paymentStatus === 'locked') ? 'border-green-300 bg-green-50/50' : 'border-border'}`}>
               <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Shield className="w-5 h-5 text-primary" /> Escrow Status</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-center text-sm font-medium">
-                  {(escrow?.status === 'held' || job.paymentStatus === 'locked') && <span className="flex items-center justify-center gap-1 text-green-700"><Lock className="w-4 h-4" /> Secured in Escrow</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'released' && <span className="flex items-center justify-center gap-1 text-blue-700"><Unlock className="w-4 h-4" /> Released to Worker</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'refunded' && <span className="flex items-center justify-center gap-1 text-orange-700"><RefreshCcw className="w-4 h-4" /> Refunded</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'pending' && <span className="flex items-center justify-center gap-1 text-amber-600"><AlertCircle className="w-4 h-4" /> Pending Payment</span>}
+                <div className="rounded-md border bg-background p-3 text-sm font-medium">
+                  {(escrow?.status === 'held' || job.paymentStatus === 'locked') && <span className="flex items-center gap-2 text-green-700"><Lock className="w-4 h-4 shrink-0" /> Secured in Escrow</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'released' && <span className="flex items-center gap-2 text-blue-700"><Unlock className="w-4 h-4 shrink-0" /> Released to Worker</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'refunded' && <span className="flex items-center gap-2 text-orange-700"><RefreshCcw className="w-4 h-4 shrink-0" /> Refunded</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'pending' && <span className="flex items-center gap-2 text-amber-600"><AlertCircle className="w-4 h-4 shrink-0" /> Pending Payment</span>}
                 </div>
 
                 <div className="space-y-2 text-sm">

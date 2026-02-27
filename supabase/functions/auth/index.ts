@@ -7,6 +7,29 @@ import {
 } from '../_shared/auth.ts'
 import { hashPassword, verifyPassword } from '../_shared/crypto.ts'
 
+const VERIFY_BASE_URL = 'https://verify.twilio.com/v2'
+
+function getTwilioConfig() {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')?.trim() ?? ''
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim() ?? ''
+  const serviceSid = Deno.env.get('TWILIO_VERIFY_SERVICE_SID')?.trim() ?? ''
+  const defaultCountryCode = Deno.env.get('OTP_DEFAULT_COUNTRY_CODE')?.trim() || '+91'
+  return { accountSid, authToken, serviceSid, defaultCountryCode }
+}
+
+function normalizePhone(rawPhone: string, defaultCountryCode: string): string {
+  const cleaned = rawPhone.replace(/\s+/g, '').trim()
+  if (!cleaned) return ''
+  if (cleaned.startsWith('+')) return cleaned
+  const digits = cleaned.replace(/\D/g, '')
+  if (!digits) return ''
+  return `${defaultCountryCode}${digits}`
+}
+
+function toBasicAuth(accountSid: string, authToken: string): string {
+  return btoa(`${accountSid}:${authToken}`)
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req)
   if (cors) return cors
@@ -130,6 +153,89 @@ Deno.serve(async (req: Request) => {
         expiresAt: session.expiresAt,
         message: 'Login successful',
       })
+    }
+
+    if (action === 'send-otp') {
+      const phoneNumber = typeof body?.phoneNumber === 'string' ? body.phoneNumber : ''
+      const { accountSid, authToken, serviceSid, defaultCountryCode } = getTwilioConfig()
+      if (!accountSid || !authToken || !serviceSid) {
+        return jsonResponse({ success: false, message: 'OTP service is not configured on backend.' }, 503)
+      }
+
+      const to = normalizePhone(phoneNumber, defaultCountryCode)
+      if (!to) {
+        return jsonResponse({ success: false, message: 'Invalid phone number.' }, 400)
+      }
+
+      const endpoint = `${VERIFY_BASE_URL}/Services/${serviceSid}/Verifications`
+      const payload = new URLSearchParams({ To: to, Channel: 'sms' })
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${toBasicAuth(accountSid, authToken)}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: payload,
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'Failed to send OTP. Please try again.'
+        return jsonResponse({ success: false, message }, response.status)
+      }
+
+      return jsonResponse({ success: true, message: 'OTP sent successfully.' })
+    }
+
+    if (action === 'verify-otp') {
+      const phoneNumber = typeof body?.phoneNumber === 'string' ? body.phoneNumber : ''
+      const code = typeof body?.otp === 'string' ? body.otp.trim() : ''
+
+      const { accountSid, authToken, serviceSid, defaultCountryCode } = getTwilioConfig()
+      if (!accountSid || !authToken || !serviceSid) {
+        return jsonResponse({ success: false, message: 'OTP service is not configured on backend.' }, 503)
+      }
+
+      const to = normalizePhone(phoneNumber, defaultCountryCode)
+      if (!to || !/^\d{6}$/.test(code)) {
+        return jsonResponse({ success: false, message: 'Invalid phone number or OTP.' }, 400)
+      }
+
+      const endpoint = `${VERIFY_BASE_URL}/Services/${serviceSid}/VerificationCheck`
+      const payload = new URLSearchParams({ To: to, Code: code })
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          Authorization: `Basic ${toBasicAuth(accountSid, authToken)}`,
+          'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: payload,
+      })
+
+      const data = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        const message = typeof data?.message === 'string' ? data.message : 'OTP verification failed. Please try again.'
+        return jsonResponse({ success: false, message }, response.status)
+      }
+
+      if (data?.status !== 'approved') {
+        return jsonResponse({ success: false, message: 'Invalid or expired OTP.' }, 400)
+      }
+
+      return jsonResponse({ success: true, message: 'OTP verified successfully.' })
+    }
+
+    if (action === 'maps-config') {
+      const mapsApiKey =
+        Deno.env.get('GOOGLE_MAPS_API_KEY')?.trim() ||
+        Deno.env.get('NEXT_PUBLIC_GOOGLE_MAPS_API_KEY')?.trim() ||
+        ''
+
+      if (!mapsApiKey) {
+        return jsonResponse({ success: false, message: 'Google Maps API key is not configured on backend.' }, 503)
+      }
+
+      return jsonResponse({ success: true, mapsApiKey })
     }
 
     if (action === 'reset-password') {

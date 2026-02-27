@@ -81,7 +81,7 @@ const handleSendMessage = async () => {
     )
     
     // Send message with attachment data
-    await mockDb.sendMessage({
+    await db.sendMessage({
       conversationId,
       senderId: user.id,
       message: `Sent ${uploadResult.name}`,

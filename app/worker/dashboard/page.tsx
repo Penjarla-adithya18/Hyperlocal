@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { WorkerNav } from '@/components/worker/WorkerNav';
@@ -20,9 +20,10 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { workerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { getWorkerProfileCompletion } from '@/lib/profileCompletion';
 import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -49,11 +50,16 @@ export default function WorkerDashboardPage() {
     if (!user) return;
 
     try {
+      const findWorkerProfileByUserId = workerProfileOps?.findByUserId;
+      if (!findWorkerProfileByUserId) {
+        throw new Error('Worker profile API is unavailable. Please refresh and try again.');
+      }
+
       const [profile, trust, apps, allJobs] = await Promise.allSettled([
-        mockWorkerProfileOps.findByUserId(user.id),
-        mockTrustScoreOps.findByUserId(user.id),
-        mockApplicationOps.findByWorkerId(user.id),
-        mockJobOps.getAll({ status: 'active' }),
+        findWorkerProfileByUserId(user.id),
+        trustScoreOps.findByUserId(user.id),
+        applicationOps.findByWorkerId(user.id),
+        jobOps.getAll({ status: 'active' }),
       ]);
 
       const profileVal = profile.status === 'fulfilled' ? profile.value : null;
@@ -83,33 +89,35 @@ export default function WorkerDashboardPage() {
     }
   };
 
-  const profileCompleteness = workerProfile
-    ? Math.round(
-        ((workerProfile.skills.length > 0 ? 25 : 0) +
-          (workerProfile.availability ? 25 : 0) +
-          (workerProfile.categories.length > 0 ? 25 : 0) +
-          (workerProfile.experience ? 25 : 0))
-      )
-    : 0;
+  const profileCompleteness = workerProfile ? getWorkerProfileCompletion(workerProfile) : 0;
 
-  // Analytics data for charts
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
-  });
+  // Analytics data for charts (deterministic from actual applications)
+  const applicationTrendData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-  const applicationTrendData = last7Days.map((day, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
-    const dayEnd = dayStart + 86400000;
-    const count = applications.filter(a => {
-      const created = new Date(a.createdAt).getTime();
-      return created >= dayStart && created < dayEnd;
-    }).length;
-    return { label: day, value: count };
-  });
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (6 - i));
+      return day;
+    });
+
+    const countsByDay = new Map<string, number>();
+    for (const application of applications) {
+      const created = new Date(application.createdAt);
+      created.setHours(0, 0, 0, 0);
+      const key = created.toISOString().slice(0, 10);
+      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+    }
+
+    return days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        value: countsByDay.get(key) ?? 0,
+      };
+    });
+  }, [applications]);
 
   if (authLoading || loading) {
     return (
@@ -124,7 +132,7 @@ export default function WorkerDashboardPage() {
             <Skeleton className="h-10 w-40 rounded-md" />
           </div>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
+            {Array.from({ length: 4 }).map((_, i) => (
               <div key={i} className="card-modern p-5">
                 <Skeleton className="h-10 w-10 rounded-xl mb-3" />
                 <Skeleton className="h-7 w-12 mb-1" />
@@ -133,7 +141,7 @@ export default function WorkerDashboardPage() {
             ))}
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {[...Array(3)].map((_, i) => (
+            {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i} className="p-6 space-y-4">
                 <div className="flex justify-between">
                   <div className="space-y-2">

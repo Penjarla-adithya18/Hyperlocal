@@ -1,5 +1,5 @@
 import { EscrowTransaction } from './types'
-import { mockEscrowOps } from './api'
+import { escrowOps } from './api'
 
 /**
  * Creates a new escrow transaction in 'pending' state.
@@ -11,7 +11,7 @@ export async function createEscrowTransaction(
   workerId: string,
   amount: number
 ): Promise<EscrowTransaction> {
-  return mockEscrowOps.create({
+  return escrowOps.create({
     jobId,
     employerId,
     workerId,
@@ -22,7 +22,7 @@ export async function createEscrowTransaction(
 
 /** Releases held escrow funds to the worker after job completion. */
 export async function releaseEscrowPayment(transactionId: string): Promise<EscrowTransaction | null> {
-  return mockEscrowOps.update(transactionId, {
+  return escrowOps.update(transactionId, {
     status: 'released',
     releasedAt: new Date().toISOString(),
   })
@@ -30,7 +30,7 @@ export async function releaseEscrowPayment(transactionId: string): Promise<Escro
 
 /** Refunds held escrow funds to the employer (e.g., dispute resolution). */
 export async function refundEscrowPayment(transactionId: string): Promise<EscrowTransaction | null> {
-  return mockEscrowOps.update(transactionId, {
+  return escrowOps.update(transactionId, {
     status: 'refunded',
     refundedAt: new Date().toISOString(),
   })
@@ -38,7 +38,7 @@ export async function refundEscrowPayment(transactionId: string): Promise<Escrow
 
 /** Fetches all escrow transactions for a user by role. */
 export async function getTransactionsByUser(userId: string, role: 'worker' | 'employer'): Promise<EscrowTransaction[]> {
-  return mockEscrowOps.findByUser(userId, role)
+  return escrowOps.findByUser(userId, role)
 }
 
 /**

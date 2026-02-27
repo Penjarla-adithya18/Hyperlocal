@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/api'
+import { db, jobOps } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { IndianRupee, X, Plus, Calendar, MapPin, Laptop, Sparkles, Loader2, TrendingUp, Wand2 } from 'lucide-react'
 import { JOB_CATEGORIES } from '@/lib/aiMatching'
@@ -94,10 +94,12 @@ const DURATION_PRESETS = [
   '2-3 days', '1 week', '2 weeks', '1 month', 'Ongoing',
 ]
 
+const POST_JOB_DRAFT_KEY = 'employer_post_job_draft_v1'
+
 export default function PostJobPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [customSkill, setCustomSkill] = useState('')
@@ -116,7 +118,7 @@ export default function PostJobPage() {
     payAmount: '',
     payType: 'hourly' as 'hourly' | 'fixed',
     duration: '',
-    slots: 1,
+    slots: '1',
     experienceRequired: 'entry' as 'entry' | 'intermediate' | 'expert',
     startDate: '',
     requirements: '',
@@ -124,6 +126,53 @@ export default function PostJobPage() {
     escrowRequired: true,
     jobMode: 'local' as JobMode,
   })
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POST_JOB_DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as {
+        formData?: typeof formData
+        selectedSkills?: string[]
+        customSkill?: string
+      }
+      if (draft.formData) {
+        setFormData((prev) => ({ ...prev, ...draft.formData }))
+      }
+      if (Array.isArray(draft.selectedSkills)) {
+        setSelectedSkills(draft.selectedSkills)
+      }
+      if (typeof draft.customSkill === 'string') {
+        setCustomSkill(draft.customSkill)
+      }
+    } catch {
+      localStorage.removeItem(POST_JOB_DRAFT_KEY)
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        POST_JOB_DRAFT_KEY,
+        JSON.stringify({ formData, selectedSkills, customSkill })
+      )
+    } catch {
+      // Ignore quota/storage errors silently
+    }
+  }, [formData, selectedSkills, customSkill])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!user || user.role !== 'employer') {
+      router.replace('/login')
+    }
+  }, [authLoading, user, router])
+
+  const toSafeNumberInputValue = (value: unknown): string => {
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+    if (typeof value === 'string') return value
+    return ''
+  }
 
   const handleAddSkill = (skill: string) => {
     if (!selectedSkills.includes(skill)) {
@@ -141,6 +190,10 @@ export default function PostJobPage() {
       setCustomSkill('')
     }
   }
+
+  const durationSelectValue = DURATION_PRESETS.includes(formData.duration)
+    ? formData.duration
+    : '__custom__'
 
   // ── Auto-suggest skills based on category + title ──────────────────────────
   useEffect(() => {
@@ -234,11 +287,39 @@ export default function PostJobPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (authLoading) {
+      toast({
+        title: 'Please wait',
+        description: 'Checking your session, please try again in a moment.',
+      })
+      return
+    }
+
+    const parsedPayAmount = Number.parseFloat(formData.payAmount)
+    if (!Number.isFinite(parsedPayAmount) || parsedPayAmount < 0) {
+      toast({
+        title: 'Invalid Pay Amount',
+        description: 'Please enter a valid amount.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    const parsedSlots = Number.parseInt(formData.slots, 10)
+    if (!Number.isFinite(parsedSlots) || parsedSlots < 1) {
+      toast({
+        title: 'Invalid Worker Count',
+        description: 'Please enter at least 1 worker needed.',
+        variant: 'destructive'
+      })
+      return
+    }
     
     if (!user || user.role !== 'employer') {
       toast({
         title: 'Error',
-        description: 'You must be logged in as an employer to post jobs',
+        description: 'Please login with your employer account to post jobs.',
         variant: 'destructive'
       })
       return
@@ -258,8 +339,8 @@ export default function PostJobPage() {
     try {
       // Posting limits: basic trust level employers can only post up to 3 jobs
       if (user.trustLevel === 'basic') {
-        const allJobs = await mockDb.getAllJobs()
-        const myActiveJobs = allJobs.filter(j => j.employerId === user.id && (j.status === 'active' || j.status === 'draft'))
+        const myJobs = await jobOps.findByEmployerId(user.id)
+        const myActiveJobs = myJobs.filter(j => j.status === 'active' || j.status === 'draft')
         if (myActiveJobs.length >= 3) {
           toast({
             title: 'Posting Limit Reached',
@@ -271,11 +352,12 @@ export default function PostJobPage() {
         }
       }
 
-      const newJob = await mockDb.createJob({
+      const newJob = await db.createJob({
         ...formData,
         employerId: user.id,
         requiredSkills: selectedSkills,
-        payAmount: parseFloat(formData.payAmount),
+        slots: parsedSlots,
+        payAmount: parsedPayAmount,
         status: 'draft',
         paymentStatus: 'pending',
       })
@@ -285,11 +367,14 @@ export default function PostJobPage() {
         description: 'Complete escrow payment to make your job live.',
       })
 
+      localStorage.removeItem(POST_JOB_DRAFT_KEY)
+
       router.push(`/employer/payment/${newJob.id}`)
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to post job. Please try again.'
       toast({
         title: 'Error',
-        description: 'Failed to post job. Please try again.',
+        description: message,
         variant: 'destructive'
       })
     } finally {
@@ -300,6 +385,12 @@ export default function PostJobPage() {
   return (
     <div className="app-surface">
       <EmployerNav />
+
+      {authLoading ? (
+        <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl">
+          <p className="text-sm text-muted-foreground">Checking your account...</p>
+        </main>
+      ) : (
       
       <main className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8 max-w-4xl">
         <div className="mb-6 md:mb-8">
@@ -556,7 +647,7 @@ export default function PostJobPage() {
                       type="number"
                       className="pl-10"
                       placeholder="0"
-                      value={formData.payAmount}
+                      value={toSafeNumberInputValue(formData.payAmount)}
                       onChange={(e) => setFormData({ ...formData, payAmount: e.target.value })}
                       required
                       min="0"
@@ -592,18 +683,32 @@ export default function PostJobPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="duration">Duration * <span className="text-xs text-muted-foreground">(type or choose)</span></Label>
+                  <Label htmlFor="duration-select">Duration *</Label>
+                  <Select
+                    value={durationSelectValue}
+                    onValueChange={(value) => {
+                      if (value === '__custom__') return
+                      setFormData({ ...formData, duration: value })
+                    }}
+                  >
+                    <SelectTrigger id="duration-select">
+                      <SelectValue placeholder="Select duration" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {DURATION_PRESETS.map((duration) => (
+                        <SelectItem key={duration} value={duration}>{duration}</SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">Custom (type below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
                   <Input
                     id="duration"
-                    list="duration-presets"
-                    placeholder="e.g., Half day, 1 week, Ongoing..."
+                    placeholder="Or enter custom duration (e.g., 5 days)"
                     value={formData.duration}
                     onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
                     required
                   />
-                  <datalist id="duration-presets">
-                    {DURATION_PRESETS.map(d => <option key={d} value={d} />)}
-                  </datalist>
                 </div>
 
                 <div className="space-y-2">
@@ -612,8 +717,8 @@ export default function PostJobPage() {
                     id="slots"
                     type="number"
                     min="1"
-                    value={formData.slots}
-                    onChange={(e) => setFormData({ ...formData, slots: parseInt(e.target.value) })}
+                    value={toSafeNumberInputValue(formData.slots)}
+                    onChange={(e) => setFormData({ ...formData, slots: e.target.value.replace(/\D/g, '') })}
                     required
                   />
                 </div>
@@ -714,6 +819,7 @@ export default function PostJobPage() {
           </div>
         </form>
       </main>
+      )}
     </div>
   )
 }

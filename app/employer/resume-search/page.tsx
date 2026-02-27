@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockWorkerProfileOps, mockUserOps, mockApplicationOps } from '@/lib/api'
+import { db, workerProfileOps, userOps, applicationOps } from '@/lib/api'
 import { ragStore, ragSearch, parseRAGQuery, type RAGSearchResult } from '@/lib/ragEngine'
 import type { WorkerProfile, User } from '@/lib/types'
 import {
@@ -52,12 +52,12 @@ export default function ResumeSearchPage() {
     setIndexing(true)
     try {
       // Get all applications for employer's jobs
-      const allJobs = await mockDb.getJobsByEmployer(user!.id)
+      const allJobs = await db.getJobsByEmployer(user!.id)
       const workerIds = new Set<string>()
 
       // Collect all worker IDs from applications
       for (const job of allJobs) {
-        const jobApps = await mockApplicationOps.findByJobId(job.id).catch(() => [])
+        const jobApps = await applicationOps.findByJobId(job.id).catch(() => [])
         for (const app of jobApps) {
           workerIds.add(app.workerId)
         }
@@ -68,8 +68,8 @@ export default function ResumeSearchPage() {
       for (const wId of workerIds) {
         try {
           const [profile, wUser] = await Promise.all([
-            mockWorkerProfileOps.findByUserId(wId),
-            mockUserOps.findById(wId),
+            workerProfileOps.findByUserId(wId),
+            userOps.findById(wId),
           ])
           if (profile?.resumeText && profile?.resumeParsed) {
             ragStore.index({

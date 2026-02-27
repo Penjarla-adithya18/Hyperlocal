@@ -31,6 +31,7 @@ function getEnv() {
 const SESSION_TOKEN_KEY = 'sessionToken'
 const SESSION_EXPIRES_AT_KEY = 'sessionExpiresAt'
 const SESSION_REFRESHED_AT_KEY = 'sessionRefreshedAt'
+let sessionRefreshInFlight: Promise<void> | null = null
 
 /**
  * Timestamp (Date.now()) of when the session token was last set.
@@ -76,6 +77,11 @@ function setSessionExpiry(expiresAt: string | null): void {
 }
 
 async function refreshSessionIfNeeded(): Promise<void> {
+  if (sessionRefreshInFlight) {
+    await sessionRefreshInFlight
+    return
+  }
+
   if (typeof window === 'undefined') return
   const token = getSessionToken()
   const expiresAt = getSessionExpiresAt()
@@ -96,45 +102,57 @@ async function refreshSessionIfNeeded(): Promise<void> {
   const { url, key } = getEnv()
   const endpoint = `${url}/functions/v1/auth`
 
-  const res = await fetchWithTimeout(
-    endpoint,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        apikey: key,
-      },
-      body: JSON.stringify({ action: 'refresh-session' }),
-    },
-    REQUEST_TIMEOUT_MS
-  )
+  sessionRefreshInFlight = (async () => {
+    // Mark early to throttle concurrent callers in the same tick
+    localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
 
-  if (!res.ok) {
-    if (res.status === 401) {
-      // Server rejected the refresh — token is stale.
-      // Only clear if the token hasn't been freshly set by a concurrent login.
-      const tokenAge = Date.now() - _sessionSetAt
-      if (tokenAge > 5000) {
-        setSessionToken(null)
-        if (typeof window !== 'undefined') {
-          localStorage.removeItem('currentUser')
+    const res = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'refresh-session' }),
+      },
+      REQUEST_TIMEOUT_MS
+    )
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        console.warn('Session refresh failed - token may be invalid')
+        // Server rejected the refresh — token is stale.
+        // Only clear if the token hasn't been freshly set by a concurrent login.
+        const tokenAge = Date.now() - _sessionSetAt
+        if (tokenAge > 5000) {
+          setSessionToken(null)
+          if (typeof window !== 'undefined') {
+            localStorage.removeItem('currentUser')
+          }
         }
       }
+      return
     }
-    return
-  }
 
-  const data = (await res.json()) as { success?: boolean; token?: string; expiresAt?: string }
-  if (data?.success && data.token && data.expiresAt) {
-    setSessionToken(data.token)
-    setSessionExpiry(data.expiresAt)
-    localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
+    const data = (await res.json()) as { success?: boolean; token?: string; expiresAt?: string }
+    if (data?.success && data.token && data.expiresAt) {
+      setSessionToken(data.token)
+      setSessionExpiry(data.expiresAt)
+      localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
+    }
+  })()
+
+  try {
+    await sessionRefreshInFlight
+  } finally {
+    sessionRefreshInFlight = null
   }
 }
 
 /** Default request timeout in milliseconds */
-const REQUEST_TIMEOUT_MS = 15_000
+const REQUEST_TIMEOUT_MS = 8_000 // 8s — fast enough to detect outages without blocking long-polls
 /** Max retries on network / 5xx errors */
 const MAX_RETRIES = 1
 /** Base delay between retries (doubles each attempt) */
@@ -197,10 +215,30 @@ async function call<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetchWithTimeout(endpoint, init)
+      const latestToken = getSessionToken()
+      const attemptInit: RequestInit = {
+        ...init,
+        headers: {
+          ...(init.headers as Record<string, string>),
+          Authorization: `Bearer ${latestToken || key}`,
+          apikey: key,
+        },
+      }
+
+      const res = await fetchWithTimeout(endpoint, attemptInit)
 
       if (!res.ok) {
         if (res.status === 401) {
+          // Handle unauthorized — a single 401 can happen during token rotation
+          // or transient edge auth issues.
+          const currentToken = getSessionToken()
+          const tokenUsed = latestToken || null
+
+          // If token rotated while this request was in-flight, retry once with new token
+          if (currentToken && tokenUsed && currentToken !== tokenUsed && attempt < MAX_RETRIES) {
+            continue
+          }
+
           const text = await res.text()
           // Never redirect on auth calls — login/register send anon key and 401
           // is a normal "bad credentials" response, not a stale session.
@@ -225,6 +263,9 @@ async function call<T>(
                 }, 500)
               }
             }
+          } else if (!currentToken && typeof window !== 'undefined') {
+            // If there is no session token at all, clear stale local user cache.
+            localStorage.removeItem('currentUser')
           }
           throw new Error(`Edge function ${fn} error 401: ${text}`)
         }
@@ -234,8 +275,15 @@ async function call<T>(
           await new Promise((r) => setTimeout(r, RETRY_BASE_MS * (attempt + 1)))
           continue
         }
-        const text = await res.text()
-        throw new Error(`Edge function ${fn} error ${res.status}: ${text}`)
+        const contentType = res.headers.get('content-type') || ''
+        let detail = ''
+        if (contentType.includes('application/json')) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string }
+          detail = body?.message || body?.error || ''
+        } else {
+          detail = await res.text()
+        }
+        throw new Error(`Edge function ${fn} error ${res.status}: ${detail || 'Request failed'}`)
       }
 
       return res.json() as Promise<T>
@@ -269,6 +317,11 @@ export async function registerUser(data: {
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data })
+  if (res.success && (!res.token || !res.user)) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+    return { success: false, message: 'Registration completed but no session was created. Please try again.' }
+  }
   if (res.success && res.token) {
     setSessionToken(res.token)
     setSessionExpiry(res.expiresAt ?? null)
@@ -285,6 +338,11 @@ export async function loginUser(
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password })
+  if (res.success && (!res.token || !res.user)) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+    return { success: false, message: 'Login failed to establish a valid session. Please try again.' }
+  }
   if (res.success && res.token) {
     setSessionToken(res.token)
     setSessionExpiry(res.expiresAt ?? null)
@@ -313,6 +371,93 @@ export async function forgotPasswordReset(
   return res
 }
 
+export async function sendOtpRequest(
+  phoneNumber: string
+): Promise<{ success: boolean; message: string }> {
+  const { url, key } = getEnv()
+  const endpoint = `${url}/functions/v1/auth`
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'send-otp', phoneNumber }),
+      },
+      10_000
+    )
+
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean
+      message?: string
+      error?: string
+    }
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || data.error || 'Failed to send OTP. Please try again.',
+      }
+    }
+
+    return {
+      success: !!data.success,
+      message: data.message || 'OTP sent successfully.',
+    }
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to send OTP. Please try again.',
+    }
+  }
+}
+
+export async function verifyOtpRequest(
+  phoneNumber: string,
+  otp: string
+): Promise<{ success: boolean; message: string }> {
+  const { url, key } = getEnv()
+  const endpoint = `${url}/functions/v1/auth`
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'verify-otp', phoneNumber, otp }),
+      },
+      10_000
+    )
+
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean
+      message?: string
+      error?: string
+    }
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || data.error || 'OTP verification failed. Please try again.',
+      }
+    }
+
+    return {
+      success: !!data.success,
+      message: data.message || 'OTP verified successfully.',
+    }
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'OTP verification failed. Please try again.',
+    }
+  }
+}
+
 export async function getUserByPhone(phoneNumber: string): Promise<User | null> {
   const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-phone', phoneNumber })
   return res.data
@@ -322,7 +467,6 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
 
 export function getCurrentUser(): User | null {
   if (typeof window === 'undefined') return null
-  if (!getSessionToken()) return null
   try { return JSON.parse(localStorage.getItem('currentUser') ?? 'null') } catch { return null }
 }
 export function setCurrentUser(user: User | null): void {
@@ -349,7 +493,7 @@ export function setUserPassword(phone: string, password: string): void {
 
 // ─── Users ─────────────────────────────────────────────────────────────────
 
-export const mockUserOps = {
+export const userOps = {
   getAll: async (): Promise<User[]> => {
     const res = await call<R<User[]>>('users')
     _usersCache = res.data || []
@@ -370,9 +514,9 @@ export const mockUserOps = {
   },
 }
 
-// ─── Worker Profiles ───────────────────────────────────────────────────────
+// ───Worker Profiles ───────────────────────────────────────────────────────
 
-export const mockWorkerProfileOps = {
+export const workerProfileOps = {
   findByUserId: async (userId: string): Promise<WorkerProfile | null> => {
     const res = await call<R<WorkerProfile | null>>('profiles', 'GET', { userId, role: 'worker' })
     return res.data
@@ -393,7 +537,7 @@ export const mockWorkerProfileOps = {
 
 // ─── Employer Profiles ─────────────────────────────────────────────────────
 
-export const mockEmployerProfileOps = {
+export const employerProfileOps = {
   findByUserId: async (userId: string): Promise<EmployerProfile | null> => {
     const res = await call<R<EmployerProfile | null>>('profiles', 'GET', { userId, role: 'employer' })
     return res.data
@@ -413,7 +557,7 @@ export const mockEmployerProfileOps = {
 
 // ─── Jobs ──────────────────────────────────────────────────────────────────
 
-export const mockJobOps = {
+export const jobOps = {
   findById: async (id: string): Promise<Job | null> => {
     const res = await call<R<Job | null>>('jobs', 'GET', { id })
     return res.data
@@ -446,7 +590,7 @@ export const mockJobOps = {
 
 // ─── Applications ──────────────────────────────────────────────────────────
 
-export const mockApplicationOps = {
+export const applicationOps = {
   /** Fetch a single application by ID (server-filtered, not client-side scan) */
   findById: async (id: string): Promise<Application | null> => {
     const res = await call<R<Application | null>>('applications', 'GET', { id })
@@ -472,7 +616,7 @@ export const mockApplicationOps = {
 
 // ─── Trust Scores ──────────────────────────────────────────────────────────
 
-export const mockTrustScoreOps = {
+export const trustScoreOps = {
   findByUserId: async (userId: string): Promise<TrustScore | null> => {
     const res = await call<R<TrustScore | null>>('trust-scores', 'GET', { userId })
     return res.data
@@ -485,7 +629,7 @@ export const mockTrustScoreOps = {
 
 // ─── Reports ───────────────────────────────────────────────────────────────
 
-export const mockReportOps = {
+export const reportOps = {
   create: async (report: Omit<Report, 'id' | 'createdAt'>): Promise<Report> => {
     const res = await call<R<Report>>('reports', 'POST', {}, report)
     return res.data
@@ -502,7 +646,7 @@ export const mockReportOps = {
 
 // ─── Notifications ───────────────────────────────────────────────────────────
 
-export const mockNotificationOps = {
+export const notificationOps = {
   create: async (notification: Omit<Notification, 'id' | 'createdAt'>): Promise<Notification> => {
     const res = await call<R<Notification>>('notifications', 'POST', {}, notification)
     return res.data
@@ -523,7 +667,7 @@ export const mockNotificationOps = {
 
 // ─── Chat (session-based ops kept for backward compat) ─────────────────────
 
-export const mockChatOps = {
+export const chatOps = {
   findSessionsByUserId: async (userId: string) => {
     const res = await call<R<ChatConversation[]>>('chat', 'GET', { type: 'conversations', userId })
     return res.data
@@ -584,7 +728,7 @@ export const mockChatOps = {
 
 // ─── Escrow ────────────────────────────────────────────────────────────────
 
-export const mockEscrowOps = {
+export const escrowOps = {
   create: async (transaction: Omit<EscrowTransaction, 'id' | 'createdAt'>): Promise<EscrowTransaction> => {
     const res = await call<R<EscrowTransaction>>('escrow', 'POST', {}, transaction)
     return res.data
@@ -623,7 +767,7 @@ export interface Rating {
   createdAt: string
 }
 
-export const mockRatingOps = {
+export const ratingOps = {
   create: async (payload: {
     jobId: string
     applicationId?: string
@@ -659,13 +803,7 @@ export async function sendWATIAlert(
 }
 
 
-// ─── mockDb facade (drop-in replacement for the old mockDb export) ─────────
-
-// Local in-memory cache for users (used by getUserById which must be sync)
-let _usersCache: User[] = []
-let _applicationsCache: Application[] = []
-let _reportsCache: Report[] = []
-let _escrowCache: EscrowTransaction[] = []
+// ─── Database operations (Supabase-backed API) ────────────────────────────
 
 function upsertUserCache(user: User): void {
   const index = _usersCache.findIndex((item) => item.id === user.id)
@@ -673,9 +811,15 @@ function upsertUserCache(user: User): void {
   else _usersCache[index] = { ..._usersCache[index], ...user }
 }
 
-export const mockDb = {
+// Minimal cache for sync methods only
+let _usersCache: User[] = []
+let _applicationsCache: Application[] = []
+let _reportsCache: Report[] = []
+let _escrowCache: EscrowTransaction[] = []
+
+export const db = {
   async getAllUsers(): Promise<User[]> {
-    const users = await mockUserOps.getAll()
+    const users = await userOps.getAll()
     _usersCache = users
     return users
   },
@@ -685,31 +829,31 @@ export const mockDb = {
   },
 
   async updateUser(userId: string, updates: Partial<User>): Promise<User | null> {
-    return mockUserOps.update(userId, updates)
+    return userOps.update(userId, updates)
   },
 
   async getAllJobs(): Promise<Job[]> {
-    return mockJobOps.getAll()
+    return jobOps.getAll()
   },
 
   async getJobsByEmployer(employerId: string): Promise<Job[]> {
-    return mockJobOps.findByEmployerId(employerId)
+    return jobOps.findByEmployerId(employerId)
   },
 
   async getJobById(jobId: string): Promise<Job | null> {
-    return mockJobOps.findById(jobId)
+    return jobOps.findById(jobId)
   },
 
   async createJob(payload: Record<string, unknown>): Promise<Job> {
-    return mockJobOps.create(payload as unknown as Omit<Job, 'id' | 'createdAt' | 'updatedAt'>)
+    return jobOps.create(payload as unknown as Omit<Job, 'id' | 'createdAt' | 'updatedAt'>)
   },
 
   async deleteJob(jobId: string): Promise<boolean> {
-    return mockJobOps.delete(jobId)
+    return jobOps.delete(jobId)
   },
 
   async updateJob(jobId: string, updates: Partial<Job>): Promise<Job | null> {
-    return mockJobOps.update(jobId, updates)
+    return jobOps.update(jobId, updates)
   },
 
   async getAllApplications(): Promise<Application[]> {
@@ -724,11 +868,11 @@ export const mockDb = {
   },
 
   async getApplicationsByWorker(workerId: string): Promise<Application[]> {
-    return mockApplicationOps.findByWorkerId(workerId)
+    return applicationOps.findByWorkerId(workerId)
   },
 
   async createApplication(payload: Record<string, unknown>): Promise<Application> {
-    return mockApplicationOps.create(payload as unknown as Omit<Application, 'id' | 'createdAt' | 'updatedAt'>)
+    return applicationOps.create(payload as unknown as Omit<Application, 'id' | 'createdAt' | 'updatedAt'>)
   },
 
   async getConversationsByUser(userId: string): Promise<ChatConversation[]> {
@@ -791,7 +935,7 @@ export const mockDb = {
   },
 
   async getAllReports(): Promise<Report[]> {
-    const reports = await mockReportOps.getAll()
+    const reports = await reportOps.getAll()
     _reportsCache = reports || []
     return reports
   },
@@ -801,7 +945,7 @@ export const mockDb = {
   },
 
   async updateReport(reportId: string, updates: Partial<Report>): Promise<Report | null> {
-    return mockReportOps.update(reportId, updates)
+    return reportOps.update(reportId, updates)
   },
 
   /** Create escrow transaction — now properly async.

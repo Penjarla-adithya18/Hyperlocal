@@ -1,10 +1,10 @@
-'use client'
+﻿'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { resetPassword, logout, sendOTP, verifyOTP } from '@/lib/auth'
-import { loginUser, mockUserOps } from '@/lib/api'
+import { loginUser, userOps } from '@/lib/api'
 import WorkerNav from '@/components/worker/WorkerNav'
 import EmployerNav from '@/components/employer/EmployerNav'
 import AdminNav from '@/components/admin/AdminNav'
@@ -57,14 +57,14 @@ export default function SettingsPage() {
       ? EmployerNav
       : AdminNav
 
-  // ── Trust level colors ──────────────────────────────────────
+  // â”€â”€ Trust level colors â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const trustColors: Record<string, string> = {
     basic: 'bg-gray-100 text-gray-700',
     active: 'bg-blue-100 text-blue-700',
     trusted: 'bg-green-100 text-green-700',
   }
 
-  // ── Change Password ──────────────────────────────────────────
+  // â”€â”€ Change Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault()
     if (pwForm.newPw !== pwForm.confirm) {
@@ -97,7 +97,7 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Update Phone ─────────────────────────────────────────────
+  // â”€â”€ Update Phone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleSendOtp = async () => {
     if (!phoneForm.phone.match(/^[6-9]\d{9}$/)) {
       toast({ title: 'Enter a valid 10-digit Indian mobile number', variant: 'destructive' })
@@ -129,7 +129,7 @@ export default function SettingsPage() {
       }
 
       // Update phone via users edge function
-      const result = await mockUserOps.update(user.id, { phoneNumber: phoneForm.phone })
+      const result = await userOps.update(user.id, { phoneNumber: phoneForm.phone })
       if (result) {
         updateUser({ phoneNumber: phoneForm.phone })
         toast({ title: 'Phone number updated' })
@@ -142,7 +142,7 @@ export default function SettingsPage() {
     }
   }
 
-  // ── GSTIN Verification (Employer) ──────────────────────────────
+  // â”€â”€ GSTIN Verification (Employer) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleVerifyGSTIN = async () => {
     const formatErr = validateGSTINFormat(gstinInput)
     if (formatErr) {
@@ -156,7 +156,7 @@ export default function SettingsPage() {
       setGstinDetails(details)
       setGstinVerified(details.verified)
       // Save GSTIN to user profile
-      const updated = await mockUserOps.update(user.id, {
+      const updated = await userOps.update(user.id, {
         gstin: gstinInput.trim().toUpperCase(),
         gstinVerified: details.verified,
         gstinDetails: details,
@@ -185,7 +185,7 @@ export default function SettingsPage() {
     }
   }
 
-  // ── Logout ───────────────────────────────────────────────────
+  // â”€â”€ Logout â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleLogout = () => {
     logout()
     router.push('/login')
@@ -201,7 +201,7 @@ export default function SettingsPage() {
           <p className="text-muted-foreground">{t('settings.subtitle')}</p>
         </div>
 
-        {/* ── Language & Region ────────────────────────────── */}
+        {/* â”€â”€ Language & Region â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -237,7 +237,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ── Trust Score Card ─────────────────────────────── */}
+        {/* â”€â”€ Trust Score Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -267,7 +267,7 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ── GSTIN Verification (Employer Only) ──────────── */}
+        {/* â”€â”€ GSTIN Verification (Employer Only) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         {user.role === 'employer' && (
           <Card className="mb-6">
             <CardHeader>
@@ -293,11 +293,11 @@ export default function SettingsPage() {
                   <div className="grid sm:grid-cols-2 gap-3 text-sm">
                     <div>
                       <p className="text-muted-foreground text-xs">Trade Name</p>
-                      <p className="font-medium">{gstinDetails.tradeName || '—'}</p>
+                      <p className="font-medium">{gstinDetails.tradeName || 'â€”'}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">Legal Name</p>
-                      <p className="font-medium">{gstinDetails.legalName || '—'}</p>
+                      <p className="font-medium">{gstinDetails.legalName || 'â€”'}</p>
                     </div>
                     <div>
                       <p className="text-muted-foreground text-xs">Status</p>
@@ -345,7 +345,7 @@ export default function SettingsPage() {
                         {gstinLoading ? (
                           <>
                             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                            Verifying…
+                            Verifyingâ€¦
                           </>
                         ) : (
                           'Verify'
@@ -368,7 +368,7 @@ export default function SettingsPage() {
           </Card>
         )}
 
-        {/* ── Change Password ───────────────────────────────── */}
+        {/* â”€â”€ Change Password â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -410,13 +410,13 @@ export default function SettingsPage() {
                 />
               </div>
               <Button type="submit" disabled={pwLoading}>
-                {pwLoading ? t('settings.updatingPw') || 'Updating…' : t('settings.updatePw')}
+                {pwLoading ? t('settings.updatingPw') || 'Updatingâ€¦' : t('settings.updatePw')}
               </Button>
             </form>
           </CardContent>
         </Card>
 
-        {/* ── Update Phone ──────────────────────────────────── */}
+        {/* â”€â”€ Update Phone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -480,14 +480,14 @@ export default function SettingsPage() {
 
               {otpSent && (
                 <Button type="submit" disabled={phoneLoading}>
-                  {phoneLoading ? 'Verifying…' : 'Verify & Update'}
+                  {phoneLoading ? 'Verifyingâ€¦' : 'Verify & Update'}
                 </Button>
               )}
             </form>
           </CardContent>
         </Card>
 
-        {/* ── Danger Zone ───────────────────────────────────── */}
+        {/* â”€â”€ Danger Zone â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
         <Card className="border-destructive/50">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-destructive">

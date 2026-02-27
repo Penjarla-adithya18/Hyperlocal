@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { SYSTEM_PROMPTS } from '@/lib/gemini'
 
 // ── Provider configuration (server-side only — never sent to browser) ─────────
 // Local dev  (.env.local) : OLLAMA_URL=http://localhost:11434
@@ -14,6 +15,9 @@ export async function POST(req: NextRequest) {
     const body       = await req.json()
     const prompt     = typeof body?.prompt    === 'string' ? body.prompt    : ''
     const maxTokens  = typeof body?.maxTokens === 'number' ? Math.min(Math.max(body.maxTokens, 16), 2048) : 512
+    const systemInstruction = typeof body?.systemInstruction === 'string' && body.systemInstruction.trim()
+      ? body.systemInstruction.trim()
+      : SYSTEM_PROMPTS.API_PROXY_DEFAULT
 
     if (!prompt.trim()) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
@@ -29,7 +33,10 @@ export async function POST(req: NextRequest) {
         },
         body: JSON.stringify({
           model:       'llama-3.1-8b-instant',
-          messages:    [{ role: 'user', content: prompt }],
+          messages:    [
+            { role: 'system', content: systemInstruction },
+            { role: 'user', content: prompt },
+          ],
           temperature: 0.2,
           max_tokens:  maxTokens,
         }),
@@ -49,6 +56,7 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         model:   OLLAMA_MODEL,
         prompt,
+        system:  systemInstruction,
         stream:  false,
         options: { temperature: 0.2, num_predict: maxTokens },
       }),

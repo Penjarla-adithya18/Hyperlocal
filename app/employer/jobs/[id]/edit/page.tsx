@@ -13,7 +13,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb } from '@/lib/api'
+import { db } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { JOB_CATEGORIES } from '@/lib/aiMatching'
 import { LocationInput } from '@/components/ui/location-input'
@@ -66,7 +66,7 @@ export default function EmployerJobEditPage() {
     let cancelled = false
     async function load() {
       try {
-        const job = await mockDb.getJobById(jobId)
+        const job = await db.getJobById(jobId)
         if (!job || cancelled) return
         setSelectedSkills(job.requiredSkills ?? [])
         setForm({
@@ -109,6 +109,10 @@ export default function EmployerJobEditPage() {
     }
   }
 
+  const durationSelectValue = DURATION_PRESETS.includes(form.duration)
+    ? form.duration
+    : '__custom__'
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title || !form.description || !form.location || !form.payAmount) {
@@ -117,7 +121,7 @@ export default function EmployerJobEditPage() {
     }
     setSaving(true)
     try {
-      const updated = await mockDb.updateJob(jobId, {
+      const updated = await db.updateJob(jobId, {
         title: form.title,
         description: form.description,
         category: form.category,
@@ -318,17 +322,30 @@ export default function EmployerJobEditPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Duration * <span className="text-xs text-muted-foreground">(type or choose)</span></Label>
+                  <Label htmlFor="duration-select">Duration *</Label>
+                  <Select
+                    value={durationSelectValue}
+                    onValueChange={(value) => {
+                      if (value === '__custom__') return
+                      setForm({ ...form, duration: value })
+                    }}
+                  >
+                    <SelectTrigger id="duration-select"><SelectValue placeholder="Select duration" /></SelectTrigger>
+                    <SelectContent>
+                      {DURATION_PRESETS.map((duration) => (
+                        <SelectItem key={duration} value={duration}>{duration}</SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">Custom (type below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
                   <Input
-                    list="duration-presets"
-                    placeholder="e.g., Half day, 1 week, Ongoing..."
+                    id="duration"
+                    placeholder="Or enter custom duration (e.g., 5 days)"
                     value={form.duration}
                     onChange={(e) => setForm({ ...form, duration: e.target.value })}
                     required
                   />
-                  <datalist id="duration-presets">
-                    {DURATION_PRESETS.map((d) => <option key={d} value={d} />)}
-                  </datalist>
                 </div>
                 <div className="space-y-2">
                   <Label>Number of Workers Needed *</Label>

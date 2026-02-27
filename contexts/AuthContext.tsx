@@ -38,6 +38,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // If getCurrentUser returns null but we think we're logged in,
       // it means the token expired — redirect to login
       if (!currentUser && user) {
+        console.warn('Token validation failed - logging out')
         setUser(null)
         logoutUser()
         if (typeof window !== 'undefined') {
@@ -45,7 +46,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-    const interval = setInterval(validateToken, 5 * 60_000) // check every 5 min
+    // Check every 5 minutes instead of 30 seconds to reduce pressure
+    const interval = setInterval(validateToken, 5 * 60_000)
     return () => clearInterval(interval)
   }, [user])
 

@@ -86,16 +86,14 @@ Deno.serve(async (req: Request) => {
 
       const body = await req.json()
       const requestedEmployerId = body.employerId as string
-      if (!requestedEmployerId) return errorResponse('employerId is required', 400)
-      if (!isAdmin && requestedEmployerId !== auth.user.id) {
-        return errorResponse('Forbidden', 403)
-      }
+      if (isAdmin && !requestedEmployerId) return errorResponse('employerId is required', 400)
+      const effectiveEmployerId = isAdmin ? requestedEmployerId : auth.user.id
 
       // Posting limit for new (basic-trust) employers — max 3 active jobs
       const { data: employerRow, error: employerError } = await supabase
         .from('users')
         .select('trust_level')
-        .eq('id', requestedEmployerId)
+        .eq('id', effectiveEmployerId)
         .maybeSingle()
       if (employerError) throw employerError
 
@@ -103,7 +101,7 @@ Deno.serve(async (req: Request) => {
         const { count, error: countError } = await supabase
           .from('jobs')
           .select('id', { count: 'exact', head: true })
-          .eq('employer_id', requestedEmployerId)
+          .eq('employer_id', effectiveEmployerId)
           .eq('status', 'active')
         if (!countError && (count ?? 0) >= 3) {
           return errorResponse(
@@ -128,7 +126,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const payload = {
-        employer_id: requestedEmployerId,
+        employer_id: effectiveEmployerId,
         title: body.title,
         description: body.description,
         job_type: body.jobType ?? (body.payType === 'fixed' ? 'gig' : 'part-time'),
@@ -156,6 +154,13 @@ Deno.serve(async (req: Request) => {
       }
       const { data, error } = await supabase.from('jobs').insert(payload).select('*').single()
       if (error) throw error
+
+      try {
+        await notifyMatchingWorkersBySms(supabase, mapJob(data))
+      } catch (smsErr) {
+        console.error('jobs sms notify error:', smsErr)
+      }
+
       return jsonResponse({ data: mapJob(data) })
     }
 
@@ -256,4 +261,155 @@ function mapJob(row: Record<string, unknown>, countOverride?: Record<string, num
     applicationCount: countOverride ? (countOverride[jobId] ?? 0) : Number(row.application_count || 0),
     views: Number(row.views || 0),
   }
+}
+
+type WorkerProfileRow = {
+  user_id: string
+  skills?: string[] | null
+  categories?: string[] | null
+  location?: string | null
+}
+
+type WorkerUserRow = {
+  id: string
+  full_name?: string | null
+  phone_number?: string | null
+  role?: string | null
+  is_verified?: boolean | null
+}
+
+function normalizeToken(input: string): string {
+  return input.trim().toLowerCase()
+}
+
+function intersectsCaseInsensitive(listA: string[] = [], listB: string[] = []): boolean {
+  if (!listA.length || !listB.length) return false
+  const setB = new Set(listB.map(normalizeToken))
+  return listA.some((value) => setB.has(normalizeToken(value)))
+}
+
+function locationLooksRelevant(jobLocation?: string, workerLocation?: string | null): boolean {
+  const jobLoc = (jobLocation || '').trim().toLowerCase()
+  const workerLoc = (workerLocation || '').trim().toLowerCase()
+  if (!jobLoc || !workerLoc) return false
+  return jobLoc.includes(workerLoc) || workerLoc.includes(jobLoc)
+}
+
+function normalizePhone(rawPhone: string, defaultCountryCode: string): string {
+  const value = rawPhone.trim()
+  if (!value) return ''
+  if (value.startsWith('+')) return value
+  const digits = value.replace(/\D/g, '')
+  if (!digits) return ''
+  return `${defaultCountryCode}${digits}`
+}
+
+function buildTwilioBody(params: Record<string, string>): string {
+  const body = new URLSearchParams()
+  for (const [key, value] of Object.entries(params)) body.append(key, value)
+  return body.toString()
+}
+
+async function sendTwilioSms(to: string, message: string): Promise<void> {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')?.trim() || ''
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim() || ''
+  const messagingServiceSid = Deno.env.get('TWILIO_MESSAGING_SERVICE_SID')?.trim() || ''
+  const fromPhone = Deno.env.get('TWILIO_PHONE_NUMBER')?.trim() || ''
+
+  if (!accountSid || !authToken) return
+  if (!messagingServiceSid && !fromPhone) return
+
+  const payload: Record<string, string> = {
+    To: to,
+    Body: message,
+  }
+  if (messagingServiceSid) payload.MessagingServiceSid = messagingServiceSid
+  else payload.From = fromPhone
+
+  const response = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Basic ${btoa(`${accountSid}:${authToken}`)}`,
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: buildTwilioBody(payload),
+  })
+
+  if (!response.ok) {
+    const text = await response.text().catch(() => '')
+    throw new Error(`Twilio SMS failed ${response.status}: ${text}`)
+  }
+}
+
+async function notifyMatchingWorkersBySms(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: ReturnType<typeof mapJob>
+): Promise<void> {
+  const accountSid = Deno.env.get('TWILIO_ACCOUNT_SID')?.trim() || ''
+  const authToken = Deno.env.get('TWILIO_AUTH_TOKEN')?.trim() || ''
+  const hasSender = !!(Deno.env.get('TWILIO_MESSAGING_SERVICE_SID') || Deno.env.get('TWILIO_PHONE_NUMBER'))
+  if (!accountSid || !authToken || !hasSender) return
+
+  const defaultCountryCode = Deno.env.get('OTP_DEFAULT_COUNTRY_CODE')?.trim() || '+91'
+
+  const { data: profileRows, error: profileError } = await supabase
+    .from('worker_profiles')
+    .select('user_id, skills, categories, location')
+  if (profileError) throw profileError
+  const profiles = (profileRows || []) as WorkerProfileRow[]
+  if (!profiles.length) return
+
+  const userIds = profiles.map((profile) => profile.user_id)
+  const { data: workerRows, error: workerError } = await supabase
+    .from('users')
+    .select('id, full_name, phone_number, role, is_verified')
+    .in('id', userIds)
+    .eq('role', 'worker')
+  if (workerError) throw workerError
+
+  const workers = (workerRows || []) as WorkerUserRow[]
+  const workerById = new Map(workers.map((worker) => [worker.id, worker]))
+
+  const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : []
+  const category = typeof job.category === 'string' ? job.category : ''
+
+  const recipients = profiles
+    .map((profile) => {
+      const worker = workerById.get(profile.user_id)
+      if (!worker) return null
+      if (!worker.phone_number || !worker.is_verified) return null
+
+      const skillMatch = intersectsCaseInsensitive(requiredSkills, profile.skills || [])
+      const categoryMatch = intersectsCaseInsensitive(category ? [category] : [], profile.categories || [])
+      const hasPrimaryMatch = skillMatch || categoryMatch
+      if (!hasPrimaryMatch) return null
+
+      const locationMatch = locationLooksRelevant(job.location, profile.location)
+
+      return {
+        id: worker.id,
+        name: worker.full_name || 'Worker',
+        phone: normalizePhone(worker.phone_number, defaultCountryCode),
+        score: (skillMatch ? 2 : 0) + (categoryMatch ? 1 : 0) + (locationMatch ? 1 : 0),
+      }
+    })
+    .filter((item): item is { id: string; name: string; phone: string; score: number } => !!item && !!item.phone)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 25)
+
+  if (!recipients.length) {
+    console.log(`jobs sms notify: no recipients for job ${job.id}`)
+    return
+  }
+
+  const settled = await Promise.allSettled(
+    recipients.map((recipient) => {
+      const smsText = `Hi ${recipient.name}, a new job \"${job.title}\" in ${job.location} may suit your profile. Open HyperLocal Jobs to apply.`
+      return sendTwilioSms(recipient.phone, smsText)
+    })
+  )
+
+  const sentCount = settled.filter((result) => result.status === 'fulfilled').length
+  const failedCount = settled.length - sentCount
+  console.log(`jobs sms notify: job=${job.id} recipients=${recipients.length} sent=${sentCount} failed=${failedCount}`)
 }

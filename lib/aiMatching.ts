@@ -13,9 +13,9 @@ import { generateWithGemini } from './gemini';
 // Gemini AI integration (optional — falls back to keyword logic)
 // ────────────────────────────────────────────────────────────────────────────
 
-/** Call Gemini via shared client. Returns null on failure. */
-async function callGemini(prompt: string): Promise<string | null> {
-  return generateWithGemini(prompt, { tier: 'flash', maxTokens: 256 });
+/** Call Gemini via shared client with optional system instruction. Returns null on failure. */
+async function callGemini(prompt: string, systemInstruction?: string): Promise<string | null> {
+  return generateWithGemini(prompt, { tier: 'flash', maxTokens: 256, systemInstruction });
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -84,8 +84,10 @@ export function extractSkills(description: string): string[] {
  * Truncates input to 500 chars to stay within token budget.
  */
 export async function extractSkillsWithAI(description: string): Promise<string[]> {
-  const prompt = `Extract a JSON array of professional skills from this job description. Return ONLY a JSON array like ["skill1","skill2"]. Description: "${description.slice(0, 500)}"`;
-  const result = await callGemini(prompt);
+  const systemInstruction = 'You are a skill extraction assistant for a job platform. Extract professional skills from job descriptions or worker experience text. Return ONLY a valid JSON array of skill name strings — no markdown, no explanation, no code fences. Example: ["Cooking","Customer Service","Food Preparation"]';
+  const prompt = `Extract professional skills from the following text. Return ONLY a JSON array of skill names.
+Text: "${description.slice(0, 500)}"`;
+  const result = await callGemini(prompt, systemInstruction);
   if (result) {
     try {
       const match = result.match(/\[[\s\S]*?\]/);
@@ -106,10 +108,11 @@ export async function generateMatchExplanationWithAI(
   matchScore: number,
 ): Promise<string> {
   const quality = matchScore >= 70 ? 'great' : matchScore >= 40 ? 'good' : 'possible';
-  const prompt = `A worker has skills: ${workerProfile.skills.join(', ')} and works in: ${workerProfile.categories.join(', ')}.
-A job requires: ${job.requiredSkills.join(', ')} in ${job.category} at ${job.location}.
-Match score: ${matchScore}%. Write ONE short sentence (max 20 words) explaining why this is a ${quality} match.`;
-  const result = await callGemini(prompt);
+  const systemInstruction = 'You are a job match explanation assistant for HyperLocal, India\'s hyperlocal job platform. Write a single, short, encouraging sentence (maximum 20 words) explaining why a worker is a match for a job. No markdown, no greetings, no extra text — just the explanation sentence.';
+  const prompt = `Worker skills: ${workerProfile.skills.join(', ')} | Categories: ${workerProfile.categories.join(', ')}
+Job requires: ${job.requiredSkills.join(', ')} in ${job.category} at ${job.location}
+Match score: ${matchScore}%. Write ONE sentence (max 20 words) explaining why this is a ${quality} match.`;
+  const result = await callGemini(prompt, systemInstruction);
   if (result) return result.trim().replace(/^["']|["']$/g, '');
   return explainJobMatch(workerProfile, job, matchScore);
 }

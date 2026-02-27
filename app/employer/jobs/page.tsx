@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockJobOps } from '@/lib/api'
+import { jobOps } from '@/lib/api'
 import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -27,7 +27,7 @@ export default function EmployerJobsPage() {
 
     async function loadJobs() {
       try {
-        const employerJobs = await mockJobOps.findByEmployerId(user!.id)
+        const employerJobs = await jobOps.findByEmployerId(user!.id)
         if (!cancelled) setJobs(employerJobs)
       } catch {
         toast({ title: 'Error', description: 'Failed to load jobs', variant: 'destructive' })
@@ -43,7 +43,7 @@ export default function EmployerJobsPage() {
   const handleDeleteJob = useCallback(async (jobId: string) => {
     if (!confirm('Are you sure you want to delete this job?')) return
     try {
-      await mockJobOps.delete(jobId)
+      await jobOps.delete(jobId)
       // Remove locally instead of full re-fetch
       setJobs((prev) => prev.filter((j) => j.id !== jobId))
       toast({ title: 'Success', description: 'Job deleted successfully' })
@@ -169,19 +169,21 @@ export default function EmployerJobsPage() {
     return (
       <div className="app-surface">
         <EmployerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <div className="flex justify-between items-center mb-8">
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-6">
+          <div className="flex justify-between items-center">
             <div className="space-y-2">
               <Skeleton className="h-8 w-48" />
               <Skeleton className="h-4 w-72" />
             </div>
-            <Skeleton className="h-10 w-36" />
+            <Skeleton className="h-10 w-36 rounded-md" />
           </div>
-          <div className="flex gap-2 mb-6">
-            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
+          <div className="flex gap-2 mb-4">
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
           </div>
-          <div className="grid md:grid-cols-2 gap-6">
-            {[...Array(4)].map((_, i) => (
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i}>
                 <CardHeader>
                   <div className="flex justify-between items-start">

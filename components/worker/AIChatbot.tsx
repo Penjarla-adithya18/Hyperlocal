@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/navigation'
@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { useAuth } from '@/contexts/AuthContext'
 import { useI18n } from '@/contexts/I18nContext'
-import { mockJobOps, mockApplicationOps, mockWorkerProfileOps } from '@/lib/api'
+import { jobOps, applicationOps, workerProfileOps } from '@/lib/api'
 import { generateWithGemini, SupportedLocale } from '@/lib/gemini'
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching'
 import { Job, Application, WorkerProfile } from '@/lib/types'
@@ -31,7 +31,7 @@ import {
   MessageSquare,
 } from 'lucide-react'
 
-// ── Types ────────────────────────────────────────────────────────────────
+// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 interface ChatMessage {
   id: string
@@ -62,7 +62,7 @@ type AgentIntent =
   | { action: 'greeting' }
   | { action: 'unknown'; message: string }
 
-// ── Intent Extraction (AI + Fallback) ────────────────────────────────────
+// â”€â”€ Intent Extraction (AI + Fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const INTENT_PROMPT = `You are an AI assistant for HyperLocal, a hyperlocal job platform in India.
 Parse the user's message into a JSON intent. Respond ONLY with valid JSON (no markdown, no fences).
@@ -70,15 +70,15 @@ Parse the user's message into a JSON intent. Respond ONLY with valid JSON (no ma
 Possible intents:
 1. {"action":"search_jobs","query":"keyword","category":"category","location":"city"}
 2. {"action":"job_detail","jobTitle":"title or keyword"}
-3. {"action":"apply_job","jobId":"id"} — when user says "apply to job #3" or "apply for <title>"
-4. {"action":"confirm_apply","jobId":"id"} — when user confirms "yes" to apply
-5. {"action":"show_all_jobs"} — when user says "show all jobs", "list all jobs", "all jobs"
-6. {"action":"recommended_jobs"} — when user says "recommended jobs", "suggest jobs", "jobs for me"
-7. {"action":"application_status"} — check my applications, status, etc.
-8. {"action":"platform_info"} — user asks what this app/platform is, what HyperLocal does, explain the platform
-9. {"action":"help"} — user asks what you can do
-10. {"action":"greeting"} — hello, hi, etc.
-11. {"action":"unknown","message":"brief reply"} — anything else
+3. {"action":"apply_job","jobId":"id"} â€” when user says "apply to job #3" or "apply for <title>"
+4. {"action":"confirm_apply","jobId":"id"} â€” when user confirms "yes" to apply
+5. {"action":"show_all_jobs"} â€” when user says "show all jobs", "list all jobs", "all jobs"
+6. {"action":"recommended_jobs"} â€” when user says "recommended jobs", "suggest jobs", "jobs for me"
+7. {"action":"application_status"} â€” check my applications, status, etc.
+8. {"action":"platform_info"} â€” user asks what this app/platform is, what HyperLocal does, explain the platform
+9. {"action":"help"} â€” user asks what you can do
+10. {"action":"greeting"} â€” hello, hi, etc.
+11. {"action":"unknown","message":"brief reply"} â€” anything else
 
 Context (if provided):
 - Last shown jobs with indices: {jobContext}
@@ -106,7 +106,7 @@ async function extractIntent(
     return { action: 'help' }
   }
 
-  // Platform info — "what is this", "explain the platform", "about hyperlocal", etc.
+  // Platform info â€” "what is this", "explain the platform", "about hyperlocal", etc.
   if (
     /what\s+is\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
     /^(about|explain|describe|tell me about)\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
@@ -180,14 +180,14 @@ async function extractIntent(
   return { action: 'search_jobs', query: lower }
 }
 
-// ── Component ────────────────────────────────────────────────────────────
+// â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const GREETING_MSG = `👋 Hi! I'm your **HyperLocal AI Assistant**. I can help you:
+const GREETING_MSG = `ðŸ‘‹ Hi! I'm your **HyperLocal AI Assistant**. I can help you:
 
-• **Search jobs** — "Find plumber jobs in Hyderabad"
-• **View details** — "Tell me about #2"
-• **Apply to jobs** — "Apply for #3"
-• **Check status** — "My applications"
+â€¢ **Search jobs** â€” "Find plumber jobs in Hyderabad"
+â€¢ **View details** â€” "Tell me about #2"
+â€¢ **Apply to jobs** â€” "Apply for #3"
+â€¢ **Check status** â€” "My applications"
 
 What would you like to do?`
 
@@ -211,7 +211,7 @@ export default function AIChatbot() {
   // Load worker profile once
   useEffect(() => {
     if (user?.role === 'worker') {
-      mockWorkerProfileOps.findByUserId(user.id).then(setProfile).catch(() => {})
+      workerProfileOps.findByUserId(user.id).then(setProfile).catch(() => {})
     }
   }, [user])
 
@@ -246,7 +246,7 @@ export default function AIChatbot() {
     }
   }, [open])
 
-  // ── Helpers ─────────────────────────────────────────────────────
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const addMessage = useCallback(
     (role: ChatMessage['role'], content: string, data?: ChatMessage['data']) => {
@@ -273,7 +273,7 @@ export default function AIChatbot() {
     return undefined
   }
 
-  // ── Action Handlers ─────────────────────────────────────────────
+  // â”€â”€ Action Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleSearchJobs = async (query?: string, category?: string, location?: string) => {
     try {
@@ -281,7 +281,7 @@ export default function AIChatbot() {
       const filters: { status?: 'active'; category?: string; location?: string } = {}
       if (category) filters.category = category
       if (location) filters.location = location
-      const allJobs = await mockJobOps.getAll(filters)
+      const allJobs = await jobOps.getAll(filters)
       let filtered = allJobs
 
       if (query) {
@@ -304,7 +304,7 @@ export default function AIChatbot() {
         })
       }
 
-      // Sort by most recent — show up to 25 search results
+      // Sort by most recent â€” show up to 25 search results
       filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       const results = filtered.slice(0, 25)
       lastJobsRef.current = results
@@ -329,7 +329,7 @@ export default function AIChatbot() {
 
   const handleShowAllJobs = async () => {
     try {
-      const allJobs = await mockJobOps.getAll()
+      const allJobs = await jobOps.getAll()
       const sorted = allJobs
         .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       lastJobsRef.current = sorted
@@ -353,7 +353,7 @@ export default function AIChatbot() {
 
   const handleRecommendedJobs = async () => {
     try {
-      const allJobs = await mockJobOps.getAll()
+      const allJobs = await jobOps.getAll()
       let results: Array<{ job: Job; matchScore: number }> = []
 
       if (profile && profile.skills?.length > 0 && profile.categories?.length > 0) {
@@ -411,7 +411,7 @@ export default function AIChatbot() {
 
     // Check if already applied
     try {
-      const myApps = await mockApplicationOps.findByWorkerId(user.id)
+      const myApps = await applicationOps.findByWorkerId(user.id)
       const alreadyApplied = myApps.some((a) => a.jobId === job.id)
       if (alreadyApplied) {
         addMessage('assistant', `You've already applied to **${job.title}**. Say "my applications" to check your status.`)
@@ -424,7 +424,7 @@ export default function AIChatbot() {
     setPendingConfirmJobId(job.id)
     addMessage(
       'assistant',
-      `Apply to **${job.title}** (₹${(job.pay ?? 0).toLocaleString()})?\n\nSay **"yes"** to confirm or **"no"** to cancel.`,
+      `Apply to **${job.title}** (â‚¹${(job.pay ?? 0).toLocaleString()})?\n\nSay **"yes"** to confirm or **"no"** to cancel.`,
       { type: 'apply_confirm', job },
     )
   }
@@ -435,7 +435,7 @@ export default function AIChatbot() {
 
     try {
       // Get the job details for match score
-      const job = await mockJobOps.findById(jobId)
+      const job = await jobOps.findById(jobId)
       if (!job) {
         addMessage('assistant', 'Sorry, that job could not be found. It may have been removed.')
         return
@@ -450,7 +450,7 @@ export default function AIChatbot() {
         ? Math.round((matchedSkills.length / job.requiredSkills.length) * 100)
         : 50
 
-      await mockApplicationOps.create({
+      await applicationOps.create({
         jobId,
         workerId: user.id,
         status: 'pending',
@@ -459,7 +459,7 @@ export default function AIChatbot() {
         createdAt: new Date().toISOString(),
       } as Omit<Application, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: string })
 
-      addMessage('assistant', `✅ Successfully applied to **${job.title}**!\n\nMatch score: **${matchScore}%**\nSay "my applications" to track your status.`, {
+      addMessage('assistant', `âœ… Successfully applied to **${job.title}**!\n\nMatch score: **${matchScore}%**\nSay "my applications" to track your status.`, {
         type: 'apply_result',
         applied: true,
       })
@@ -475,7 +475,7 @@ export default function AIChatbot() {
     }
 
     try {
-      const apps = await mockApplicationOps.findByWorkerId(user.id)
+      const apps = await applicationOps.findByWorkerId(user.id)
       if (apps.length === 0) {
         addMessage('assistant', "You haven't applied to any jobs yet. Say **\"search jobs\"** to find opportunities!",
           { type: 'suggestions', suggestions: ['Search jobs', 'Find plumber jobs', 'Show all jobs'] })
@@ -485,7 +485,7 @@ export default function AIChatbot() {
       // Enrich with job titles
       const enriched = await Promise.all(
         apps.slice(0, 10).map(async (app) => {
-          const job = await mockJobOps.findById(app.jobId)
+          const job = await jobOps.findById(app.jobId)
           return { ...app, jobTitle: job?.title ?? 'Unknown Job' }
         }),
       )
@@ -499,7 +499,7 @@ export default function AIChatbot() {
 
       addMessage(
         'assistant',
-        `📋 You have **${apps.length}** application${apps.length > 1 ? 's' : ''}:\n• Pending: ${statusCounts.pending}\n• Accepted: ${statusCounts.accepted}\n• Completed: ${statusCounts.completed}\n• Rejected: ${statusCounts.rejected}`,
+        `ðŸ“‹ You have **${apps.length}** application${apps.length > 1 ? 's' : ''}:\nâ€¢ Pending: ${statusCounts.pending}\nâ€¢ Accepted: ${statusCounts.accepted}\nâ€¢ Completed: ${statusCounts.completed}\nâ€¢ Rejected: ${statusCounts.rejected}`,
         { type: 'applications', applications: enriched },
       )
     } catch {
@@ -507,7 +507,7 @@ export default function AIChatbot() {
     }
   }
 
-  // ── Main Send Handler ────────────────────────────────────────────
+  // â”€â”€ Main Send Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleSend = async () => {
     const text = input.trim()
@@ -538,37 +538,37 @@ export default function AIChatbot() {
         case 'platform_info':
           addMessage(
             'assistant',
-            `**HyperLocal** is a hyperlocal job platform built for India 🇮🇳
+            `**HyperLocal** is a hyperlocal job platform built for India ðŸ‡®ðŸ‡³
 
 ` +
-            `It connects **local workers** (plumbers, electricians, drivers, domestic helpers, and more) with **employers** in their area — no long commutes, no middlemen.
+            `It connects **local workers** (plumbers, electricians, drivers, domestic helpers, and more) with **employers** in their area â€” no long commutes, no middlemen.
 
 ` +
             `**For Workers (you):**
 ` +
-            `• Browse & apply for jobs nearby
+            `â€¢ Browse & apply for jobs nearby
 ` +
-            `• AI-powered job recommendations based on your skills
+            `â€¢ AI-powered job recommendations based on your skills
 ` +
-            `• Real-time chat with employers
+            `â€¢ Real-time chat with employers
 ` +
-            `• Track your applications & earnings
+            `â€¢ Track your applications & earnings
 ` +
-            `• Skill gap analysis to grow your career
+            `â€¢ Skill gap analysis to grow your career
 
 ` +
             `**For Employers:**
 ` +
-            `• Post jobs and find verified local workers fast
+            `â€¢ Post jobs and find verified local workers fast
 ` +
-            `• AI resume screening & candidate matching
+            `â€¢ AI resume screening & candidate matching
 ` +
-            `• Secure escrow payments — money released only when work is done
+            `â€¢ Secure escrow payments â€” money released only when work is done
 ` +
-            `• WhatsApp notifications via WATI
+            `â€¢ WhatsApp notifications via WATI
 
 ` +
-            `Think of it as a **neighbourhood job board powered by AI** — local, fast, and fair. 🤝`,
+            `Think of it as a **neighbourhood job board powered by AI** â€” local, fast, and fair. ðŸ¤`,
             {
               type: 'suggestions',
               suggestions: ['Show all jobs', 'Recommended jobs for me', 'What can you do?'],
@@ -578,7 +578,7 @@ export default function AIChatbot() {
 
         case 'help':
           addMessage('assistant',
-            `Here's what I can do:\n\n🔍 **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2" or "Tell me about job 3"\n📝 **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications" or "Check status"\n\nJust type naturally — I understand!`,
+            `Here's what I can do:\n\nðŸ” **Search Jobs** â€” "Find plumber jobs in Delhi"\nðŸ“‹ **Job Details** â€” "Show #2" or "Tell me about job 3"\nðŸ“ **Apply** â€” "Apply for #1"\nðŸ“Š **Track Applications** â€” "My applications" or "Check status"\n\nJust type naturally â€” I understand!`,
             {
               type: 'suggestions',
               suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
@@ -603,10 +603,10 @@ export default function AIChatbot() {
           if (intent.jobTitle?.startsWith('__index_')) {
             job = resolveJobByIndex(intent.jobTitle)
           } else if (intent.jobId) {
-            job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+            job = (await jobOps.findById(intent.jobId)) ?? undefined
           } else if (intent.jobTitle) {
             // Search by title
-            const allJobs = await mockJobOps.getAll({ status: 'active' })
+            const allJobs = await jobOps.getAll({ status: 'active' })
             job = allJobs.find((j) =>
               j.title.toLowerCase().includes(intent.jobTitle!.toLowerCase()),
             )
@@ -625,7 +625,7 @@ export default function AIChatbot() {
           if (intent.jobId.startsWith('__index_')) {
             job = resolveJobByIndex(intent.jobId)
           } else {
-            job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+            job = (await jobOps.findById(intent.jobId)) ?? undefined
           }
 
           if (job) {
@@ -666,7 +666,7 @@ export default function AIChatbot() {
     }
   }
 
-  // ── Suggestion click ─────────────────────────────────────────────
+  // â”€â”€ Suggestion click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const handleSuggestionClick = (suggestion: string) => {
     setInput(suggestion)
@@ -682,7 +682,7 @@ export default function AIChatbot() {
         : ''
 
       extractIntent(suggestion, jobCtx, pendingConfirmJobId).then(async (intent) => {
-        // Re-dispatch same logic as handleSend — must mirror all cases
+        // Re-dispatch same logic as handleSend â€” must mirror all cases
         switch (intent.action) {
           case 'greeting':
             addMessage('assistant', GREETING_MSG, {
@@ -692,7 +692,7 @@ export default function AIChatbot() {
             break
           case 'help':
             addMessage('assistant',
-              `Here's what I can do:\n\n🔍 **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2"\n📝 **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications"`,
+              `Here's what I can do:\n\nðŸ” **Search Jobs** â€” "Find plumber jobs in Delhi"\nðŸ“‹ **Job Details** â€” "Show #2"\nðŸ“ **Apply** â€” "Apply for #1"\nðŸ“Š **Track Applications** â€” "My applications"`,
               {
                 type: 'suggestions',
                 suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
@@ -716,7 +716,7 @@ export default function AIChatbot() {
             if (intent.jobTitle?.startsWith('__index_')) {
               job = resolveJobByIndex(intent.jobTitle)
             } else if (intent.jobId) {
-              job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+              job = (await jobOps.findById(intent.jobId)) ?? undefined
             }
             if (job) {
               await handleJobDetail(job)
@@ -730,7 +730,7 @@ export default function AIChatbot() {
             if (intent.jobId.startsWith('__index_')) {
               job = resolveJobByIndex(intent.jobId)
             } else {
-              job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+              job = (await jobOps.findById(intent.jobId)) ?? undefined
             }
             if (job) {
               await handleApplyJob(job)
@@ -753,7 +753,7 @@ export default function AIChatbot() {
     }, 50)
   }
 
-  // ── Render ──────────────────────────────────────────────────────
+  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   if (!user || user.role !== 'worker') return null
 
@@ -834,7 +834,7 @@ export default function AIChatbot() {
                                   <MapPin className="h-3 w-3" /> {job.location}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
-                                  <IndianRupee className="h-3 w-3" /> ₹{(job.pay ?? 0).toLocaleString()}
+                                  <IndianRupee className="h-3 w-3" /> â‚¹{(job.pay ?? 0).toLocaleString()}
                                 </span>
                               </div>
                             </div>
@@ -854,7 +854,7 @@ export default function AIChatbot() {
                           <MapPin className="h-3 w-3" /> {msg.data.job.location}
                         </span>
                         <span className="text-[11px] flex items-center gap-1 text-muted-foreground">
-                          <IndianRupee className="h-3 w-3" /> ₹{(msg.data.job.pay ?? 0).toLocaleString()}/{msg.data.job.payType === 'hourly' ? 'hr' : 'fixed'}
+                          <IndianRupee className="h-3 w-3" /> â‚¹{(msg.data.job.pay ?? 0).toLocaleString()}/{msg.data.job.payType === 'hourly' ? 'hr' : 'fixed'}
                         </span>
                         <span className="text-[11px] flex items-center gap-1 text-muted-foreground">
                           <Clock className="h-3 w-3" /> {msg.data.job.timing}

@@ -10,13 +10,14 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockWorkerProfileOps } from '@/lib/api'
-import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching'
-import { Application, Job, WorkerProfile } from '@/lib/types'
+import { applicationOps, jobOps, workerProfileOps } from '@/lib/api'
+import { getRecommendedJobs, getBasicRecommendations, matchJobs } from '@/lib/aiMatching'
+import { Application, Job, User, WorkerProfile } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
 import { Slider } from '@/components/ui/slider'
+import { LocationInput } from '@/components/ui/location-input'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerJobsPage() {
@@ -51,9 +52,9 @@ export default function WorkerJobsPage() {
   const loadJobs = async () => {
     try {
       const [allJobs, profile, myApplications] = await Promise.all([
-        mockDb.getAllJobs(),
-        user ? mockWorkerProfileOps.findByUserId(user.id) : Promise.resolve(null),
-        user ? mockDb.getApplicationsByWorker(user.id) : Promise.resolve([]),
+        jobOps.getAll(),
+        user ? workerProfileOps.findByUserId(user.id) : Promise.resolve(null),
+        user ? applicationOps.findByWorkerId(user.id) : Promise.resolve([]),
       ])
 
       const activeJobs = allJobs.filter((j) => j.status === 'active')
@@ -61,19 +62,28 @@ export default function WorkerJobsPage() {
       setWorkerProfile(profile)
       setApplications(myApplications)
 
-      // Use the same recommendation logic as the dashboard for consistency
-      if (profile && profile.profileCompleted) {
-        // Full AI scoring — same as dashboard
-        const recommended = getRecommendedJobs(profile, activeJobs, 50)
-        setMatchedJobs(recommended.map(({ job, matchScore }) => ({ job, score: matchScore })))
-      } else if (profile && profile.categories.length > 0) {
-        // Partial profile — category-only matching
-        const basic = getBasicRecommendations(profile.categories, activeJobs, 50)
-        setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
-      } else {
-        // No profile — show recent jobs
-        const basic = getBasicRecommendations([], activeJobs, 50)
-        setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
+      // Use AI matching when available, with fallback logic
+      if (user) {
+        try {
+          const matches = await matchJobs(
+            user as User,
+            activeJobs,
+            workerProfileOps.findByUserId
+          )
+          setMatchedJobs(matches)
+        } catch {
+          // Fallback: use local recommendation logic
+          if (profile && profile.profileCompleted) {
+            const recommended = getRecommendedJobs(profile, activeJobs, 50)
+            setMatchedJobs(recommended.map(({ job, matchScore }) => ({ job, score: matchScore })))
+          } else if (profile && profile.categories.length > 0) {
+            const basic = getBasicRecommendations(profile.categories, activeJobs, 50)
+            setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
+          } else {
+            const basic = getBasicRecommendations([], activeJobs, 50)
+            setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
+          }
+        }
       }
     } catch (error) {
       console.error('Failed to load jobs:', error)
@@ -205,7 +215,6 @@ export default function WorkerJobsPage() {
   }
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
-    const employer = mockDb.getUserById(job.employerId)
     const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (
@@ -215,7 +224,7 @@ export default function WorkerJobsPage() {
             <div className="flex-1">
               <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {employer?.companyName || 'Company'}
+                Company
               </p>
             </div>
             {typeof matchScore === 'number' && (
@@ -298,7 +307,7 @@ export default function WorkerJobsPage() {
           </div>
           {/* Stats cards skeleton */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-            {[...Array(3)].map((_, i) => (
+            {Array.from({ length: 3 }).map((_, i) => (
               <Card key={i}>
                 <CardContent className="pt-6">
                   <Skeleton className="h-4 w-24 mb-2" />
@@ -313,8 +322,8 @@ export default function WorkerJobsPage() {
             <Skeleton className="h-10 w-32 rounded-md" />
           </div>
           {/* Job cards skeleton */}
-          <div className="grid md:grid-cols-2 gap-4">
-            {[...Array(6)].map((_, i) => (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
               <Card key={i}>
                 <CardHeader>
                   <div className="flex justify-between">
@@ -329,7 +338,7 @@ export default function WorkerJobsPage() {
                   <Skeleton className="h-4 w-full" />
                   <Skeleton className="h-4 w-3/4" />
                   <div className="flex gap-2">
-                    {[...Array(3)].map((_, j) => <Skeleton key={j} className="h-5 w-20 rounded-full" />)}
+                    {Array.from({ length: 3 }).map((_, j) => <Skeleton key={j} className="h-5 w-20 rounded-full" />)}
                   </div>
                   <Skeleton className="h-9 w-full rounded-md" />
                 </CardContent>
@@ -444,10 +453,10 @@ export default function WorkerJobsPage() {
                       ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  placeholder="Location"
+                <LocationInput
                   value={locationFilter}
-                  onChange={(e) => setLocationFilter(e.target.value)}
+                  onChange={(value) => setLocationFilter(value)}
+                  placeholder="Location"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">

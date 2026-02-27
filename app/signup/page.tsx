@@ -33,7 +33,6 @@ function SignupPageContent() {
   });
 
   const [otpSent, setOtpSent] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   // PAN KYC state
@@ -70,14 +69,15 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
-        // Extract OTP from message (for demo purposes)
-        const otpMatch = result.message.match(/OTP is: (\d{6})/);
-        if (otpMatch) {
-          setGeneratedOtp(otpMatch[1]);
-        }
         toast({
           title: 'OTP Sent',
           description: result.message,
+        });
+      } else {
+        toast({
+          title: 'Failed to Send OTP',
+          description: result.message || 'Unable to send OTP right now. Please try again.',
+          variant: 'destructive',
         });
       }
     } catch (error) {
@@ -304,8 +304,8 @@ function SignupPageContent() {
   };
 
   return (
-    <div suppressHydrationWarning className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:p-6">
-      <div suppressHydrationWarning className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-blue-50/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+    <div suppressHydrationWarning className="flex min-h-screen items-start justify-center overflow-y-auto bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-3 py-6 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 sm:items-center sm:p-4 md:p-6">
+      <div suppressHydrationWarning className="flex w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-blue-50/95 shadow-2xl sm:rounded-3xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
         <section suppressHydrationWarning className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
@@ -343,11 +343,11 @@ function SignupPageContent() {
           </div>
         </section>
 
-        <section suppressHydrationWarning className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
-          <Link href="/" className="absolute left-6 top-6 inline-flex items-center text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:left-8 md:top-8">
+        <section suppressHydrationWarning className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-5 pt-6 shadow-2xl sm:p-6 md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
+          <Link href="/" className="mb-4 inline-flex items-center self-start text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:absolute md:left-8 md:top-8 md:mb-0">
             ← Back to Home
           </Link>
-          <div className="w-full max-w-sm space-y-7">
+          <div className="w-full max-w-sm space-y-6 sm:space-y-7">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign up</h2>
             </div>
@@ -389,7 +389,7 @@ function SignupPageContent() {
 
                 <div className="space-y-6">
                   <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
                     <input
@@ -436,7 +436,7 @@ function SignupPageContent() {
                   ) : (
                     <>
                       <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <ShieldCheck className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
                         <input
@@ -451,14 +451,6 @@ function SignupPageContent() {
                           className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
                         />
                       </div>
-
-                      {generatedOtp && (
-                        <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/30 p-4 text-center">
-                          <p className="text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Development Mode - OTP Code:</p>
-                          <p className="text-3xl font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-widest">{generatedOtp}</p>
-                          <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">Copy this code to the input above</p>
-                        </div>
-                      )}
 
                       <button
                         onClick={handleVerifyOTP}
@@ -495,7 +487,7 @@ function SignupPageContent() {
 
                 <div className="space-y-6">
                   <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <User className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
                     <input
@@ -512,7 +504,7 @@ function SignupPageContent() {
                   {role === 'employer' && (
                     <>
                       <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <Store className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
                         <input
@@ -527,7 +519,7 @@ function SignupPageContent() {
                       </div>
 
                       <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <Building2 className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
                         <input
@@ -641,7 +633,7 @@ function SignupPageContent() {
                   </div>
 
                   <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Lock className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
                     <input
@@ -657,7 +649,7 @@ function SignupPageContent() {
                   </div>
 
                   <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Lock className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
                     <input

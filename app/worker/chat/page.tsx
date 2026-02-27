@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockUserOps, mockReportOps } from '@/lib/api'
+import { db, jobOps, reportOps, userOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
 import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff, ChevronLeft } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -48,10 +48,14 @@ export default function WorkerChatPage() {
   const [voiceListening, setVoiceListening] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
-  const [loadingConversations, setLoadingConversations] = useState(true)
+  const [loadingConvs, setLoadingConvs] = useState(true)
+  const [loadingMsgs, setLoadingMsgs] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const activeConvIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -59,15 +63,20 @@ export default function WorkerChatPage() {
     }
   }, [user])
 
-  // Poll for new messages every 3s (reduced latency)
+  // Poll for new messages every 1.5s
   useEffect(() => {
     if (!selectedConversation) return
 
+    // Clear messages immediately when switching conversations
+    setMessages([])
+    setLoadingMsgs(true)
+    isAtBottomRef.current = true
+    activeConvIdRef.current = selectedConversation.id
     loadMessages(selectedConversation.id)
 
     const interval = setInterval(() => {
       loadMessages(selectedConversation.id)
-    }, 3000)
+    }, 1500) // 1.5s polling for fast message delivery
 
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
@@ -81,15 +90,25 @@ export default function WorkerChatPage() {
     return () => clearInterval(convInterval)
   }, [user])
 
+  // Only auto-scroll on poll if user is already at the bottom
   useEffect(() => {
-    scrollToBottom()
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  // Track scroll position on the message container
+  const handleMessagesScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    const threshold = 80 // px from bottom
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+  }
 
   const loadConversations = async () => {
     if (!user) return
-    setLoadingConversations(true)
+    setLoadingConvs(true)
     try {
-      const userConvs = await mockDb.getConversationsByUser(user.id)
+      const userConvs = await db.getConversationsByUser(user.id)
       setConversations(userConvs)
       const participantIds = [...new Set(
         userConvs
@@ -97,7 +116,7 @@ export default function WorkerChatPage() {
           .filter((participantId) => participantId !== user.id)
       )]
       if (participantIds.length > 0) {
-        const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+        const fetchedUsers = await Promise.all(participantIds.map((id) => userOps.findById(id)))
         setUsersById((previous) => {
           const next = { ...previous }
           for (const fetched of fetchedUsers) {
@@ -115,34 +134,35 @@ export default function WorkerChatPage() {
       sessionStorage.removeItem('targetChatEmployerId')
       sessionStorage.removeItem('targetChatJobId')
 
+      let selected = false
       // 1. Try exact conv ID
       if (targetConvId) {
         const targetConv = userConvs.find(c => c.id === targetConvId)
         if (targetConv) {
           setSelectedConversation(targetConv)
-          return
+          selected = true
         }
       }
       // 2. Fall back to employer + job lookup
-      if (targetEmployerId) {
+      if (!selected && targetEmployerId) {
         const found = userConvs.find(c =>
           c.participants.includes(targetEmployerId) &&
           (!targetJobId || c.jobId === targetJobId)
         )
         if (found) {
           setSelectedConversation(found)
-          return
+          selected = true
         }
       }
       // 3. Only auto-select first if no target was requested
-      if (!targetConvId && !targetEmployerId && userConvs.length > 0 && !selectedConversation) {
+      if (!selected && !targetConvId && !targetEmployerId && userConvs.length > 0 && !selectedConversation) {
         setSelectedConversation(userConvs[0])
       }
 
       // Load jobs for all conversations (to check completion status)
       const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
       if (jobIds.length > 0) {
-        const allJobs = await mockDb.getAllJobs()
+        const allJobs = await jobOps.getAll()
         const jMap: Record<string, Job> = {}
         for (const j of allJobs) {
           if (jobIds.includes(j.id)) jMap[j.id] = j
@@ -150,24 +170,32 @@ export default function WorkerChatPage() {
         setJobsById(jMap)
       }
     } finally {
-      setLoadingConversations(false)
+      setLoadingConvs(false)
     }
   }
 
   const loadMessages = async (conversationId: string) => {
-    const convMessages = await mockDb.getMessagesByConversation(conversationId)
-    setMessages(convMessages)
-    if (user) {
-      setConversations((prev) =>
-        prev.map((conv) => {
-          if (conv.id !== conversationId || !conv.lastMessage) return conv
-          if (conv.lastMessage.senderId === user.id || conv.lastMessage.read) return conv
-          return {
-            ...conv,
-            lastMessage: { ...conv.lastMessage, read: true },
-          }
-        })
-      )
+    try {
+      const convMessages = await db.getMessagesByConversation(conversationId)
+      // Stale-fetch guard: discard response if conversation changed while fetching
+      if (activeConvIdRef.current !== conversationId) return
+      setMessages(convMessages)
+      setLoadingMsgs(false)
+      if (user) {
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== conversationId || !conv.lastMessage) return conv
+            if (conv.lastMessage.senderId === user.id || conv.lastMessage.read) return conv
+            return {
+              ...conv,
+              lastMessage: { ...conv.lastMessage, read: true },
+            }
+          })
+        )
+      }
+    } catch {
+      // Silently swallow timeout/network errors during polling — the next poll will retry
+      setLoadingMsgs(false)
     }
   }
 
@@ -189,6 +217,7 @@ export default function WorkerChatPage() {
 
     setUploading(true)
     let attachmentData: { url: string; name: string; type: string; size: number } | undefined
+    let tempMessage: ChatMessage | undefined
 
     try {
       // Upload file if attached
@@ -207,7 +236,7 @@ export default function WorkerChatPage() {
       }
 
       // Optimistic UI update
-      const tempMessage: ChatMessage = {
+      tempMessage = {
         id: `temp-${Date.now()}`,
         conversationId: selectedConversation.id,
         senderId: user.id,
@@ -221,15 +250,14 @@ export default function WorkerChatPage() {
           attachmentSize: attachmentData.size,
         }),
       }
-      setMessages((prev) => [...prev, tempMessage])
-      setNewMessage('')
+      setMessages((prev) => [...prev, tempMessage!])
       setSelectedFile(null)
-      scrollToBottom()
+      scrollToBottom(true)
 
-      const message = await mockDb.sendMessage({
+      const message = await db.sendMessage({
         conversationId: selectedConversation.id,
         senderId: user.id,
-        message: tempMessage.message,
+        message: tempMessage!.message,
         ...(attachmentData && {
           attachmentUrl: attachmentData.url,
           attachmentName: attachmentData.name,
@@ -239,11 +267,11 @@ export default function WorkerChatPage() {
       })
 
       // Replace temp message with real one
-      setMessages((prev) => prev.map(m => m.id === tempMessage.id ? message : m))
+      setMessages((prev) => prev.map(m => m.id === tempMessage!.id ? message : m))
       loadConversations() // Update conversation list
     } catch (error) {
-      // Remove temp message on error
-      setMessages((prev) => prev.filter(m => !m.id.startsWith('temp-')))
+      // Remove only the failed temp message
+      if (tempMessage) setMessages((prev) => prev.filter(m => m.id !== tempMessage!.id))
       toast({
         title: 'Failed to send',
         description: error instanceof Error ? error.message : 'Please try again',
@@ -254,8 +282,11 @@ export default function WorkerChatPage() {
     }
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = (force = false) => {
+    if (force || isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      isAtBottomRef.current = true
+    }
   }
 
   const handleReportAbuse = async () => {
@@ -264,7 +295,7 @@ export default function WorkerChatPage() {
     if (!otherUser) return
     setSubmittingReport(true)
     try {
-      await mockReportOps.create({
+      await reportOps.create({
         reporterId: user.id,
         reportedUserId: otherUser.id,
         type: 'chat_abuse',
@@ -365,14 +396,14 @@ export default function WorkerChatPage() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {loadingConversations ? (
-                  <div className="p-2 space-y-2">
-                    {[...Array(5)].map((_, i) => (
+                {loadingConvs ? (
+                  <div className="p-4 space-y-1">
+                    {Array.from({ length: 6 }).map((_, i) => (
                       <div key={i} className="flex items-center gap-3 p-3">
-                        <Skeleton className="h-11 w-11 rounded-full shrink-0" />
+                        <Skeleton className="h-12 w-12 rounded-full shrink-0" />
                         <div className="flex-1 space-y-2">
-                          <Skeleton className="h-4 w-28" />
-                          <Skeleton className="h-3 w-44" />
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-48" />
                         </div>
                       </div>
                     ))}
@@ -466,9 +497,22 @@ export default function WorkerChatPage() {
                   <Flag className="h-4 w-4" />
                 </Button>
               </div>
-              <div className="flex-1 overflow-y-auto p-4 bg-background">
+              <div
+                className="flex-1 overflow-y-auto p-4 bg-background"
+                onScroll={handleMessagesScroll}
+              >
                 <div className="space-y-2">
-                  {messages.length === 0 ? (
+                  {loadingMsgs ? (
+                    <div className="space-y-4 pt-2">
+                      {[true, false, true, false, true].map((isSent, i) => (
+                        <div key={i} className={`flex items-end gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                          {!isSent && <Skeleton className="h-7 w-7 rounded-full shrink-0" />}
+                          <Skeleton className={`h-10 rounded-2xl ${isSent ? 'w-40' : 'w-52'}`} />
+                          {isSent && <div className="w-7" />}
+                        </div>
+                      ))}
+                    </div>
+                  ) : messages.length === 0 ? (
                     <div className="text-center py-12">
                       <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                       <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
@@ -620,13 +664,13 @@ export default function WorkerChatPage() {
               </CardHeader>
               <div className="flex-1 overflow-y-auto">
                 <CardContent className="space-y-2">
-                  {loadingConversations ? (
-                    <div className="space-y-2">
-                      {[...Array(5)].map((_, i) => (
-                        <div key={i} className="flex items-start gap-3 p-3">
+                  {loadingConvs ? (
+                    <div className="space-y-1 pt-2">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3">
                           <Skeleton className="h-10 w-10 rounded-full shrink-0" />
                           <div className="flex-1 space-y-2">
-                            <Skeleton className="h-3.5 w-28" />
+                            <Skeleton className="h-4 w-28" />
                             <Skeleton className="h-3 w-40" />
                           </div>
                         </div>
@@ -713,9 +757,22 @@ export default function WorkerChatPage() {
                       </Button>
                     </div>
                   </CardHeader>
-                <ScrollArea className="flex-1 min-h-0 p-4 md:p-6 bg-background">
+                <div
+                  className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 bg-background"
+                  onScroll={handleMessagesScroll}
+                >
                   <div className="space-y-2">
-                    {messages.length === 0 ? (
+                    {loadingMsgs ? (
+                      <div className="space-y-4 pt-2">
+                        {[true, false, true, false, true].map((isSent, i) => (
+                          <div key={i} className={`flex items-end gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                            {!isSent && <Skeleton className="h-7 w-7 rounded-full shrink-0" />}
+                            <Skeleton className={`h-10 rounded-2xl ${isSent ? 'w-40' : 'w-52'}`} />
+                            {isSent && <div className="w-7" />}
+                          </div>
+                        ))}
+                      </div>
+                    ) : messages.length === 0 ? (
                       <div className="text-center py-12">
                         <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                         <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
@@ -793,7 +850,7 @@ export default function WorkerChatPage() {
                     )}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
                 <CardContent className="border-t pt-4 pb-4 bg-background/50">
                   {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-2xl text-sm text-muted-foreground">
@@ -842,7 +899,7 @@ export default function WorkerChatPage() {
               </>
             ) : (
               <CardContent className="flex items-center justify-center h-full">
-                {loadingConversations ? (
+                {loadingConvs ? (
                   <div className="flex flex-col items-center gap-4 w-full max-w-xs">
                     <Skeleton className="h-16 w-16 rounded-full" />
                     <Skeleton className="h-5 w-48" />

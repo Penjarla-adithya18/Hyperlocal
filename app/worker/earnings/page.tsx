@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockEscrowOps, mockApplicationOps, mockJobOps } from '@/lib/api'
+import { escrowOps, applicationOps, jobOps } from '@/lib/api'
 import { EscrowTransaction, Job } from '@/lib/types'
 import {
   IndianRupee,
@@ -70,12 +70,12 @@ export default function WorkerEarningsPage() {
     if (!user) return
     ;(async () => {
       try {
-        const txns = await mockEscrowOps.findByUser(user.id, 'worker')
+        const txns = await escrowOps.findByUser(user.id, 'worker')
         setEscrowTxns(txns)
 
         // Batch-fetch unique job info
         const jobIds = [...new Set(txns.map((t) => t.jobId))]
-        const jobResults = await Promise.all(jobIds.map((id) => mockJobOps.findById(id)))
+        const jobResults = await Promise.all(jobIds.map((id) => jobOps.findById(id)))
         const map: Record<string, Job> = {}
         jobResults.forEach((j: Job | null) => {
           if (j) map[j.id] = j

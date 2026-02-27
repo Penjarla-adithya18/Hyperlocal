@@ -93,7 +93,7 @@ supabase secrets set WATI_API_TOKEN=<your-wati-token>
 │   └── admin/                        # Admin pages (3)
 │       ├── dashboard/ users/ reports/
 ├── lib/
-│   ├── api.ts                        # API client — calls edge functions, exports mockDb facade
+│   ├── api.ts                        # API client — calls edge functions, exports db facade
 │   ├── types.ts                      # All TypeScript interfaces & enums
 │   ├── auth.ts                       # sendOTP / verifyOTP (WATI integration)
 │   ├── aiMatching.ts                 # AI skill extraction & job matching
@@ -148,8 +148,8 @@ supabase secrets set WATI_API_TOKEN=<your-wati-token>
 ```
 
 All frontend API calls go through `lib/api.ts` which exports:
-- `mockDb` — drop-in facade matching the old in-memory DB interface
-- `mockUserOps`, `mockJobOps`, `mockApplicationOps`, `mockEscrowOps`, etc. — typed CRUD helpers
+- `db` — main database operations interface
+- `userOps`, `jobOps`, `applicationOps`, `escrowOps`, etc. — typed CRUD helpers
 - `registerUser()`, `loginUser()`, `resetPassword()` — auth functions
 
 ---

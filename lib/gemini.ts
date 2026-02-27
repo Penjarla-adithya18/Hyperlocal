@@ -27,6 +27,8 @@ type ModelTier = 'lite' | 'flash'
 interface GenerateWithGeminiOptions {
   tier?: ModelTier
   maxTokens?: number
+  /** Optional system instruction to set the model's persona and scope */
+  systemInstruction?: string
 }
 
 // ── TTL in-memory cache ───────────────────────────────────────────────────────
@@ -50,16 +52,84 @@ const TTL = {
   INTENT:       5 * 60 * 1000,
 }
 
+// ── System Prompts ────────────────────────────────────────────────────────────
+// Each AI feature gets a dedicated system instruction that defines the model's
+// persona, scope, and output rules. Separating system prompts from user prompts
+// ensures consistent behaviour, reduces repeated boilerplate per call, and
+// makes the persona easy to audit and update in one place.
+
+export const SYSTEM_PROMPTS = {
+  /** Base platform identity used when no specialist context applies */
+  BASE: `You are an AI assistant for HyperLocal, India's hyperlocal platform that connects blue-collar and gig workers with local employers. Always be helpful, culturally sensitive to India, and use simple language that blue-collar workers can understand.`,
+
+  /** Intent extraction and structured query parsing from multilingual user messages */
+  USER_INPUT: `You are an AI assistant for HyperLocal, India's hyperlocal job platform for blue-collar and gig workers. You understand Hindi (Devanagari and romanized), Telugu, and English. Extract structured intent from user messages and return valid JSON only. Never add markdown, code fences, or extra explanation outside the JSON object.`,
+
+  /** Minimal language detection — classify script and return a single language code */
+  LANGUAGE_DETECT: `You detect the language of short text snippets. Reply with exactly one code: en (English), hi (Hindi), or te (Telugu). No explanation, no punctuation — output only the two-letter code.`,
+
+  /** Natural-language translator for Indian worker/employer context */
+  TRANSLATOR: `You are a professional translator specialising in Indian languages (Hindi, Telugu, English). Your translations are natural, conversational, and culturally appropriate for the Indian context. Always preserve the tone and intent of the original. Return ONLY the translated text — no explanations, no quotes, no formatting.`,
+
+  /** One-sentence job match explanation blurbs shown in worker job cards */
+  MATCH_SUMMARY: `You are a job-matching assistant for HyperLocal. Write short, encouraging, localised match explanations for workers. Keep every response to one sentence, maximum 20 words. No markdown, no formal greetings — output only the match sentence.`,
+
+  /** AI skill gap analyser — identifies missing in-demand skills for a worker */
+  SKILL_GAP: `You are a career development advisor for HyperLocal, India's hyperlocal job platform. You help blue-collar workers identify skill gaps and growth opportunities based on real job market demand. Your advice is practical, encouraging, and culturally relevant to Indian workers. Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Personalised learning plan generator for skill-up journeys */
+  LEARNING_PLAN: `You are an AI career coach for HyperLocal, India's hyperlocal job platform. You create personalised, actionable learning plans for blue-collar and gig workers. Prioritise free resources: government skill portals (Skill India, NSDC, skill.gov.in), YouTube tutorials in Indian languages, NPTEL, and Khan Academy. For technical roles, also recommend Coursera and freeCodeCamp. Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Short, genuine job application message writer */
+  COVER_LETTER: `You are a professional application-message writer for HyperLocal, India's hyperlocal job platform. You write short (60–100 word), warm, and confident job application messages for blue-collar workers. Messages must sound genuine and highlight skills naturally — never use generic templates. Write directly in the language specified. Do not include subject lines, 'Dear Sir/Madam', or formal letter formatting.`,
+
+  /** Interview preparation coach tailored for Indian blue-collar/gig context */
+  INTERVIEW_PREP: `You are an interview coach for HyperLocal, India's hyperlocal job platform. You help blue-collar and gig workers prepare for job interviews. Your guidance is practical, encouraging, and tailored to the Indian blue-collar and gig economy. Many workers may be first-time interviewees — keep language empathetic and simple. Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Fair and objective candidate ranking assistant for employers */
+  CANDIDATE_RANKER: `You are an AI hiring assistant for HyperLocal, India's hyperlocal job platform. You help employers fairly and objectively rank job applicants by skill match, experience, and platform ratings. Rankings must be unbiased, transparent, and actionable. Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Indian hyperlocal job description writer */
+  JOB_DESCRIPTION: `You are an expert job-posting writer for HyperLocal, India's hyperlocal blue-collar and gig-work platform. Write compelling, clear, and honest job descriptions that attract the right candidates. Use simple language that blue-collar workers can understand. Include realistic pay ranges based on current Indian market rates (Entry: ₹200–400/hr, Intermediate: ₹400–700/hr, Expert: ₹700–1500/hr). Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Indian labour market salary estimator */
+  SALARY_ESTIMATOR: `You are an Indian labour market compensation analyst specialising in hyperlocal, gig, and blue-collar work. Provide fair, realistic salary estimates based on current Indian market rates for various job categories, experience levels, and locations. Use these benchmarks: Entry ₹200–400/hr, Intermediate ₹400–700/hr, Expert ₹700–1500/hr. For fixed-price jobs, scale by typical daily rate × duration. Respond only in the valid JSON format specified in each request. No markdown, no code fences.`,
+
+  /** Personalised dashboard insight generator for workers and employers */
+  DASHBOARD_INSIGHTS: `You are a career and business coach for HyperLocal, India's hyperlocal gig-work platform. Generate personalised, actionable insights for workers and employers based on activity statistics. Keep insights encouraging, specific, and relevant to Indian gig/blue-collar context. For workers: profile optimisation, skill improvement, earning tips. For employers: hiring efficiency, job description quality, response time. Respond only in the valid JSON array format specified in each request. No markdown, no code fences.`,
+
+  /** Resume parser with strict schema adherence */
+  RESUME_PARSER: `You are a resume parsing assistant for HyperLocal. Convert resume text into clean structured JSON exactly following the requested schema. Do not output markdown, code fences, or extra keys. For missing values, return empty arrays or empty strings exactly as requested.`,
+
+  /** Semantic reranker for recruiter resume search */
+  RAG_RERANKER: `You are a recruiter relevance ranking assistant for HyperLocal. Rank only the provided candidate summaries by relevance to the recruiter query using evidence from skills and experience. Return strict JSON only.`,
+
+  /** Query parser for recruiter natural-language search */
+  RAG_QUERY_PARSER: `You are a recruiter query parser for HyperLocal. Convert natural-language search into structured filters. Return strict JSON only with keys: keywords, skills, minExperience. Do not output markdown or extra text.`,
+
+  /** Default system instruction for generic API proxy calls */
+  API_PROXY_DEFAULT: `You are an AI assistant for HyperLocal, India's hyperlocal job platform. Follow user instructions safely and clearly. If a structured format is requested, output only that format with no markdown or extra explanation.`,
+
+  /** Real-time chat message translator */
+  CHAT_TRANSLATOR: `You are a real-time chat translator for HyperLocal, a job platform. Translate messages between English, Hindi, and Telugu. Translations must be natural, informal, and appropriate for casual chat between workers and employers. Return ONLY the translated message text — no explanations, no quotes, no formatting.`,
+} as const
+
 // ── Server-side caller: Groq → Ollama ────────────────────────────────────────
-async function _callModelServer(prompt: string, maxTokens: number): Promise<string> {
+async function _callModelServer(prompt: string, maxTokens: number, systemInstruction?: string): Promise<string> {
   if (_GROQ_KEY) {
     // ── Groq (Vercel / cloud) ────────────────────────────────────────────────
+    const messages: Array<{ role: string; content: string }> = []
+    if (systemInstruction) {
+      messages.push({ role: 'system', content: systemInstruction })
+    }
+    messages.push({ role: 'user', content: prompt })
+
     const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_GROQ_KEY}` },
       body: JSON.stringify({
         model: 'llama-3.1-8b-instant',
-        messages: [{ role: 'user', content: prompt }],
+        messages,
         temperature: 0.2,
         max_tokens: maxTokens,
       }),
@@ -76,6 +146,7 @@ async function _callModelServer(prompt: string, maxTokens: number): Promise<stri
     body: JSON.stringify({
       model: _OLLAMA_MDL,
       prompt,
+      system: systemInstruction ?? undefined,
       stream: false,
       options: { temperature: 0.2, num_predict: maxTokens },
     }),
@@ -86,11 +157,11 @@ async function _callModelServer(prompt: string, maxTokens: number): Promise<stri
 }
 
 // ── Client-side caller: proxied through Next.js API route ─────────────────────
-async function _callModelClient(prompt: string, maxTokens: number): Promise<string> {
+async function _callModelClient(prompt: string, maxTokens: number, systemInstruction?: string): Promise<string> {
   const res = await fetch('/api/ai/generate', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ prompt, maxTokens }),
+    body: JSON.stringify({ prompt, maxTokens, systemInstruction }),
   })
   if (!res.ok) {
     const e = await res.json().catch(() => ({}))
@@ -100,10 +171,11 @@ async function _callModelClient(prompt: string, maxTokens: number): Promise<stri
   return data.text ?? ''
 }
 
-async function _callModel(prompt: string, _tier: ModelTier, maxTokens = 512): Promise<string> {
+// ── Core model dispatcher ─────────────────────────────────────────────────────
+async function _callModel(prompt: string, _tier: ModelTier, maxTokens = 512, systemInstruction?: string): Promise<string> {
   return _isServer
-    ? _callModelServer(prompt, maxTokens)
-    : _callModelClient(prompt, maxTokens)
+    ? _callModelServer(prompt, maxTokens, systemInstruction)
+    : _callModelClient(prompt, maxTokens, systemInstruction)
 }
 
 /**
@@ -116,8 +188,9 @@ export async function generateWithGemini(
 ): Promise<string | null> {
   const tier = options.tier ?? 'lite'
   const maxTokens = options.maxTokens ?? 512
+  const systemInstruction = options.systemInstruction ?? SYSTEM_PROMPTS.BASE
   try {
-    const text = await _callModel(prompt, tier, maxTokens)
+    const text = await _callModel(prompt, tier, maxTokens, systemInstruction)
     return text?.trim() || null
   } catch {
     return null
@@ -182,12 +255,11 @@ export async function detectLanguage(text: string): Promise<SupportedLocale> {
   const cached = getCached(cacheKey)
   if (cached) return cached as SupportedLocale
 
-  const prompt = `Reply with ONLY one code: en, hi, or te
-en=English  hi=Hindi  te=Telugu
+  const prompt = `en=English  hi=Hindi  te=Telugu
 Text: "${text.trim().slice(0, 200)}"`
 
   try {
-    const result = (await _callModel(prompt, 'lite', 16)).trim().toLowerCase()
+    const result = (await _callModel(prompt, 'lite', 16, SYSTEM_PROMPTS.LANGUAGE_DETECT)).trim().toLowerCase()
     const detected: SupportedLocale = result.startsWith('hi') ? 'hi' : result.startsWith('te') ? 'te' : 'en'
     setCached(cacheKey, detected, TTL.TRANSLATION)
     return detected
@@ -217,12 +289,11 @@ export async function translateText(
   if (cached) return cached
 
   const langName = LANG_NAMES[targetLang]
-  const prompt = `Translate to ${langName}. Return ONLY the translated text, no explanations.
-If already in ${langName}, return unchanged.
+  const prompt = `Translate to ${langName}. If already in ${langName}, return unchanged.
 Text: ${text}`
 
   try {
-    const result = (await _callModel(prompt, 'lite', 512)).trim()
+    const result = (await _callModel(prompt, 'lite', 512, SYSTEM_PROMPTS.TRANSLATOR)).trim()
     const translated = result || text
     setCached(cacheKey, translated, TTL.TRANSLATION)
     return translated
@@ -274,14 +345,13 @@ export async function processUserInput(
   }
 
   const langName = LANG_NAMES[userLang]
-  const prompt = `You are an AI for HyperLocal, an Indian blue-collar job app.
-User message (possibly in ${langName}): "${trimmed}"
+  const prompt = `User message (possibly in ${langName}): "${trimmed}"
 
-Return ONLY a JSON object (no markdown):
-{"normalizedInput":"<English>","detectedLanguage":"<en|hi|te>","intent":"<search_job|apply_job|check_application|ask_question|greeting|other>","data":{"jobTitle":"","location":"","skills":"","salary":""},"response":"<reply IN ${langName}>"}`
+Return ONLY a JSON object (no markdown, no code fences):
+{"normalizedInput":"<English translation>","detectedLanguage":"<en|hi|te>","intent":"<search_job|apply_job|check_application|ask_question|greeting|other>","data":{"jobTitle":"","location":"","skills":"","salary":""},"response":"<conversational reply IN ${langName}>"}`
 
   try {
-    const raw = await _callModel(prompt, 'flash', 512)
+    const raw = await _callModel(prompt, 'flash', 512, SYSTEM_PROMPTS.USER_INPUT)
     const cleaned = raw.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
     const parsed = JSON.parse(cleaned) as ProcessedInput
     setCached(cacheKey, JSON.stringify(parsed), TTL.INTENT)
@@ -349,12 +419,11 @@ export async function generateJobMatchSummary(
   if (cached) return cached
 
   const langName = LANG_NAMES[userLang]
-  const prompt = `HyperLocal job app. Write ONE encouraging sentence (in ${langName}, max 20 words) for why this worker matches "${jobTitle}".
-Matched skills: ${matchedSkills.join(', ') || 'general background'}
-No markdown.`
+  const prompt = `Write ONE encouraging sentence (in ${langName}, max 20 words) explaining why this worker matches the "${jobTitle}" position.
+Matched skills: ${matchedSkills.join(', ') || 'general background'}`
 
   try {
-    const result = (await _callModel(prompt, 'lite', 64)).trim()
+    const result = (await _callModel(prompt, 'lite', 64, SYSTEM_PROMPTS.MATCH_SUMMARY)).trim()
     setCached(cacheKey, result, TTL.SUMMARY)
     return result
   } catch {
@@ -391,12 +460,10 @@ export async function analyzeSkillGap(
   }
 
   const langName = LANG_NAMES[userLang]
-  const prompt = `You are a career advisor for HyperLocal, a blue-collar/hyperlocal job platform in India.
-
-Worker's current skills: ${workerSkills.join(', ') || 'none listed'}
+  const prompt = `Worker's current skills: ${workerSkills.join(', ') || 'none listed'}
 Top in-demand skills from active job listings: ${demandedSkills.join(', ')}
 
-Analyze the gap. Respond in ${langName} with ONLY valid JSON (no markdown, no code fences):
+Analyse the skill gap. Respond in ${langName} with ONLY valid JSON:
 {
   "strongSkills": ["skills the worker already has that are in demand"],
   "gapSkills": ["top 5 in-demand skills the worker is missing"],
@@ -405,7 +472,7 @@ Analyze the gap. Respond in ${langName} with ONLY valid JSON (no markdown, no co
 }`
 
   try {
-    const raw = (await _callModel(prompt, 'flash', 512)).trim()
+    const raw = (await _callModel(prompt, 'flash', 512, SYSTEM_PROMPTS.SKILL_GAP)).trim()
     // Strip possible code fences
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result: SkillGapResult = JSON.parse(cleaned)
@@ -480,16 +547,14 @@ export async function generateLearningPlan(
     (s) => !workerSkills.map((w) => w.toLowerCase()).includes(s.toLowerCase())
   )
 
-  const prompt = `You are an AI career coach for HyperLocal, India's hyperlocal job platform.
-
-Job: "${jobTitle}"
+  const prompt = `Job: "${jobTitle}"
 Required skills: ${jobSkills.join(', ')}
 Worker's skills: ${workerSkills.join(', ') || 'none listed'}
 Worker's experience level: ${workerExperience || 'not specified'}
 Skills worker already has: ${matched.join(', ') || 'none'}
 Skills to learn: ${missing.join(', ') || 'none (fully qualified!)'}
 
-Generate a PERSONALIZED learning plan. Respond in ${langName} with ONLY valid JSON (no markdown, no code fences):
+Generate a PERSONALISED learning plan. Respond in ${langName} with ONLY valid JSON:
 {
   "resources": [
     {
@@ -524,7 +589,7 @@ Rules:
 - Focus more on MISSING skills`
 
   try {
-    const raw = (await _callModel(prompt, 'flash', 1024)).trim()
+    const raw = (await _callModel(prompt, 'flash', 1024, SYSTEM_PROMPTS.LEARNING_PLAN)).trim()
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result: AILearningPlan = JSON.parse(cleaned)
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -699,27 +764,24 @@ export async function generateCoverLetter(
     jobSkills.map((j) => j.toLowerCase()).includes(s.toLowerCase())
   )
 
-  const prompt = `You are writing a job application message for a worker on HyperLocal (India's hyperlocal job platform).
-
-Job: "${jobTitle}"
+  const prompt = `Job: "${jobTitle}"
 Job description: ${jobDescription.slice(0, 300)}
 Required skills: ${jobSkills.join(', ')}
-Worker name: ${workerName}
-Worker skills: ${workerSkills.join(', ') || 'general experience'}
+Applicant name: ${workerName}
+Applicant skills: ${workerSkills.join(', ') || 'general experience'}
 Matching skills: ${matched.join(', ') || 'general background'}
 Experience: ${workerExperience || 'not specified'}
 
-Write a SHORT, professional application message (${langName}, 60-100 words) that:
+Write a SHORT, professional application message in ${langName} (60-100 words) that:
 - Is warm and confident, not generic
-- Highlights specific matching skills
+- Highlights specific matching skills naturally
 - Shows enthusiasm for the role
 - Mentions availability and willingness to learn
 - Sounds natural, NOT like a template
-Do NOT include subject lines, "Dear Sir/Madam", or formal letter formatting.
-Just write the message text directly.`
+Output the message text only — no subject line, no salutation, no formatting.`
 
   try {
-    const result = (await _callModel(prompt, 'flash', 256)).trim()
+    const result = (await _callModel(prompt, 'flash', 256, SYSTEM_PROMPTS.COVER_LETTER)).trim()
     setCached(cacheKey, result, TTL.SUMMARY)
     return result
   } catch {
@@ -760,13 +822,11 @@ export async function generateInterviewPrep(
   }
 
   const langName = LANG_NAMES[userLang]
-  const prompt = `You are an AI interview coach for HyperLocal, India's hyperlocal job platform (primarily blue-collar and gig economy).
-
-Job: "${jobTitle}" (Category: ${jobCategory})
+  const prompt = `Job: "${jobTitle}" (Category: ${jobCategory})
 Required skills: ${jobSkills.join(', ')}
 Worker's skills: ${workerSkills.join(', ') || 'general'}
 
-Generate interview preparation material in ${langName}. Respond with ONLY valid JSON (no markdown):
+Generate interview preparation material in ${langName}. Respond with ONLY valid JSON:
 {
   "questions": [
     {
@@ -781,13 +841,13 @@ Generate interview preparation material in ${langName}. Respond with ONLY valid 
 }
 
 Rules:
-- Include 5 questions: 2 about skills, 1 about experience, 1 about availability, 1 behavioral
+- Include 5 questions: 2 about skills, 1 about experience, 1 about availability, 1 behavioural
 - Keep language simple and encouraging — many workers may be first-time interviewees
 - Tips should be practical for Indian blue-collar/gig context
 - Sample answers should sound natural, not robotic`
 
   try {
-    const raw = (await _callModel(prompt, 'flash', 768)).trim()
+    const raw = (await _callModel(prompt, 'flash', 768, SYSTEM_PROMPTS.INTERVIEW_PREP)).trim()
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result: InterviewPrepResult = JSON.parse(cleaned)
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -847,16 +907,14 @@ export async function rankCandidates(
     .map((c, i) => `${i + 1}. ${c.name} — Skills: ${c.skills.join(', ') || 'N/A'}, Experience: ${c.experience || 'N/A'}, Match: ${c.matchScore}%, Rating: ${c.rating}/5`)
     .join('\n')
 
-  const prompt = `You are an AI hiring assistant for HyperLocal, India's hyperlocal job platform.
-
-Job: "${jobTitle}"
+  const prompt = `Job: "${jobTitle}"
 Required skills: ${jobSkills.join(', ')}
 Description: ${jobDescription.slice(0, 200)}
 
 Candidates:
 ${candidateList}
 
-Rank ALL candidates from best to worst fit. Respond with ONLY valid JSON (no markdown):
+Rank ALL candidates from best to worst fit. Respond with ONLY valid JSON:
 {
   "rankings": [
     {
@@ -878,7 +936,7 @@ Rules:
 - Summary should be actionable`
 
   try {
-    const raw = (await _callModel(prompt, 'flash', 768)).trim()
+    const raw = (await _callModel(prompt, 'flash', 768, SYSTEM_PROMPTS.CANDIDATE_RANKER)).trim()
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result: CandidateRanking = JSON.parse(cleaned)
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -926,8 +984,7 @@ export async function generateJobDescription(
     try { return JSON.parse(cached) as GeneratedJobContent } catch { /* regenerate */ }
   }
 
-  const prompt = `You are an expert Indian job-posting writer for a hyperlocal blue-collar / gig-work platform.
-Generate a compelling, concise job post for:
+  const prompt = `Generate a compelling, concise job post for:
   Title: "${title}"
   Category: ${category}
   Location: ${location || 'Not specified'}
@@ -935,19 +992,17 @@ Generate a compelling, concise job post for:
   Experience: ${experienceLevel}
   Duration: ${duration || 'Not specified'}
 
-Return ONLY a valid JSON object (no markdown, no code fences):
+Return ONLY a valid JSON object:
 {
   "description": "A 3-5 sentence engaging description. Use simple language suitable for Indian blue-collar workers. Mention what the work involves.",
   "requirements": "Bullet-pointed specific requirements (separated by newlines). Include tools, timing, physical requirements if relevant.",
   "benefits": "Bullet-pointed benefits (separated by newlines). Include realistic perks like tea/lunch, travel allowance, bonus, flexible hours.",
   "suggestedSkills": ["skill1", "skill2", "skill3", "skill4", "skill5"],
   "suggestedPay": { "min": 300, "max": 500, "type": "hourly" }
-}
-
-Pay guideline: Entry ₹200-400/hr, Intermediate ₹400-700/hr, Expert ₹700-1500/hr for hourly. For fixed, scale by typical daily rate × duration. Use realistic Indian market rates.`
+}`
 
   try {
-    const raw = await _callModel(prompt, 'flash')
+    const raw = await _callModel(prompt, 'flash', 1024, SYSTEM_PROMPTS.JOB_DESCRIPTION)
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result = JSON.parse(cleaned) as GeneratedJobContent
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -994,14 +1049,14 @@ export async function estimateSalary(
     try { return JSON.parse(cached) as SalaryEstimate } catch { /* regenerate */ }
   }
 
-  const prompt = `You are an Indian labour market salary analyst. Estimate fair compensation for:
+  const prompt = `Estimate fair compensation for:
   Job: "${title}"
   Category: ${category}
   Location: ${location || 'Urban India'}
   Experience Level: ${experienceLevel}
   Required Skills: ${skills.join(', ') || 'General'}
 
-Return ONLY a valid JSON object (no markdown, no code fences):
+Return ONLY a valid JSON object:
 {
   "minPay": <number in INR>,
   "maxPay": <number in INR>,
@@ -1010,12 +1065,10 @@ Return ONLY a valid JSON object (no markdown, no code fences):
   "confidence": "low" | "medium" | "high",
   "reasoning": "1-2 sentence explanation of the estimate based on Indian market rates",
   "marketTrend": "rising" | "stable" | "declining"
-}
-
-Use realistic Indian hyperlocal/gig-work rates. Entry: ₹200-400/hr, Intermediate: ₹400-700/hr, Expert: ₹700-1500/hr. For technical roles, rates can be higher.`
+}`
 
   try {
-    const raw = await _callModel(prompt, 'lite')
+    const raw = await _callModel(prompt, 'lite', 256, SYSTEM_PROMPTS.SALARY_ESTIMATOR)
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result = JSON.parse(cleaned) as SalaryEstimate
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -1051,12 +1104,11 @@ export async function translateChatMessage(
   const cached = getCached(cacheKey)
   if (cached) return cached
 
-  const prompt = `Translate the following message to ${langNames[targetLang]}. Keep it natural, informal, and suitable for chat between a worker and employer. If it's already in ${langNames[targetLang]}, return as-is. Return ONLY the translated text, no quotes or explanation.
-
+  const prompt = `Translate to ${langNames[targetLang]}. If already in ${langNames[targetLang]}, return as-is.
 Message: "${message}"`
 
   try {
-    const result = await _callModel(prompt, 'lite')
+    const result = await _callModel(prompt, 'lite', 512, SYSTEM_PROMPTS.CHAT_TRANSLATOR)
     const cleaned = result.replace(/^["']|["']$/g, '').trim()
     setCached(cacheKey, cleaned, TTL.TRANSLATION)
     return cleaned
@@ -1095,12 +1147,11 @@ export async function generateDashboardInsights(
     try { return JSON.parse(cached) as DashboardInsight[] } catch { /* regenerate */ }
   }
 
-  const prompt = `You are a career/business coach for an Indian hyperlocal gig-work platform.
-Generate 3-4 personalized, actionable dashboard insights for a ${role}.
+  const prompt = `Generate 3-4 personalised, actionable dashboard insights for a ${role}.
 
 Stats: ${JSON.stringify(stats)}
 
-Return ONLY a valid JSON array (no markdown, no code fences):
+Return ONLY a valid JSON array:
 [
   {
     "title": "Short catchy title (3-5 words)",
@@ -1111,13 +1162,13 @@ Return ONLY a valid JSON array (no markdown, no code fences):
 ]
 
 Rules:
-- For workers: focus on profile optimization, skill improvement, earning tips, job match advice
+- For workers: focus on profile optimisation, skill improvement, earning tips, job match advice
 - For employers: focus on hiring efficiency, better job descriptions, candidate management
 - Be culturally relevant to India
 - At least 1 should be an achievement/positive reinforcement if stats are decent`
 
   try {
-    const raw = await _callModel(prompt, 'lite')
+    const raw = await _callModel(prompt, 'lite', 512, SYSTEM_PROMPTS.DASHBOARD_INSIGHTS)
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result = JSON.parse(cleaned) as DashboardInsight[]
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
@@ -1138,3 +1189,4 @@ Rules:
     return result
   }
 }
+

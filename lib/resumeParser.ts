@@ -11,12 +11,12 @@
  */
 
 import type { ResumeData } from './types'
-import { generateWithGemini } from './gemini'
+import { generateWithGemini, SYSTEM_PROMPTS } from './gemini'
 
 // ── AI integration (uses shared Ollama / Groq layer from gemini.ts) ──────────
 
-async function callGemini(prompt: string, maxTokens = 3000): Promise<string> {
-  const result = await generateWithGemini(prompt, { tier: 'flash', maxTokens })
+async function callGemini(prompt: string, maxTokens = 3000, systemInstruction?: string): Promise<string> {
+  const result = await generateWithGemini(prompt, { tier: 'flash', maxTokens, systemInstruction })
   if (!result) throw new Error('AI model returned empty response')
   return result
 }
@@ -101,6 +101,47 @@ function extractPDFTextFromRaw(raw: string): string {
   }
 
   return parts.join(' ').replace(/\s+/g, ' ').trim()
+}
+
+function normalizeResumeData(parsed: ResumeData): ResumeData {
+  return {
+    summary: parsed.summary || undefined,
+    skills: Array.isArray(parsed.skills) ? parsed.skills.filter(Boolean) : [],
+    experience: Array.isArray(parsed.experience)
+      ? parsed.experience.map((e) => ({
+          title: e.title || '',
+          company: e.company || '',
+          duration: e.duration || '',
+          description: e.description || '',
+        }))
+      : [],
+    education: Array.isArray(parsed.education)
+      ? parsed.education.map((e) => ({
+          degree: e.degree || '',
+          institution: e.institution || '',
+          year: e.year,
+        }))
+      : [],
+    projects: Array.isArray(parsed.projects)
+      ? parsed.projects.map((p) => ({
+          name: p.name || '',
+          description: p.description || '',
+          technologies: Array.isArray(p.technologies) ? p.technologies : [],
+        }))
+      : [],
+    certifications: Array.isArray(parsed.certifications) ? parsed.certifications : undefined,
+  }
+}
+
+function parseResumeJson(raw: string): ResumeData {
+  const cleaned = raw
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/```$/i, '')
+    .trim()
+
+  const parsed = JSON.parse(cleaned) as ResumeData
+  return normalizeResumeData(parsed)
 }
 
 async function extractTextFromPDF(file: File): Promise<string> {
@@ -264,28 +305,43 @@ export async function parseResume(resumeText: string): Promise<ParsedResume> {
   const textForGemini = clean.slice(0, 5000)
 
   try {
-    const raw = await callGemini(buildResumePrompt(textForGemini), 3000)
+    const raw = await callGemini(buildResumePrompt(textForGemini), 3000, SYSTEM_PROMPTS.RESUME_PARSER)
     if (!raw || raw.length < 20) throw new Error('Empty Gemini response')
 
-    const jsonStr = raw
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/```\s*$/i, '')
-      .trim()
+    let p: Record<string, unknown>
+    try {
+      const jsonStr = raw
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim()
+      p = JSON.parse(jsonStr)
+    } catch {
+      // Retry once if JSON parsing fails
+      const retryPrompt = `Your previous output was not valid JSON for the required schema.
+Return ONLY valid JSON for the same resume extraction request.
+Do not include markdown or code fences.
+Previous output:\n${raw.slice(0, 4000)}`
+      const repaired = await callGemini(retryPrompt, 3000, SYSTEM_PROMPTS.RESUME_PARSER)
+      const cleanedRetry = repaired
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim()
+      p = JSON.parse(cleanedRetry)
+    }
 
-    const p = JSON.parse(jsonStr)
-
-    const techSkills: string[] = Array.isArray(p.skills?.technical) ? p.skills.technical.filter(Boolean) : []
-    const softSkills: string[] = Array.isArray(p.skills?.soft) ? p.skills.soft.filter(Boolean) : []
-    const domainSkills: string[] = Array.isArray(p.skills?.domain) ? p.skills.domain.filter(Boolean) : []
-    const toolSkills: string[] = Array.isArray(p.skills?.tools) ? p.skills.tools.filter(Boolean) : []
-    const projectTech = (p.projects ?? []).flatMap((pr: { technologies?: string[] }) => pr.technologies ?? [])
+    const techSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).technical) ? ((p.skills as Record<string, unknown>).technical as string[]).filter(Boolean) : []
+    const softSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).soft) ? ((p.skills as Record<string, unknown>).soft as string[]).filter(Boolean) : []
+    const domainSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).domain) ? ((p.skills as Record<string, unknown>).domain as string[]).filter(Boolean) : []
+    const toolSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).tools) ? ((p.skills as Record<string, unknown>).tools as string[]).filter(Boolean) : []
+    const projectTech = ((p.projects as Array<{ technologies?: string[] }>) ?? []).flatMap((pr) => pr.technologies ?? [])
     const allSkills = [...new Set([...techSkills, ...softSkills, ...domainSkills, ...toolSkills, ...projectTech])].filter(Boolean)
 
     const result: ParsedResume = {
-      name: p.name || undefined,
-      summary: p.summary || undefined,
-      contact: p.contact || undefined,
+      name: (p.name as string) || undefined,
+      summary: (p.summary as string) || undefined,
+      contact: (p.contact as ParsedResume['contact']) || undefined,
       skills: allSkills,
       categorizedSkills: {
         technical: techSkills,
@@ -294,7 +350,7 @@ export async function parseResume(resumeText: string): Promise<ParsedResume> {
         tools: toolSkills,
       },
       experience: Array.isArray(p.experience)
-        ? p.experience.map((e: Record<string, string>) => ({
+        ? (p.experience as Record<string, string>[]).map((e) => ({
             title: e.title || '',
             company: e.company || '',
             duration: e.duration || '',
@@ -302,21 +358,21 @@ export async function parseResume(resumeText: string): Promise<ParsedResume> {
           }))
         : [],
       education: Array.isArray(p.education)
-        ? p.education.map((e: Record<string, string>) => ({
+        ? (p.education as Record<string, string>[]).map((e) => ({
             degree: e.degree || '',
             institution: e.institution || '',
             year: e.year,
           }))
         : [],
       projects: Array.isArray(p.projects)
-        ? p.projects.map((pr: Record<string, unknown>) => ({
+        ? (p.projects as Record<string, unknown>[]).map((pr) => ({
             name: (pr.name as string) || '',
             description: (pr.description as string) || '',
-            technologies: Array.isArray(pr.technologies) ? pr.technologies : [],
+            technologies: Array.isArray(pr.technologies) ? (pr.technologies as string[]) : [],
           }))
         : [],
-      certifications: Array.isArray(p.certifications) ? p.certifications.filter(Boolean) : undefined,
-      languages: Array.isArray(p.languages) ? p.languages.filter(Boolean) : undefined,
+      certifications: Array.isArray(p.certifications) ? (p.certifications as string[]).filter(Boolean) : undefined,
+      languages: Array.isArray(p.languages) ? (p.languages as string[]).filter(Boolean) : undefined,
     }
 
     _parseCache.set(cacheKey, result)
