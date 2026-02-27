@@ -5,7 +5,7 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
-import { User, Briefcase, Loader2, Phone, ShieldCheck, Lock, Building2, Store } from 'lucide-react';
+import { User, Briefcase, Loader2, Phone, ShieldCheck, Lock, Building2, Store, CreditCard, CheckCircle2, XCircle, AlertTriangle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { sendOTP, verifyOTP, registerUser, setUserPassword } from '@/lib/auth';
 import { useToast } from '@/hooks/use-toast';
@@ -35,6 +35,18 @@ function SignupPageContent() {
   const [otpSent, setOtpSent] = useState(false);
   const [generatedOtp, setGeneratedOtp] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+
+  // PAN KYC state
+  const [panNumber, setPanNumber] = useState('');
+  const [panVerified, setPanVerified] = useState(false);
+  const [panVerifying, setPanVerifying] = useState(false);
+  const [panResult, setPanResult] = useState<{
+    verified: boolean;
+    panName?: string;
+    nameMatch?: boolean;
+    similarity?: number;
+    message?: string;
+  } | null>(null);
 
   useEffect(() => {
     const roleParam = searchParams.get('role');
@@ -116,6 +128,71 @@ function SignupPageContent() {
     }
   };
 
+  // ── PAN KYC Verification ──────────────────────────────────────────────
+  const handleVerifyPAN = async () => {
+    const pan = panNumber.toUpperCase().trim();
+    if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(pan)) {
+      toast({
+        title: 'Invalid PAN',
+        description: 'Enter a valid 10-character PAN (e.g. ABCDE1234F)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!formData.fullName || formData.fullName.length < 3) {
+      toast({
+        title: 'Enter Name First',
+        description: 'Please enter your full name before verifying PAN',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setPanVerifying(true);
+    setPanResult(null);
+    try {
+      const res = await fetch('/api/kyc/verify-pan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pan, fullName: formData.fullName }),
+      });
+      const data = await res.json();
+      setPanResult(data);
+
+      if (data.verified && data.nameMatch) {
+        setPanVerified(true);
+        toast({
+          title: 'PAN Verified ✓',
+          description: `Identity confirmed: ${data.panName}`,
+        });
+      } else if (data.verified && !data.nameMatch) {
+        setPanVerified(false);
+        toast({
+          title: 'Name Mismatch',
+          description: data.message || 'The name you entered does not match the PAN card.',
+          variant: 'destructive',
+        });
+      } else {
+        setPanVerified(false);
+        toast({
+          title: 'PAN Verification Failed',
+          description: data.message || 'Could not verify PAN. Please check and try again.',
+          variant: 'destructive',
+        });
+      }
+    } catch (err) {
+      setPanVerified(false);
+      toast({
+        title: 'Error',
+        description: 'PAN verification service unavailable. Try again later.',
+        variant: 'destructive',
+      });
+    } finally {
+      setPanVerifying(false);
+    }
+  };
+
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -133,6 +210,15 @@ function SignupPageContent() {
       toast({
         title: 'Invalid Name',
         description: 'Please enter your full name (minimum 3 characters)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!panVerified) {
+      toast({
+        title: 'PAN Verification Required',
+        description: 'Please verify your PAN card to complete registration',
         variant: 'destructive',
       });
       return;
@@ -177,6 +263,13 @@ function SignupPageContent() {
       });
 
       if (result.success && result.user) {
+        // Attach PAN KYC data to user
+        result.user.panNumber = panNumber.toUpperCase().trim();
+        result.user.panVerified = true;
+        result.user.panName = panResult?.panName ?? formData.fullName;
+        result.user.panVerifiedAt = new Date().toISOString();
+        result.user.isVerified = true;
+
         // Store password for mock auth
         setUserPassword(formData.phoneNumber, formData.password);
 
@@ -448,6 +541,104 @@ function SignupPageContent() {
                       </div>
                     </>
                   )}
+
+                  {/* ── PAN Card KYC Verification ── */}
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
+                      <CreditCard className="h-3.5 w-3.5" />
+                      PAN Card Verification (KYC)
+                    </div>
+
+                    <div className={`group relative border-b pb-3 ${
+                      panVerified ? 'border-emerald-300 dark:border-emerald-700' : 'border-gray-200 dark:border-slate-700'
+                    }`}>
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
+                        <CreditCard className={`h-5 w-5 transition-colors ${
+                          panVerified ? 'text-emerald-500' : 'text-gray-400 group-focus-within:text-emerald-500'
+                        }`} />
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <input
+                          id="panNumber"
+                          type="text"
+                          placeholder="PAN Number (e.g. ABCDE1234F)"
+                          value={panNumber}
+                          onChange={(e) => {
+                            const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
+                            setPanNumber(v);
+                            if (panVerified) { setPanVerified(false); setPanResult(null); }
+                          }}
+                          disabled={panVerified}
+                          maxLength={10}
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                        />
+                        {panVerified && (
+                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mr-1" />
+                        )}
+                      </div>
+                    </div>
+
+                    {!panVerified && (
+                      <button
+                        type="button"
+                        onClick={handleVerifyPAN}
+                        disabled={panVerifying || panNumber.length !== 10 || !formData.fullName}
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100/70 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                      >
+                        {panVerifying ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Verifying PAN...
+                          </>
+                        ) : (
+                          <>
+                            <ShieldCheck className="h-4 w-4" />
+                            Verify PAN Card
+                          </>
+                        )}
+                      </button>
+                    )}
+
+                    {/* PAN result feedback */}
+                    {panResult && (
+                      <div className={`rounded-xl border p-3 text-sm ${
+                        panResult.verified && panResult.nameMatch
+                          ? 'border-emerald-200 bg-emerald-50/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                          : panResult.verified && !panResult.nameMatch
+                            ? 'border-amber-200 bg-amber-50/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                            : 'border-red-200 bg-red-50/80 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                      }`}>
+                        <div className="flex items-start gap-2">
+                          {panResult.verified && panResult.nameMatch ? (
+                            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-emerald-600" />
+                          ) : panResult.verified && !panResult.nameMatch ? (
+                            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                          ) : (
+                            <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />
+                          )}
+                          <div>
+                            <p className="font-medium">{panResult.message}</p>
+                            {panResult.panName && (
+                              <p className="text-xs mt-1 opacity-80">
+                                PAN registered to: <strong>{panResult.panName}</strong>
+                                {panResult.similarity !== undefined && ` (${panResult.similarity}% match)`}
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
+                    {panVerified && (
+                      <button
+                        type="button"
+                        onClick={() => { setPanVerified(false); setPanResult(null); setPanNumber(''); }}
+                        className="text-xs text-gray-500 hover:text-emerald-500 transition-colors dark:text-slate-400"
+                      >
+                        Change PAN Number
+                      </button>
+                    )}
+                  </div>
 
                   <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">

@@ -512,7 +512,7 @@ Generate a PERSONALIZED learning plan. Respond in ${langName} with ONLY valid JS
 
 Rules:
 - Include 2-3 resources per skill (mix of YouTube, free courses, practice sites)
-- For blue-collar skills, prefer: YouTube tutorials in Hindi, government skill portals (skill.gov.in), NSDC courses
+- For blue-collar skills, prefer: YouTube tutorials in Hindi, government skill portals (https://www.skillindiadigital.gov.in/courses?keyword=<skill>), NSDC courses
 - For technical skills: Coursera, freeCodeCamp, Khan Academy, NPTEL
 - URLs must be real, well-known platforms (YouTube search URLs are acceptable: https://www.youtube.com/results?search_query=...)
 - readinessScore: 0-100 based on how ready the worker is
@@ -542,12 +542,12 @@ Rules:
             description: `Search for ${skill} tutorials in your language`,
           },
           {
-            title: `${skill} courses on Skill India`,
-            url: 'https://www.skillindiadigital.gov.in/courses',
+            title: `${skill} courses on Skill India Digital`,
+            url: `https://www.skillindiadigital.gov.in/courses?keyword=${encodeURIComponent(skill)}`,
             type: 'course' as const,
             free: true,
-            platform: 'Skill India',
-            description: 'Free government-certified courses',
+            platform: 'Skill India Digital',
+            description: `Free government-certified ${skill} courses`,
           },
         ],
         estimatedTime: '1-2 weeks',
@@ -580,6 +580,97 @@ Rules:
     }
     setCached(cacheKey, JSON.stringify(fallback), TTL.SUMMARY)
     return fallback
+  }
+}
+
+// ── AI Skill Assessment Generator ────────────────────────────────────────────
+// Generates a quiz (MCQ) for a given skill. Each call produces UNIQUE questions
+// because we inject a random seed into the prompt — no caching.
+
+export interface AssessmentQuestion {
+  question: string
+  options: string[]         // exactly 4
+  correctIndex: number      // 0-3
+  explanation: string       // shown after answering
+}
+
+export interface SkillAssessment {
+  skill: string
+  difficulty: 'beginner' | 'intermediate' | 'advanced'
+  questions: AssessmentQuestion[]
+  passingScore: number      // e.g. 3 out of 5
+}
+
+export async function generateSkillAssessment(
+  skill: string,
+  difficulty: 'beginner' | 'intermediate' | 'advanced' = 'beginner',
+  userLang: SupportedLocale = 'en',
+  questionCount = 5,
+): Promise<SkillAssessment> {
+  const langName = LANG_NAMES[userLang]
+  // Random seed ensures unique questions on every call
+  const seed = Math.random().toString(36).slice(2, 10)
+
+  const prompt = `You are a skill assessment specialist for HyperLocal, India's hyperlocal job platform.
+
+Generate a ${difficulty}-level quiz to assess someone's "${skill}" knowledge.
+Random seed (use this to vary questions): ${seed}
+
+Respond in ${langName} with ONLY valid JSON (no markdown, no code fences):
+{
+  "questions": [
+    {
+      "question": "question text",
+      "options": ["option A", "option B", "option C", "option D"],
+      "correctIndex": 0,
+      "explanation": "brief explanation why this answer is correct"
+    }
+  ]
+}
+
+Rules:
+- Generate exactly ${questionCount} multiple choice questions
+- Each question has exactly 4 options
+- correctIndex is 0-based (0=first option, 3=last option)
+- Questions should be PRACTICAL and relevant to real-world ${skill} work
+- For blue-collar / trade skills: focus on safety, best practices, tools, techniques
+- For technical skills: focus on concepts, problem-solving, real-world scenarios
+- Mix easy and hard questions within the difficulty level
+- Make wrong options plausible (not obviously wrong)
+- Explanations should teach — be helpful, not just "this is correct"
+- VARY the position of correct answers across questions (don't always put correct at index 0)`
+
+  const passingScore = Math.ceil(questionCount * 0.6)  // 60% to pass
+
+  try {
+    const raw = (await _callModel(prompt, 'flash', 1024)).trim()
+    const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
+    const parsed = JSON.parse(cleaned) as { questions: AssessmentQuestion[] }
+
+    // Validate structure
+    const questions = (parsed.questions ?? []).slice(0, questionCount).map((q) => ({
+      question: q.question ?? '',
+      options: Array.isArray(q.options) ? q.options.slice(0, 4) : ['A', 'B', 'C', 'D'],
+      correctIndex: typeof q.correctIndex === 'number' ? Math.min(Math.max(q.correctIndex, 0), 3) : 0,
+      explanation: q.explanation ?? '',
+    }))
+
+    return { skill, difficulty, questions, passingScore }
+  } catch {
+    // Deterministic fallback
+    const fallbackQuestions: AssessmentQuestion[] = Array.from({ length: questionCount }, (_, i) => ({
+      question: `${skill} Assessment Question ${i + 1}: What is the most important safety practice when performing ${skill} tasks?`,
+      options: [
+        'Always wear appropriate PPE (Personal Protective Equipment)',
+        'Work as fast as possible to finish quickly',
+        'Skip the preparation steps to save time',
+        'Use any available tool regardless of its condition',
+      ],
+      correctIndex: 0,
+      explanation: `Safety is always the top priority in ${skill}. Wearing proper PPE protects you from workplace hazards.`,
+    }))
+
+    return { skill, difficulty, questions: fallbackQuestions, passingScore }
   }
 }
 

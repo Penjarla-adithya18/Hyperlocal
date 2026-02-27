@@ -41,6 +41,14 @@ export interface User {
   gstinVerified?: boolean;
   /** Business details fetched from ClearTax */
   gstinDetails?: GSTINDetails;
+  /** PAN card number used for KYC verification */
+  panNumber?: string;
+  /** Whether PAN has been verified via Sandbox API */
+  panVerified?: boolean;
+  /** Name as registered on the PAN card */
+  panName?: string;
+  /** PAN verification timestamp */
+  panVerifiedAt?: string;
 }
 
 /** GSTIN verification details from ClearTax API */

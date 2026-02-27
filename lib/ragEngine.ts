@@ -13,6 +13,8 @@
  *  - Gemini re-ranks only the top-K candidates (hybrid approach)
  */
 
+import { generateWithGemini } from './gemini'
+
 import type { ResumeData } from './types'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -214,38 +216,10 @@ class RAGStore {
 
 export const ragStore = new RAGStore()
 
-// ── Gemini-powered semantic re-ranking ─────────────────────────────────────
-
-const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
-  .split(',')
-  .map((k) => k.trim())
-  .filter(Boolean)
-
-let _keyIdx = 0
+// ── AI-powered semantic re-ranking (uses shared Ollama / Groq layer) ────────
 
 async function callGeminiForRAG(prompt: string): Promise<string> {
-  if (GEMINI_KEYS.length === 0) return ''
-  const key = GEMINI_KEYS[_keyIdx % GEMINI_KEYS.length]
-  _keyIdx++
-
-  try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: 512 },
-        }),
-      }
-    )
-    if (!res.ok) return ''
-    const data = await res.json()
-    return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-  } catch {
-    return ''
-  }
+  return (await generateWithGemini(prompt, { tier: 'lite', maxTokens: 512 })) ?? ''
 }
 
 /**
@@ -263,8 +237,8 @@ export async function ragSearch(query: RAGQuery): Promise<RAGSearchResult[]> {
 
   if (candidates.length === 0) return []
 
-  // If few candidates or no Gemini keys, return as-is
-  if (candidates.length <= 3 || GEMINI_KEYS.length === 0) {
+  // If few candidates, skip AI re-ranking
+  if (candidates.length <= 3) {
     return candidates.slice(0, limit)
   }
 
@@ -323,10 +297,7 @@ Rules:
  * Extracts skills, experience requirements, and keywords from a free-text query.
  */
 export async function parseRAGQuery(naturalQuery: string): Promise<RAGQuery> {
-  if (GEMINI_KEYS.length === 0) {
-    // No API key — basic keyword extraction
-    return { text: naturalQuery, limit: 10 }
-  }
+  // AI query parsing — if it fails, fall back to basic keyword search below
 
   const prompt = `Parse this recruiter search query into structured filters.
 Query: "${naturalQuery}"
