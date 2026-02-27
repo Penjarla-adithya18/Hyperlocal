@@ -36,6 +36,8 @@ function SignupPageContent() {
 
   const [otpSent, setOtpSent] = useState(false);
   const [agreeToTerms, setAgreeToTerms] = useState(false);
+  // Whether user chose phone or email for step 1 identity verification
+  const [signupMethod, setSignupMethod] = useState<'phone' | 'email'>('phone');
 
   // PAN KYC state
   const [panNumber, setPanNumber] = useState('');
@@ -178,6 +180,10 @@ function SignupPageContent() {
       if (result.success) {
         setEmailOtpVerified(true);
         toast({ title: 'Email Verified ✓', description: 'Your email address has been verified.' });
+        // If this is the step-1 email signup path, advance to step 2
+        if (signupMethod === 'email' && step === 1) {
+          setStep(2);
+        }
       } else {
         toast({ title: 'Verification Failed', description: result.message, variant: 'destructive' });
       }
@@ -284,6 +290,7 @@ function SignupPageContent() {
       return;
     }
 
+
     if (formData.password.length < 8) {
       toast({
         title: 'Weak Password',
@@ -376,6 +383,18 @@ function SignupPageContent() {
       return;
     }
 
+    // Email-signup path: phone number is required (no OTP — can verify from profile later)
+    if (signupMethod === 'email') {
+      if (!formData.phoneNumber || formData.phoneNumber.length !== 10) {
+        toast({
+          title: 'Phone Number Required',
+          description: 'Please enter your 10-digit mobile number to continue',
+          variant: 'destructive',
+        });
+        return;
+      }
+    }
+
     if (role === 'employer' && !formData.businessName) {
       toast({
         title: 'Business Name Required',
@@ -451,7 +470,7 @@ function SignupPageContent() {
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
                     : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
                 }`}>
-                  Step 1: Verify phone
+                  Step 1: Verify identity
                 </span>
                 <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
                   step === 2
@@ -498,110 +517,176 @@ function SignupPageContent() {
             </div>
 
             {step === 1 ? (
-              <div className="space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
+              <div className="space-y-5 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
                 <p className="text-sm text-gray-500 dark:text-slate-400">
-                  {role === 'worker'
-                    ? 'Verify your phone number to continue as a worker.'
-                    : 'Verify your phone number to continue as an employer.'}
+                  Sign up using your phone number or email address.
                 </p>
 
-                <div className="space-y-4">
-                  <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
-                    <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
-                    </div>
-                    <input
-                      id="phoneNumber"
-                      type="tel"
-                      placeholder="Phone Number"
-                      value={formData.phoneNumber}
-                      onChange={(e) =>
-                        setFormData({ ...formData, phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10) })
-                      }
-                      disabled={otpSent}
-                      maxLength={10}
-                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
-                    />
+                {/* Method toggle */}
+                {!otpSent && !emailOtpSent && (
+                  <div className="grid grid-cols-2 gap-1.5 rounded-xl bg-slate-200/60 p-1 dark:bg-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => { setSignupMethod('phone'); setFormData({ ...formData, email: '', otp: '' }); setEmailOtpSent(false); setEmailOtpVerified(false); setEmailOtpInput(''); }}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-all ${
+                        signupMethod === 'phone'
+                          ? 'bg-white shadow text-emerald-600 dark:bg-slate-900 dark:text-emerald-400'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                      }`}
+                    >
+                      <Phone className="h-4 w-4" /> Phone
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => { setSignupMethod('email'); setFormData({ ...formData, phoneNumber: '', otp: '' }); setOtpSent(false); }}
+                      className={`flex items-center justify-center gap-2 rounded-lg py-2 text-sm font-semibold transition-all ${
+                        signupMethod === 'email'
+                          ? 'bg-white shadow text-blue-600 dark:bg-slate-900 dark:text-blue-400'
+                          : 'text-slate-500 hover:text-slate-700 dark:text-slate-400'
+                      }`}
+                    >
+                      <Mail className="h-4 w-4" /> Email
+                    </button>
                   </div>
+                )}
 
-                  {!otpSent ? (
-                    <>
-                      <button
-                        onClick={handleSendOTP}
-                        disabled={loading}
-                        className="group relative flex w-full transform justify-center rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-4 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:from-emerald-600 hover:to-blue-600 hover:shadow-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin text-emerald-100" />
-                            Sending OTP...
-                          </>
-                        ) : (
-                          <>
-                            <ShieldCheck className="mr-2 h-5 w-5 text-emerald-100" />
-                            SEND OTP
-                          </>
-                        )}
-                      </button>
-
-                      <p className="text-center text-sm text-gray-500 dark:text-slate-400">
-                        Already have an account?{' '}
-                        <Link className="font-medium text-emerald-500 transition-colors hover:text-blue-500" href="/login">
-                          Log in
-                        </Link>
-                      </p>
-                    </>
-                  ) : (
-                    <>
-                      <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
-                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                          <ShieldCheck className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
-                        </div>
-                        <input
-                          id="otp"
-                          type="text"
-                          placeholder="Enter 6-digit OTP"
-                          value={formData.otp}
-                          onChange={(e) =>
-                            setFormData({ ...formData, otp: e.target.value.replace(/\D/g, '').slice(0, 6) })
-                          }
-                          maxLength={6}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
-                        />
+                {/* ── Phone path ── */}
+                {signupMethod === 'phone' && (
+                  <div className="space-y-4">
+                    <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                       </div>
+                      <input
+                        id="phoneNumber"
+                        type="tel"
+                        placeholder="10-digit phone number"
+                        value={formData.phoneNumber}
+                        onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                        disabled={otpSent}
+                        maxLength={10}
+                        className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                      />
+                    </div>
 
-                      <button
-                        onClick={handleVerifyOTP}
-                        disabled={loading}
-                        className="group relative flex w-full transform justify-center rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-4 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:from-emerald-600 hover:to-blue-600 hover:shadow-emerald-500/30 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-70"
-                      >
-                        {loading ? (
-                          <>
-                            <Loader2 className="mr-2 h-5 w-5 animate-spin text-emerald-100" />
-                            Verifying...
-                          </>
-                        ) : (
-                          'VERIFY OTP'
-                        )}
-                      </button>
+                    {!otpSent ? (
+                      <>
+                        <button onClick={handleSendOTP} disabled={loading} className="group relative flex w-full justify-center rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-3.5 text-sm font-bold text-white shadow-lg transition-all hover:-translate-y-0.5 hover:from-emerald-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-70">
+                          {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Sending...</> : <><ShieldCheck className="mr-2 h-5 w-5" />Send OTP</>}
+                        </button>
+                        <p className="text-center text-sm text-gray-500 dark:text-slate-400">
+                          Already have an account?{' '}
+                          <Link className="font-medium text-emerald-500 hover:text-blue-500" href="/login">Log in</Link>
+                        </p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">Code sent to <strong>+91 {formData.phoneNumber}</strong></p>
+                        <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                            <ShieldCheck className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500" />
+                          </div>
+                          <input
+                            id="otp" type="text" inputMode="numeric" placeholder="6-digit OTP"
+                            value={formData.otp}
+                            onChange={(e) => setFormData({ ...formData, otp: e.target.value.replace(/\D/g, '').slice(0, 6) })}
+                            maxLength={6}
+                            className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base tracking-widest text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                          />
+                        </div>
+                        <button onClick={handleVerifyOTP} disabled={loading} className="flex w-full justify-center rounded-xl bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-3.5 text-sm font-bold text-white shadow transition-all hover:-translate-y-0.5 hover:from-emerald-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-70">
+                          {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Verifying...</> : 'Verify OTP'}
+                        </button>
+                        <button type="button" onClick={() => { setOtpSent(false); setFormData({ ...formData, otp: '' }); }} className="w-full text-center text-sm text-gray-400 hover:text-emerald-500 transition-colors py-1">
+                          ← Change phone number
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
 
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setOtpSent(false);
-                          setFormData({ ...formData, otp: '' });
-                        }}
-                        className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
-                      >
-                        Change Phone Number
-                      </button>
-                    </>
-                  )}
-                </div>
+                {/* ── Email path ── */}
+                {signupMethod === 'email' && (
+                  <div className="space-y-4">
+                    <div className={`group relative rounded-xl border bg-white px-3 py-2 dark:bg-slate-950 ${
+                      emailOtpVerified ? 'border-emerald-300 dark:border-emerald-700' : formData.email ? 'border-blue-300 dark:border-blue-700' : 'border-slate-200 dark:border-slate-700'
+                    }`}>
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <Mail className={`h-5 w-5 transition-colors ${
+                          emailOtpVerified ? 'text-emerald-500' : formData.email ? 'text-blue-400' : 'text-gray-400 group-focus-within:text-blue-400'
+                        }`} />
+                      </div>
+                      <input
+                        id="email" type="email" placeholder="your@email.com"
+                        value={formData.email}
+                        onChange={(e) => { setFormData({ ...formData, email: e.target.value }); if (emailOtpSent) { setEmailOtpSent(false); setEmailOtpInput(''); setEmailOtpVerified(false); } }}
+                        disabled={emailOtpSent}
+                        className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                      />
+                    </div>
+
+                    {!emailOtpSent && (
+                      <>
+                        <button
+                          type="button" onClick={handleSendEmailOtp}
+                          disabled={loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)}
+                          className="flex w-full justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-3.5 text-sm font-bold text-white shadow transition-all hover:-translate-y-0.5 hover:from-blue-600 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-70"
+                        >
+                          {loading ? <><Loader2 className="mr-2 h-5 w-5 animate-spin" />Sending...</> : <><Mail className="mr-2 h-5 w-5" />Send Verification Code</>}
+                        </button>
+                        <p className="text-center text-sm text-gray-500 dark:text-slate-400">
+                          Already have an account?{' '}
+                          <Link className="font-medium text-emerald-500 hover:text-blue-500" href="/login">Log in</Link>
+                        </p>
+                      </>
+                    )}
+
+                    {emailOtpSent && !emailOtpVerified && (
+                      <>
+                        <p className="text-xs text-gray-500 dark:text-slate-400">Code sent to <strong>{formData.email}</strong></p>
+                        <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
+                          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                            <ShieldCheck className="h-5 w-5 text-gray-400 group-focus-within:text-blue-400" />
+                          </div>
+                          <input
+                            id="emailOtp" type="text" inputMode="numeric" placeholder="6-digit code"
+                            value={emailOtpInput}
+                            onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                            maxLength={6}
+                            className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base tracking-widest text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                          />
+                        </div>
+                        <div className="flex gap-2">
+                          <button type="button" onClick={handleVerifyEmailOtp} disabled={loading || emailOtpInput.length !== 6}
+                            className="flex flex-1 justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-3 text-sm font-bold text-white shadow transition hover:from-blue-600 hover:to-indigo-600 disabled:cursor-not-allowed disabled:opacity-70">
+                            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Verify
+                          </button>
+                          <button type="button" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-gray-500 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-950">
+                            Resend
+                          </button>
+                        </div>
+                        <button type="button" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); setEmailOtpVerified(false); }}
+                          className="w-full text-center text-sm text-gray-400 hover:text-blue-500 transition-colors py-1">
+                          ← Change email address
+                        </button>
+                      </>
+                    )}
+                  </div>
+                )}
               </div>
             ) : step === 2 ? (
               <div className="space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Add profile and identity details.</p>
+                {/* Verified identity summary */}
+                <div className="flex items-center gap-2 rounded-lg bg-emerald-50 px-3 py-2 text-sm dark:bg-emerald-950/30">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-500" />
+                  <span className="text-emerald-700 dark:text-emerald-300">
+                    {signupMethod === 'phone'
+                      ? <>Phone <strong>+91 {formData.phoneNumber}</strong> verified</>
+                      : <>Email <strong>{formData.email}</strong> verified</>}
+                  </span>
+                </div>
+                <p className="text-sm text-gray-500 dark:text-slate-400">Add your profile details. You can add the other contact method later from your profile.</p>
 
                 <div className="space-y-4">
                   <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
@@ -619,88 +704,97 @@ function SignupPageContent() {
                     />
                   </div>
 
-                  {/* ── Email Address (Optional) ── */}
-                  <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
-                    <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">
-                      <Mail className="h-3.5 w-3.5" />
-                      Email Address <span className="font-normal normal-case text-gray-400">(optional)</span>
-                    </div>
-                    <div className={`group relative rounded-xl border bg-slate-50 px-3 py-2 dark:bg-slate-900 ${
-                      emailOtpVerified
-                        ? 'border-emerald-300 dark:border-emerald-700'
-                        : 'border-slate-200 dark:border-slate-700'
-                    }`}>
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                        <Mail className={`h-5 w-5 transition-colors ${
-                          emailOtpVerified ? 'text-emerald-500' : 'text-gray-400 group-focus-within:text-emerald-500'
-                        }`} />
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <input
-                          id="email"
-                          type="email"
-                          placeholder="your@email.com"
-                          value={formData.email}
-                          onChange={(e) => {
-                            setFormData({ ...formData, email: e.target.value });
-                            if (emailOtpVerified) { setEmailOtpVerified(false); setEmailOtpSent(false); setEmailOtpInput(''); }
-                          }}
-                          disabled={emailOtpVerified}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
-                        />
-                        {emailOtpVerified && <CheckCircle2 className="mr-1 h-5 w-5 shrink-0 text-emerald-500" />}
-                      </div>
-                    </div>
-
-                    {formData.email && !emailOtpVerified && !emailOtpSent && (
-                      <button
-                        type="button"
-                        onClick={handleSendEmailOtp}
-                        disabled={loading}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400"
-                      >
-                        {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />}
-                        Verify Email Address
-                      </button>
-                    )}
-
-                    {emailOtpSent && !emailOtpVerified && (
-                      <div className="space-y-2">
-                        <div className="group relative rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
-                          <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                            <ShieldCheck className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
-                          </div>
-                          <input
-                            id="emailOtp"
-                            type="text"
-                            placeholder="6-digit code from email"
-                            value={emailOtpInput}
-                            onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
-                            maxLength={6}
-                            className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
-                          />
+                  {/* ── Phone signup: optional email field ── */}
+                  {signupMethod === 'phone' && (
+                    <div className="space-y-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                          <Mail className="h-3.5 w-3.5" /> Email Address
                         </div>
-                        <button
-                          type="button"
-                          onClick={handleVerifyEmailOtp}
-                          disabled={loading || emailOtpInput.length !== 6}
-                          className="flex w-full items-center justify-center gap-2 rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-2.5 text-sm font-bold text-white shadow transition hover:from-emerald-600 hover:to-blue-600 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                          Confirm Code
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }}
-                          className="w-full text-center text-sm text-gray-400 transition-colors hover:text-emerald-500 dark:text-slate-500"
-                        >
-                          Resend or change email
-                        </button>
+                        {emailOtpVerified
+                          ? <span className="flex items-center gap-1 text-xs font-semibold text-emerald-600 dark:text-emerald-400"><CheckCircle2 className="h-3.5 w-3.5" />Verified</span>
+                          : <span className="text-xs text-slate-400">Optional — add later</span>}
                       </div>
-                    )}
+                      {!emailOtpVerified ? (
+                        <>
+                          <div className={`group relative rounded-xl border bg-slate-50 px-3 py-2 dark:bg-slate-900 ${
+                            formData.email ? 'border-blue-300 dark:border-blue-700' : 'border-slate-200 dark:border-slate-700'
+                          }`}>
+                            <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                              <Mail className={`h-5 w-5 transition-colors ${formData.email ? 'text-blue-400' : 'text-gray-400 group-focus-within:text-blue-400'}`} />
+                            </div>
+                            <input
+                              id="email" type="email" placeholder="your@email.com (optional)"
+                              value={formData.email}
+                              onChange={(e) => { setFormData({ ...formData, email: e.target.value }); setEmailOtpSent(false); setEmailOtpInput(''); }}
+                              disabled={emailOtpSent}
+                              className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                            />
+                          </div>
+                          {formData.email && !emailOtpSent && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email) && (
+                            <button type="button" onClick={handleSendEmailOtp} disabled={loading}
+                              className="flex w-full items-center justify-center gap-2 rounded-xl border border-blue-300 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50 dark:border-blue-700 dark:bg-blue-950/30 dark:text-blue-400">
+                              {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Verify Email
+                            </button>
+                          )}
+                          {emailOtpSent && (
+                            <div className="space-y-2">
+                              <p className="text-xs text-gray-500">Code sent to <strong>{formData.email}</strong></p>
+                              <div className="group relative rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                                <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                                  <ShieldCheck className="h-5 w-5 text-gray-400 group-focus-within:text-blue-400" />
+                                </div>
+                                <input id="emailOtp" type="text" inputMode="numeric" placeholder="6-digit code"
+                                  value={emailOtpInput} onChange={(e) => setEmailOtpInput(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                  maxLength={6}
+                                  className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base tracking-widest text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500" />
+                              </div>
+                              <div className="flex gap-2">
+                                <button type="button" onClick={handleVerifyEmailOtp} disabled={loading || emailOtpInput.length !== 6}
+                                  className="flex flex-1 justify-center gap-2 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-500 px-4 py-2.5 text-sm font-bold text-white shadow transition disabled:opacity-50">
+                                  {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />} Verify
+                                </button>
+                                <button type="button" onClick={() => { setEmailOtpSent(false); setEmailOtpInput(''); }}
+                                  className="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm text-gray-500 hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-950">Resend</button>
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      ) : (
+                        <div className="flex items-center justify-between rounded-lg bg-emerald-50 px-3 py-2 dark:bg-emerald-950/30">
+                          <span className="text-sm text-emerald-700 dark:text-emerald-300">{formData.email}</span>
+                          <button type="button" onClick={() => { setEmailOtpVerified(false); setEmailOtpSent(false); setEmailOtpInput(''); }}
+                            className="text-xs text-gray-400 hover:text-gray-600 underline">Change</button>
+                        </div>
+                      )}
+                      <p className="text-xs text-gray-400 dark:text-slate-500">For job alerts and account security.</p>
+                    </div>
+                  )}
 
-                    <p className="text-xs text-gray-400 dark:text-slate-500">For job alerts, security notices, and account updates.</p>
-                  </div>
+                  {/* ── Email signup: required phone input (no OTP, can verify later) ── */}
+                  {signupMethod === 'email' && (
+                    <div className="space-y-2 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                          <Phone className="h-3.5 w-3.5" /> Phone Number
+                        </div>
+                        <span className="text-xs text-rose-500 font-medium">Required</span>
+                      </div>
+                      <div className="group relative rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 dark:border-slate-700 dark:bg-slate-900">
+                        <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                          <Phone className="h-5 w-5 text-gray-400 group-focus-within:text-emerald-500" />
+                        </div>
+                        <input
+                          id="phoneNumber" type="tel" placeholder="10-digit mobile number"
+                          value={formData.phoneNumber}
+                          onChange={(e) => setFormData({ ...formData, phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10) })}
+                          maxLength={10}
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
+                        />
+                      </div>
+                      <p className="text-xs text-gray-400 dark:text-slate-500">Used for account access. You can verify it later from your profile.</p>
+                    </div>
+                  )}
 
                   {role === 'employer' && (
                     <>
