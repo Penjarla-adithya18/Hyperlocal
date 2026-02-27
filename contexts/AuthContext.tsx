@@ -29,7 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
-  // Periodically validate token hasn't expired (every 30s)
+  // Periodically validate token hasn't expired (every 5 minutes)
   // This catches cases where the token expires while the app is open
   useEffect(() => {
     if (!user) return
@@ -38,11 +38,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // If getCurrentUser returns null but we think we're logged in,
       // it means the token expired — silently logout
       if (!currentUser && user) {
+        console.warn('Token validation failed - logging out')
         setUser(null)
         logoutUser()
       }
     }
-    const interval = setInterval(validateToken, 30_000)
+    // Check every 5 minutes instead of 30 seconds to reduce pressure
+    const interval = setInterval(validateToken, 5 * 60 * 1000)
     return () => clearInterval(interval)
   }, [user])
 

@@ -95,12 +95,9 @@ async function refreshSessionIfNeeded(): Promise<void> {
 
   if (!res.ok) {
     if (res.status === 401) {
-      setSessionToken(null)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser')
-        // Redirect to login on session refresh failure
-        window.location.href = '/login'
-      }
+      console.warn('Session refresh failed - token may be invalid')
+      // Don't auto-redirect on refresh failure - let user stay logged in
+      // The periodic validation in AuthContext will handle actual logout if needed
     }
     return
   }
