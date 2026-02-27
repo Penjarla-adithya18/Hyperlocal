@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
 import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
-import { SkillAssessment, SkillResult } from '@/components/ui/skill-assessment';
+import { VideoSkillAssessment, VideoAssessmentResult } from '@/components/ui/video-skill-assessment';
 import { workerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { resetPassword, sendOTP, verifyOTP } from '@/lib/auth';
 import { WorkerProfile } from '@/lib/types';
@@ -72,6 +72,7 @@ export default function WorkerProfilePage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [assessmentOpen, setAssessmentOpen] = useState(false);
   const [verifiedSkills, setVerifiedSkills] = useState<string[]>([]);
+  const [pendingReviewSkills, setPendingReviewSkills] = useState<string[]>([]);
   const [pendingSkills, setPendingSkills] = useState<string[]>([]);
 
   useEffect(() => {
@@ -110,7 +111,9 @@ export default function WorkerProfilePage() {
         // Existing profile skills are already verified
         const existingSkills = workerProfile.skills || [];
         const storedVerified = JSON.parse(localStorage.getItem(`verifiedSkills_${user.id}`) || '[]') as string[];
+        const storedPending = JSON.parse(localStorage.getItem(`pendingReviewSkills_${user.id}`) || '[]') as string[];
         setVerifiedSkills([...new Set([...existingSkills, ...storedVerified])]);
+        setPendingReviewSkills(storedPending);
         // Restore resume data if available
         if (workerProfile.resumeText) {
           setResumeRawText(workerProfile.resumeText);
@@ -288,9 +291,12 @@ export default function WorkerProfilePage() {
     setFormData(prev => ({ ...prev, skills: prev.skills.filter((s) => s !== skill) }));
     // Also remove from verified list so re-adding requires re-assessment
     setVerifiedSkills(prev => prev.filter(s => s !== skill));
+    setPendingReviewSkills(prev => prev.filter(s => s !== skill));
     if (user) {
       const updated = verifiedSkills.filter(s => s !== skill);
       localStorage.setItem(`verifiedSkills_${user.id}`, JSON.stringify(updated));
+      const updatedPending = pendingReviewSkills.filter(s => s !== skill);
+      localStorage.setItem(`pendingReviewSkills_${user.id}`, JSON.stringify(updatedPending));
     }
   };
 
@@ -393,42 +399,69 @@ export default function WorkerProfilePage() {
     router.push('/login');
   };
 
-  const handleAssessmentComplete = (results: SkillResult[]) => {
-    const passed = results.filter(r => r.passed).map(r => r.skill);
-    const failed = results.filter(r => !r.passed).map(r => r.skill);
+  const handleAssessmentComplete = (results: VideoAssessmentResult[]) => {
+    const approved = results.filter(r => r.verdict === 'approved').map(r => r.skill);
+    const rejected = results.filter(r => r.verdict === 'rejected');
+    const pending = results.filter(r => r.submitted && r.verdict === 'pending').map(r => r.skill);
+    const failed = results.filter(r => !r.submitted).map(r => r.skill);
 
-    // Update verified skills list
-    const newVerified = [...new Set([...verifiedSkills, ...passed])];
-    setVerifiedSkills(newVerified);
-    if (user) {
-      localStorage.setItem(`verifiedSkills_${user.id}`, JSON.stringify(newVerified));
+    // Auto-approved skills → verified immediately
+    if (approved.length > 0) {
+      const newVerified = [...new Set([...verifiedSkills, ...approved])];
+      setVerifiedSkills(newVerified);
+      if (user) {
+        localStorage.setItem(`verifiedSkills_${user.id}`, JSON.stringify(newVerified));
+      }
+      toast({
+        title: `${approved.length} Skill${approved.length > 1 ? 's' : ''} Verified! ✓`,
+        description: `${approved.join(', ')} — verified automatically.`,
+      });
     }
 
-    // Remove failed skills from formData
-    if (failed.length > 0) {
+    // Pending (borderline) → pending review
+    if (pending.length > 0) {
+      const newPendingReview = [...new Set([...pendingReviewSkills, ...pending])];
+      setPendingReviewSkills(newPendingReview);
+      if (user) {
+        localStorage.setItem(`pendingReviewSkills_${user.id}`, JSON.stringify(newPendingReview));
+      }
+      toast({
+        title: 'Skills Under Review',
+        description: `${pending.join(', ')} — needs admin review (borderline score).`,
+      });
+    }
+
+    // Auto-rejected → show reason, remove from skills
+    if (rejected.length > 0) {
+      const rejectedSkillNames = rejected.map(r => r.skill);
       setFormData(prev => ({
         ...prev,
-        skills: prev.skills.filter(s => !failed.includes(s)),
+        skills: prev.skills.filter(s => !rejectedSkillNames.includes(s)),
       }));
+      const reasons = rejected.map(r => `${r.skill}: ${r.verdictReason || 'Not passed'}`).join('\n');
       toast({
-        title: 'Some skills removed',
-        description: `${failed.join(', ')} removed because the assessment was not passed.`,
+        title: `${rejected.length} Skill${rejected.length > 1 ? 's' : ''} Not Passed`,
+        description: reasons,
         variant: 'destructive',
       });
     }
 
-    if (passed.length > 0) {
+    // Submission failures → keep skills as unassessed (don't remove)
+    if (failed.length > 0) {
       toast({
-        title: 'Skills Verified!',
-        description: `${passed.join(', ')} verified successfully.`,
+        title: 'Assessment incomplete',
+        description: `${failed.join(', ')} — submission failed. You can retry from your profile.`,
+        variant: 'destructive',
       });
     }
 
     setAssessmentOpen(false);
     setPendingSkills([]);
 
-    // Now proceed with actual save using only verified skills
-    doSaveProfile(formData.skills.filter(s => !failed.includes(s)));
+    // Save profile with valid skills (approved + pending + existing verified + unrejected)
+    const rejectedNames = rejected.map(r => r.skill);
+    const keepSkills = formData.skills.filter(s => !rejectedNames.includes(s));
+    doSaveProfile(keepSkills);
   };
 
   const doSaveProfile = async (skillsToSave?: string[]) => {
@@ -501,10 +534,10 @@ export default function WorkerProfilePage() {
       return;
     }
 
-    // Check for unverified skills
-    const unverified = formData.skills.filter(s => !verifiedSkills.includes(s));
-    if (unverified.length > 0) {
-      setPendingSkills(unverified);
+    // Check for skills that haven't been assessed yet (not verified AND not pending review)
+    const unassessed = formData.skills.filter(s => !verifiedSkills.includes(s) && !pendingReviewSkills.includes(s));
+    if (unassessed.length > 0) {
+      setPendingSkills(unassessed);
       setAssessmentOpen(true);
       return;
     }
@@ -1020,20 +1053,25 @@ export default function WorkerProfilePage() {
                 </div>
                 <p className="text-xs text-muted-foreground flex items-center gap-1">
                   <Shield className="w-3 h-3" />
-                  New skills require passing an AI assessment (60%) before saving.
+                  New skills require a video assessment — AI verifies automatically.
                 </p>
                 {formData.skills.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {formData.skills.map((skill) => (
-                      <Badge key={skill} variant={verifiedSkills.includes(skill) ? 'default' : 'secondary'} className={`gap-1 pr-1 ${verifiedSkills.includes(skill) ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-dashed border-amber-400'}`}>
+                      <Badge key={skill} variant={verifiedSkills.includes(skill) ? 'default' : pendingReviewSkills.includes(skill) ? 'outline' : 'secondary'} className={`gap-1 pr-1 ${verifiedSkills.includes(skill) ? 'bg-green-600 hover:bg-green-700 text-white' : pendingReviewSkills.includes(skill) ? 'border-blue-400 bg-blue-50 dark:bg-blue-950' : 'border-dashed border-amber-400'}`}>
                         {verifiedSkills.includes(skill) ? (
                           <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                        ) : pendingReviewSkills.includes(skill) ? (
+                          <Loader2 className="w-3 h-3 mr-0.5 text-blue-500 animate-spin" />
                         ) : (
                           <AlertTriangle className="w-3 h-3 mr-0.5 text-amber-500" />
                         )}
                         {skill}
                         {verifiedSkills.includes(skill) && (
                           <span className="text-[10px] ml-1 opacity-80">Verified</span>
+                        )}
+                        {pendingReviewSkills.includes(skill) && (
+                          <span className="text-[10px] ml-1 text-blue-600 dark:text-blue-400">Pending Review</span>
                         )}
                         <button
                           type="button"
@@ -1231,12 +1269,11 @@ export default function WorkerProfilePage() {
           </AlertDialogContent>
         </AlertDialog>
 
-        {/* Skill Assessment Dialog */}
-        <SkillAssessment
+        {/* Video Skill Assessment Dialog */}
+        <VideoSkillAssessment
           open={assessmentOpen}
           skills={pendingSkills}
-          verifiedSkills={verifiedSkills}
-          passThreshold={60}
+          workerId={user!.id}
           onComplete={handleAssessmentComplete}
           onCancel={() => { setAssessmentOpen(false); setPendingSkills([]); }}
         />

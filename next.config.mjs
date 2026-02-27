@@ -23,6 +23,16 @@ const nextConfig = {
       },
     ]
   },
+  // Allow large video uploads for skill assessment
+  serverExternalPackages: [],
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '50mb',
+    },
+    // Route handler / proxy body size limit — default is 10MB (10485760 bytes)
+    // Video assessments can be up to ~8MB raw, needs headroom
+    proxyClientMaxBodySize: 50 * 1024 * 1024, // 50 MB
+  },
   // Headers: cache static assets aggressively
   async headers() {
     return [
