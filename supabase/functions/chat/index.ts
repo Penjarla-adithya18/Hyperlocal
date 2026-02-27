@@ -1,5 +1,6 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { createServiceClient, requireAuth } from '../_shared/auth.ts'
+import { sendPushToUser } from '../_shared/push.ts'
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req)
@@ -175,6 +176,19 @@ Deno.serve(async (req: Request) => {
           .from('chat_conversations')
           .update({ updated_at: new Date().toISOString() })
           .eq('id', body.conversationId)
+
+        // Push notification to other participants (fire-and-forget)
+        const otherParticipants = participants.filter((p: string) => p !== auth.user.id)
+        for (const recipientId of otherParticipants) {
+          sendPushToUser(
+            supabase,
+            recipientId,
+            'New Message',
+            `${auth.user.fullName || 'Someone'}: ${message.length > 80 ? message.slice(0, 80) + '…' : message || 'Sent an attachment'}`,
+            '/worker/chat',
+            'new-message'
+          ).catch(() => {})
+        }
 
         return jsonResponse({ data: mapMessage(data) })
       }

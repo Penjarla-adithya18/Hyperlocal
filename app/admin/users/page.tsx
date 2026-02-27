@@ -11,9 +11,20 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { userOps } from '@/lib/api'
 import { User } from '@/lib/types'
-import { Search, Star, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
+import { Search, Star, CheckCircle, ShieldOff, ShieldCheck, Trash2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
 
 /** Helper: check if a user matches the search query */
 function matchesSearch(user: User, query: string): boolean {
@@ -45,6 +56,10 @@ export default function AdminUsersPage() {
         const allUsers = await userOps.getAll()
         if (!cancelled) setUsers(allUsers.filter((u) => u.role !== 'admin'))
       } catch (err) {
+        if (!cancelled && err instanceof Error && err.message.includes('Unauthorized')) {
+          router.push('/login')
+          return
+        }
         console.error('Failed to load users:', err)
       }
     }
@@ -67,6 +82,16 @@ export default function AdminUsersPage() {
     if (updated) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
       toast({ title: 'Account Restored', description: 'User account has been restored' })
+    }
+  }, [toast])
+
+  const handleDeleteUser = useCallback(async (userId: string) => {
+    try {
+      await userOps.delete(userId)
+      setUsers((prev) => prev.filter((u) => u.id !== userId))
+      toast({ title: 'Account Deleted', description: 'The user account has been permanently removed.' })
+    } catch (err) {
+      toast({ title: 'Delete failed', description: String(err), variant: 'destructive' })
     }
   }, [toast])
 
@@ -124,7 +149,7 @@ export default function AdminUsersPage() {
               </Badge>
             </div>
 
-            <div className="flex gap-2 mt-4">
+            <div className="flex flex-wrap gap-2 mt-4">
               {!user.isVerified ? (
                 <Button
                   size="sm"
@@ -145,6 +170,33 @@ export default function AdminUsersPage() {
                   Suspend
                 </Button>
               )}
+
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" variant="outline" className="text-destructive border-destructive/40 hover:bg-destructive/5">
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete Account Permanently?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      This will permanently delete <strong>{user.fullName}</strong>&apos;s account, all their jobs, applications, chat history, and escrow records. This action{' '}
+                      <strong>cannot be undone</strong>.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Cancel</AlertDialogCancel>
+                    <AlertDialogAction
+                      className="bg-destructive hover:bg-destructive/90 text-destructive-foreground"
+                      onClick={() => handleDeleteUser(user.id)}
+                    >
+                      Delete Permanently
+                    </AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             </div>
           </div>
         </div>

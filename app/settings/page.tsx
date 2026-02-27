@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { resetPassword, logout, sendOTP, verifyOTP } from '@/lib/auth'
-import { loginUser, userOps } from '@/lib/api'
+import { loginUser, pushOps, userOps } from '@/lib/api'
 import WorkerNav from '@/components/worker/WorkerNav'
 import EmployerNav from '@/components/employer/EmployerNav'
 import AdminNav from '@/components/admin/AdminNav'
@@ -15,9 +15,16 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound, Globe } from 'lucide-react'
+import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound, Globe, Bell, BellOff } from 'lucide-react'
 import { useI18n } from '@/contexts/I18nContext'
 import { localeLabels, localeNames, locales, SupportedLocale } from '@/i18n'
+import {
+  subscribeToPush,
+  unsubscribeFromPush,
+  getPushPermissionState,
+  isPushSubscribed,
+  VAPID_PUBLIC_KEY,
+} from '@/lib/pushNotifications'
 
 export default function SettingsPage() {
   const { user, updateUser, login } = useAuth()
@@ -28,6 +35,17 @@ export default function SettingsPage() {
   // Change password form
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' })
   const [pwLoading, setPwLoading] = useState(false)
+
+  // Push notification state
+  const [pushPermission, setPushPermission] = useState<'granted' | 'denied' | 'default' | 'unsupported'>('default')
+  const [pushSubscribed, setPushSubscribed] = useState(false)
+  const [pushLoading, setPushLoading] = useState(false)
+
+  // Initialize push state
+  useEffect(() => {
+    setPushPermission(getPushPermissionState())
+    isPushSubscribed().then(setPushSubscribed)
+  }, [])
 
   // Update phone form
   const [phoneForm, setPhoneForm] = useState({ phone: user?.phoneNumber ?? '', otp: '' })
@@ -185,7 +203,90 @@ export default function SettingsPage() {
           </CardContent>
         </Card>
 
-        {/* ── Trust Score Card ─────────────────────────────── */}
+        {/* ── Push Notifications ───────────────────────────────── */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Bell className="h-5 w-5 text-primary" />
+              Push Notifications
+            </CardTitle>
+            <CardDescription>
+              Get notified about new jobs, messages, and application updates — even when the app is closed.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            {pushPermission === 'unsupported' ? (
+              <p className="text-sm text-muted-foreground">
+                Push notifications are not supported in this browser.
+              </p>
+            ) : !VAPID_PUBLIC_KEY ? (
+              <p className="text-sm text-muted-foreground">
+                Push notifications are not configured for this environment.
+              </p>
+            ) : pushPermission === 'denied' ? (
+              <div className="flex items-start gap-3 p-3 bg-orange-50 dark:bg-orange-950/30 rounded-lg border border-orange-200 dark:border-orange-800">
+                <AlertTriangle className="h-5 w-5 text-orange-500 shrink-0 mt-0.5" />
+                <div>
+                  <p className="text-sm font-medium text-orange-800 dark:text-orange-300">Notifications blocked</p>
+                  <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
+                    You have blocked notifications for this site. To enable them, click the lock icon in your browser address bar and allow notifications.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  {pushSubscribed ? (
+                    <Bell className="h-5 w-5 text-green-600" />
+                  ) : (
+                    <BellOff className="h-5 w-5 text-muted-foreground" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium">{pushSubscribed ? 'Notifications enabled' : 'Notifications disabled'}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {pushSubscribed ? 'You will receive push alerts for jobs and messages.' : 'Enable to get real-time alerts.'}
+                    </p>
+                  </div>
+                </div>
+                <Button
+                  variant={pushSubscribed ? 'outline' : 'default'}
+                  size="sm"
+                  disabled={pushLoading}
+                  onClick={async () => {
+                    setPushLoading(true)
+                    try {
+                      if (pushSubscribed) {
+                        await unsubscribeFromPush()
+                        await pushOps.unsubscribe()
+                        setPushSubscribed(false)
+                        toast({ title: 'Notifications disabled' })
+                      } else {
+                        const sub = await subscribeToPush()
+                        if (!sub) {
+                          toast({ title: 'Could not enable notifications', description: 'Please allow notifications in your browser settings.', variant: 'destructive' })
+                        } else {
+                          const keys = sub.keys as Record<string, string> | undefined
+                          await pushOps.subscribe(sub.endpoint!, keys?.p256dh ?? '', keys?.auth ?? '')
+                          setPushSubscribed(true)
+                          setPushPermission('granted')
+                          toast({ title: 'Notifications enabled! 🔔' })
+                        }
+                      }
+                    } catch {
+                      toast({ title: 'Failed to update notification settings', variant: 'destructive' })
+                    } finally {
+                      setPushLoading(false)
+                    }
+                  }}
+                >
+                  {pushLoading ? 'Updating…' : pushSubscribed ? 'Disable' : 'Enable'}
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* ── Trust Score Card ────────────────────────────── */}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">

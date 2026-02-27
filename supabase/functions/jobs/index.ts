@@ -1,5 +1,6 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { createServiceClient, requireAuth } from '../_shared/auth.ts'
+import { sendPushToRole } from '../_shared/push.ts'
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req)
@@ -130,6 +131,18 @@ Deno.serve(async (req: Request) => {
       } catch (smsErr) {
         console.error('jobs sms notify error:', smsErr)
       }
+
+      // Push notification to all subscribed workers (fire-and-forget)
+      const jobTitle = (data as Record<string, unknown>).title as string || 'New Job'
+      const jobLocation = (data as Record<string, unknown>).location as string || ''
+      sendPushToRole(
+        supabase,
+        'worker',
+        '🆕 New Job Posted',
+        `${jobTitle}${jobLocation ? ' in ' + jobLocation : ''} — Tap to apply`,
+        '/worker/jobs',
+        'new-job'
+      ).catch(() => {})
 
       return jsonResponse({ data: mapJob(data) })
     }

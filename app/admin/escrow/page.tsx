@@ -51,7 +51,11 @@ export default function AdminEscrowPage() {
         const jobMap: Record<string, Job> = {}
         for (const j of jobResults) { if (j) jobMap[j.id] = j }
         setJobs(jobMap)
-      } catch {
+      } catch (err) {
+        if (err instanceof Error && err.message.includes('Unauthorized')) {
+          router.push('/login')
+          return
+        }
         toast({ title: 'Error', description: 'Failed to load escrow data', variant: 'destructive' })
       } finally {
         if (!cancelled) setLoading(false)
@@ -98,7 +102,11 @@ export default function AdminEscrowPage() {
       const jobMap: Record<string, Job> = {}
       for (const j of jobResults) { if (j) jobMap[j.id] = j }
       setJobs(jobMap)
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.message.includes('Unauthorized')) {
+        router.push('/login')
+        return
+      }
       toast({ title: 'Error', description: 'Failed to refresh escrow data', variant: 'destructive' })
     } finally {
       setLoading(false)

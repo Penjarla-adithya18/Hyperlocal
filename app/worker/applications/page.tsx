@@ -7,17 +7,43 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { applicationOps, jobOps } from '@/lib/api'
+import { applicationOps, jobOps, ratingOps } from '@/lib/api'
 import { Application, Job } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Eye } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Eye, Star } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog'
+import { Textarea } from '@/components/ui/textarea'
+import { useToast } from '@/hooks/use-toast'
+
+interface RatingTarget {
+  jobId: string
+  applicationId: string
+  employerId: string
+  jobTitle: string
+}
 
 export default function WorkerApplicationsPage() {
   const router = useRouter()
   const { user } = useAuth()
+  const { toast } = useToast()
   const [applications, setApplications] = useState<Application[]>([])
   const [jobsById, setJobsById] = useState<Record<string, Job>>({})
   const [loading, setLoading] = useState(true)
+
+  // Rating dialog state
+  const [ratingOpen, setRatingOpen] = useState(false)
+  const [ratingTarget, setRatingTarget] = useState<RatingTarget | null>(null)
+  const [ratingValue, setRatingValue] = useState(0)
+  const [hoverRating, setHoverRating] = useState(0)
+  const [ratingFeedback, setRatingFeedback] = useState('')
+  const [submittingRating, setSubmittingRating] = useState(false)
+  const [ratedJobIds, setRatedJobIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     if (user) {
@@ -37,10 +63,53 @@ export default function WorkerApplicationsPage() {
         return acc
       }, {} as Record<string, Job>)
       setJobsById(byId)
+
+      // Check which jobs the worker has already rated the employer for
+      const completedJobIds = workerApplications
+        .filter(a => a.status === 'accepted' && byId[a.jobId]?.status === 'completed')
+        .map(a => a.jobId)
+      if (completedJobIds.length > 0) {
+        const sentRatings = await ratingOps.getSentByUser(user.id).catch(() => [])
+        const sentJobIds = new Set(sentRatings.map(r => r.jobId))
+        setRatedJobIds(sentJobIds)
+      }
     } catch (error) {
       console.error('Failed to load applications:', error)
     } finally {
       setLoading(false)
+    }
+  }
+
+  const openRatingDialog = (target: RatingTarget) => {
+    setRatingTarget(target)
+    setRatingValue(0)
+    setHoverRating(0)
+    setRatingFeedback('')
+    setRatingOpen(true)
+  }
+
+  const handleSubmitRating = async () => {
+    if (!ratingTarget || ratingValue === 0) return
+    setSubmittingRating(true)
+    try {
+      await ratingOps.create({
+        jobId: ratingTarget.jobId,
+        applicationId: ratingTarget.applicationId,
+        toUserId: ratingTarget.employerId,
+        rating: ratingValue,
+        feedback: ratingFeedback.trim() || undefined,
+      })
+      setRatedJobIds(prev => new Set([...prev, ratingTarget.jobId]))
+      setRatingOpen(false)
+      toast({ title: 'Rating submitted', description: 'Thank you for your feedback!' })
+    } catch (err) {
+      toast({
+        title: 'Failed to submit rating',
+        description: err instanceof Error ? err.message : 'Please try again.',
+        variant: 'destructive',
+      })
+    } finally {
+      setSubmittingRating(false)
     }
   }
 
@@ -51,6 +120,9 @@ export default function WorkerApplicationsPage() {
   const ApplicationCard = ({ application }: { application: Application }) => {
     const job = jobsById[application.jobId]
     if (!job) return null
+
+    const isCompleted = job.status === 'completed' || job.paymentStatus === 'released'
+    const alreadyRated = ratedJobIds.has(job.id)
 
     return (
       <Card className="hover:border-primary transition-colors">
@@ -100,14 +172,40 @@ export default function WorkerApplicationsPage() {
             </div>
           )}
 
-          <Button
-            variant="outline"
-            className="w-full"
-            onClick={() => router.push(`/worker/jobs/${job.id}`)}
-          >
-            <Eye className="h-4 w-4 mr-2" />
-            View Job Details
-          </Button>
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={() => router.push(`/worker/jobs/${job.id}`)}
+            >
+              <Eye className="h-4 w-4 mr-2" />
+              View Job Details
+            </Button>
+
+            {isCompleted && (
+              alreadyRated ? (
+                <Button variant="ghost" size="sm" disabled className="gap-1 text-yellow-500">
+                  <Star className="h-4 w-4 fill-yellow-400 text-yellow-400" />
+                  Rated
+                </Button>
+              ) : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-1 border-yellow-400 text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-950"
+                  onClick={() => openRatingDialog({
+                    jobId: job.id,
+                    applicationId: application.id,
+                    employerId: job.employerId,
+                    jobTitle: job.title,
+                  })}
+                >
+                  <Star className="h-4 w-4" />
+                  Rate Employer
+                </Button>
+              )
+            )}
+          </div>
         </CardContent>
       </Card>
     )
@@ -201,6 +299,76 @@ export default function WorkerApplicationsPage() {
           </TabsContent>
         </Tabs>
       </main>
+
+      {/* ── Rate Employer Dialog ── */}
+      <Dialog open={ratingOpen} onOpenChange={setRatingOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Star className="h-5 w-5 text-yellow-500" />
+              Rate Employer
+            </DialogTitle>
+            {ratingTarget && (
+              <p className="text-sm text-muted-foreground mt-1">
+                How was your experience with the employer for <strong>{ratingTarget.jobTitle}</strong>?
+              </p>
+            )}
+          </DialogHeader>
+
+          <div className="py-4 space-y-4">
+            {/* Star selector */}
+            <div className="flex justify-center gap-2">
+              {[1, 2, 3, 4, 5].map((star) => (
+                <button
+                  key={star}
+                  type="button"
+                  onClick={() => setRatingValue(star)}
+                  onMouseEnter={() => setHoverRating(star)}
+                  onMouseLeave={() => setHoverRating(0)}
+                  className="transition-transform hover:scale-110 focus:outline-none"
+                >
+                  <Star
+                    className={`h-9 w-9 ${
+                      star <= (hoverRating || ratingValue)
+                        ? 'fill-yellow-400 text-yellow-400'
+                        : 'text-muted-foreground'
+                    }`}
+                  />
+                </button>
+              ))}
+            </div>
+            <p className="text-center text-sm text-muted-foreground h-4">
+              {(hoverRating || ratingValue) > 0 && (
+                ['', 'Poor', 'Fair', 'Good', 'Very Good', 'Excellent'][hoverRating || ratingValue]
+              )}
+            </p>
+
+            {/* Feedback */}
+            <Textarea
+              placeholder="Share your experience (optional)"
+              value={ratingFeedback}
+              onChange={(e) => setRatingFeedback(e.target.value)}
+              rows={3}
+              maxLength={500}
+            />
+            <p className="text-xs text-muted-foreground text-right">{ratingFeedback.length}/500</p>
+          </div>
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setRatingOpen(false)} disabled={submittingRating}>
+              Cancel
+            </Button>
+            <Button
+              onClick={handleSubmitRating}
+              disabled={ratingValue === 0 || submittingRating}
+              className="gap-1"
+            >
+              <Star className="h-4 w-4" />
+              {submittingRating ? 'Submitting…' : 'Submit Rating'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
