@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
   LayoutDashboard, Users, AlertTriangle, 
-  LogOut, Menu, X, IndianRupee, MessageSquare
+  LogOut, Menu, X, IndianRupee, MessageSquare, Video
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationBell } from '@/components/ui/notification-bell'
