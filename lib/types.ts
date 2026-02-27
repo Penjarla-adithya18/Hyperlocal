@@ -194,6 +194,10 @@ export interface ChatMessage {
   createdAt: string;
   isRead?: boolean;
   read?: boolean;
+  attachmentUrl?: string;
+  attachmentName?: string;
+  attachmentType?: string;
+  attachmentSize?: number;
 }
 
 export interface Rating {

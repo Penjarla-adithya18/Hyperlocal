@@ -10,7 +10,7 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockEscrowOps, mockJobOps } from '@/lib/api'
+import { escrowOps, jobOps } from '@/lib/api'
 import { EscrowTransaction, Job } from '@/lib/types'
 import { Search, Lock, Unlock, RefreshCcw, IndianRupee, AlertCircle, TrendingUp } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
@@ -40,13 +40,13 @@ export default function AdminEscrowPage() {
     let cancelled = false
     async function loadData() {
       try {
-        const txns = await mockEscrowOps.getAll()
+        const txns = await escrowOps.getAll()
         if (cancelled) return
         setTransactions(txns)
 
         // Batch-fetch unique job titles (de-duped)
         const uniqueJobIds = [...new Set(txns.map((t) => t.jobId))]
-        const jobResults = await Promise.all(uniqueJobIds.map((id) => mockJobOps.findById(id).catch(() => null)))
+        const jobResults = await Promise.all(uniqueJobIds.map((id) => jobOps.findById(id).catch(() => null)))
         if (cancelled) return
         const jobMap: Record<string, Job> = {}
         for (const j of jobResults) { if (j) jobMap[j.id] = j }
@@ -91,10 +91,10 @@ export default function AdminEscrowPage() {
   const handleRefresh = async () => {
     setLoading(true)
     try {
-      const txns = await mockEscrowOps.getAll()
+      const txns = await escrowOps.getAll()
       setTransactions(txns)
       const uniqueJobIds = [...new Set(txns.map((t) => t.jobId))]
-      const jobResults = await Promise.all(uniqueJobIds.map((id) => mockJobOps.findById(id).catch(() => null)))
+      const jobResults = await Promise.all(uniqueJobIds.map((id) => jobOps.findById(id).catch(() => null)))
       const jobMap: Record<string, Job> = {}
       for (const j of jobResults) { if (j) jobMap[j.id] = j }
       setJobs(jobMap)

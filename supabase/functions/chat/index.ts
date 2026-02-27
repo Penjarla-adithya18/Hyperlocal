@@ -9,6 +9,7 @@ Deno.serve(async (req: Request) => {
   const url = new URL(req.url)
   const type = url.searchParams.get('type')
   const conversationId = url.searchParams.get('conversationId')
+  const applicationId = url.searchParams.get('applicationId')
   const method = req.method
 
   try {
@@ -16,11 +17,17 @@ Deno.serve(async (req: Request) => {
     if ('error' in auth) return auth.error
 
     if (method === 'GET' && type === 'conversations') {
-      const { data: convs, error: convErr } = await supabase
+      let query = supabase
         .from('chat_conversations')
         .select('*')
         .contains('participants', [auth.user.id])
         .order('updated_at', { ascending: false })
+
+      if (applicationId) {
+        query = query.eq('application_id', applicationId)
+      }
+
+      const { data: convs, error: convErr } = await query
 
       if (convErr) throw convErr
       if (!convs || convs.length === 0) return jsonResponse({ data: [] })
@@ -69,6 +76,13 @@ Deno.serve(async (req: Request) => {
       const participants = (conversation.participants || []) as string[]
       if (!participants.includes(auth.user.id)) return errorResponse('Forbidden', 403)
 
+      await supabase
+        .from('chat_messages')
+        .update({ read: true })
+        .eq('conversation_id', conversationId)
+        .neq('sender_id', auth.user.id)
+        .eq('read', false)
+
       const { data, error } = await supabase
         .from('chat_messages')
         .select('*')
@@ -113,6 +127,16 @@ Deno.serve(async (req: Request) => {
       if (body.type === 'message' || body.conversationId) {
         const requestedSender = body.senderId as string
         if (requestedSender !== auth.user.id) return errorResponse('Forbidden', 403)
+        if (!body.conversationId) return errorResponse('Conversation ID is required', 400)
+
+        const message = typeof body.message === 'string' ? body.message.trim() : ''
+        if (!message && !body.attachmentUrl) return errorResponse('Message or attachment is required', 400)
+        if (message && message.length > 2000) return errorResponse('Message is too long', 400)
+
+        if (message) {
+          const blockedReason = getBlockedMessageReason(message)
+          if (blockedReason) return errorResponse(blockedReason, 400)
+        }
 
         const { data: conversation, error: conversationError } = await supabase
           .from('chat_conversations')
@@ -125,14 +149,24 @@ Deno.serve(async (req: Request) => {
         const participants = (conversation.participants || []) as string[]
         if (!participants.includes(auth.user.id)) return errorResponse('Forbidden', 403)
 
+        const messageData: Record<string, unknown> = {
+          conversation_id: body.conversationId,
+          sender_id: requestedSender,
+          message: message || '',
+          read: false,
+        }
+
+        // Add attachment fields if present
+        if (body.attachmentUrl) {
+          messageData.attachment_url = body.attachmentUrl
+          messageData.attachment_name = body.attachmentName || null
+          messageData.attachment_type = body.attachmentType || null
+          messageData.attachment_size = body.attachmentSize || null
+        }
+
         const { data, error } = await supabase
           .from('chat_messages')
-          .insert({
-            conversation_id: body.conversationId,
-            sender_id: requestedSender,
-            message: body.message,
-            read: false,
-          })
+          .insert(messageData)
           .select('*')
           .single()
         if (error) throw error
@@ -165,5 +199,35 @@ function mapMessage(row: Record<string, unknown>) {
     createdAt: row.created_at,
     read: !!row.read,
     isRead: !!row.read,
+    attachmentUrl: row.attachment_url || undefined,
+    attachmentName: row.attachment_name || undefined,
+    attachmentType: row.attachment_type || undefined,
+    attachmentSize: row.attachment_size ? Number(row.attachment_size) : undefined,
   }
+}
+
+function getBlockedMessageReason(message: string): string | null {
+  const emailPattern = /\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b/i
+  if (emailPattern.test(message)) {
+    return 'Email addresses cannot be shared in chat'
+  }
+
+  const phonePatterns = [
+    /\+91\s*[6-9]\d{9}/,
+    /\b0?[6-9]\d{9}\b/,
+    /\b91[6-9]\d{9}\b/,
+    /(?:\d\D*){8,}/,
+  ]
+  for (const pattern of phonePatterns) {
+    if (pattern.test(message)) {
+      return 'Phone numbers cannot be shared in chat'
+    }
+  }
+
+  const offPlatformPattern = /\b(whatsapp|wa\.me|telegram|signal|wechat)\b/i
+  if (offPlatformPattern.test(message)) {
+    return 'External contact sharing is not allowed'
+  }
+
+  return null
 }

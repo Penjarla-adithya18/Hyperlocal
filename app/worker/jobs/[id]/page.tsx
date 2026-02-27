@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps } from '@/lib/api'
+import { applicationOps, db, jobOps, reportOps, userOps, workerProfileOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
 import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
 import { translateDynamic, SupportedLocale } from '@/lib/gemini'
@@ -107,16 +107,16 @@ export default function JobDetailsPage() {
 
   const loadJobDetails = async () => {
     try {
-      const jobData = await mockDb.getJobById(params.id as string)
+      const jobData = await jobOps.findById(params.id as string)
       if (jobData) {
         setJob(jobData)
-        const employerData = await mockUserOps.findById(jobData.employerId)
+        const employerData = await userOps.findById(jobData.employerId)
         setEmployer(employerData)
 
         if (user) {
           const [workerApplications, profile] = await Promise.all([
-            mockDb.getApplicationsByWorker(user.id),
-            mockWorkerProfileOps.findByUserId(user.id).catch(() => null),
+            applicationOps.findByWorkerId(user.id),
+            workerProfileOps.findByUserId(user.id).catch(() => null),
           ])
           const existingApplication = workerApplications
             .find(app => app.jobId === jobData.id)
@@ -146,7 +146,7 @@ export default function JobDetailsPage() {
         }
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('error 401')) {
+      if (error instanceof Error && error.message.toLowerCase().includes('unauthorized')) {
         toast({
           title: 'Session expired',
           description: 'Please log in again to continue.',
@@ -176,7 +176,7 @@ export default function JobDetailsPage() {
 
     setApplying(true)
     try {
-      const newApplication = await mockDb.createApplication({
+      const newApplication = await db.createApplication({
         jobId: job.id,
         workerId: user.id,
         coverLetter: coverLetter.trim() || undefined,
@@ -187,7 +187,7 @@ export default function JobDetailsPage() {
       setShowApplicationForm(false)
 
       // Create a conversation so employer can chat with the worker
-      await mockDb.createConversation({
+      await db.createConversation({
         workerId: user.id,
         employerId: job.employerId,
         jobId: job.id,
@@ -214,7 +214,7 @@ export default function JobDetailsPage() {
     if (!user || !job) return
     setSubmittingReport(true)
     try {
-      await mockReportOps.create({
+      await reportOps.create({
         reporterId: user.id,
         reportedJobId: job.id,
         type: 'fake_job',

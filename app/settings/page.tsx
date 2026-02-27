@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/contexts/AuthContext'
 import { resetPassword, logout, sendOTP, verifyOTP } from '@/lib/auth'
-import { loginUser, mockUserOps } from '@/lib/api'
+import { loginUser, userOps } from '@/lib/api'
 import WorkerNav from '@/components/worker/WorkerNav'
 import EmployerNav from '@/components/employer/EmployerNav'
 import AdminNav from '@/components/admin/AdminNav'
@@ -120,7 +120,7 @@ export default function SettingsPage() {
       }
 
       // Update phone via users edge function
-      const result = await mockUserOps.update(user.id, { phoneNumber: phoneForm.phone })
+      const result = await userOps.update(user.id, { phoneNumber: phoneForm.phone })
       if (result) {
         updateUser({ phoneNumber: phoneForm.phone })
         toast({ title: 'Phone number updated' })

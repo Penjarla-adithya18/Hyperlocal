@@ -113,6 +113,10 @@ create table if not exists chat_messages (
   sender_id uuid not null references users(id) on delete cascade,
   message text not null,
   read boolean not null default false,
+  attachment_url text,
+  attachment_name text,
+  attachment_type text,
+  attachment_size integer,
   created_at timestamptz not null default now()
 );
 

@@ -60,13 +60,10 @@ const FOUL_LANGUAGE_PATTERNS = [
   /\bshit\b/i,
   /\bbitch\b/i,
   /\bmadarchod\b/i,
-  /\bmc\b/i,
   /\bbhenchod\b/i,
-  /\bbc\b/i,
   /\blanja\b/i,
   /\bdengey\b/i,
   /\bchodu\b/i,
-  /\bsale\b/i,
 ]
 
 function hasDenseDigitSequence(message: string): boolean {

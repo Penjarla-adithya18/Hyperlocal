@@ -20,10 +20,12 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockEmployerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { employerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { EmployerProfile, Job, Application, TrustScore } from '@/lib/types';
+import { SimpleLineChart, SimpleBarChart } from '@/components/ui/charts';
+import { getEmployerProfileCompletion } from '@/lib/profileCompletion';
 import { useI18n } from '@/contexts/I18nContext';
 
 export default function EmployerDashboardPage() {
@@ -48,10 +50,15 @@ export default function EmployerDashboardPage() {
 
     async function loadDashboardData() {
       try {
+        const findEmployerProfileByUserId = employerProfileOps?.findByUserId;
+        if (!findEmployerProfileByUserId) {
+          throw new Error('Employer profile API is unavailable. Please refresh and try again.');
+        }
+
         const [profile, trust, employerJobs] = await Promise.all([
-          mockEmployerProfileOps.findByUserId(user!.id),
-          mockTrustScoreOps.findByUserId(user!.id),
-          mockJobOps.findByEmployerId(user!.id),
+          findEmployerProfileByUserId(user!.id),
+          trustScoreOps.findByUserId(user!.id),
+          jobOps.findByEmployerId(user!.id),
         ]);
         if (cancelled) return;
 
@@ -59,9 +66,9 @@ export default function EmployerDashboardPage() {
         setTrustScore(trust);
         setJobs(employerJobs);
 
-        // Fetch applications per job in parallel (N+1 � acceptable since no bulk endpoint exists)
+        // Fetch applications per job in parallel (N+1 – acceptable since no bulk endpoint exists)
         const jobIds = employerJobs.map((j) => j.id);
-        const allApps = await Promise.all(jobIds.map((id) => mockApplicationOps.findByJobId(id)));
+        const allApps = await Promise.all(jobIds.map((id) => applicationOps.findByJobId(id)));
         if (cancelled) return;
         const flatApps = allApps.flat();
         setApplications(flatApps);
@@ -90,13 +97,41 @@ export default function EmployerDashboardPage() {
   // Calculate employer profile completeness
   const profileCompleteness = useMemo(() => {
     if (!employerProfile) return 0;
-    let score = 0;
-    if (employerProfile.businessName) score += 30;
-    if (employerProfile.location) score += 25;
-    if (employerProfile.description && employerProfile.description.length > 20) score += 25;
-    if (employerProfile.businessType) score += 20;
-    return Math.round(score);
+    return getEmployerProfileCompletion(employerProfile);
   }, [employerProfile]);
+
+  // Analytics data (deterministic from actual applications)
+  const applicationTrendData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (6 - i));
+      return day;
+    });
+
+    const countsByDay = new Map<string, number>();
+    for (const application of applications) {
+      const created = new Date(application.createdAt);
+      created.setHours(0, 0, 0, 0);
+      const key = created.toISOString().slice(0, 10);
+      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+    }
+
+    return days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        value: countsByDay.get(key) ?? 0,
+      };
+    });
+  }, [applications]);
+
+  const jobPerformanceData = jobs.slice(0, 5).map((job) => ({
+    label: job.title.slice(0, 15) + (job.title.length > 15 ? '...' : ''),
+    value: appCountByJob[job.id] || 0
+  }));
 
   if (authLoading || loading) {
     return (
@@ -253,6 +288,35 @@ export default function EmployerDashboardPage() {
             </Link>
           </div>
         </Card>
+
+        {/* Analytics Charts */}
+        <div className="grid md:grid-cols-2 gap-6">
+          <Card className="p-6 card-modern">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Applications Received</h3>
+                <p className="text-xs text-muted-foreground">Last 7 days</p>
+              </div>
+            </div>
+            <SimpleLineChart data={applicationTrendData} />
+          </Card>
+
+          <Card className="p-6 card-modern">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-accent/10 flex items-center justify-center">
+                <Briefcase className="w-5 h-5 text-accent" />
+              </div>
+              <div>
+                <h3 className="font-semibold">Top Performing Jobs</h3>
+                <p className="text-xs text-muted-foreground">By applications</p>
+              </div>
+            </div>
+            <SimpleBarChart data={jobPerformanceData} />
+          </Card>
+        </div>
 
         {/* Recent Jobs */}
         <div>

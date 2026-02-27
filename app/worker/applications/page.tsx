@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb } from '@/lib/api'
+import { applicationOps, jobOps } from '@/lib/api'
 import { Application, Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Eye } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
@@ -28,10 +28,10 @@ export default function WorkerApplicationsPage() {
   const loadApplications = async () => {
     if (!user) return
     try {
-      const workerApplications = await mockDb.getApplicationsByWorker(user.id)
+      const workerApplications = await applicationOps.findByWorkerId(user.id)
       setApplications(workerApplications)
 
-      const allJobs = await mockDb.getAllJobs()
+      const allJobs = await jobOps.getAll()
       const byId = allJobs.reduce((acc, job) => {
         acc[job.id] = job
         return acc

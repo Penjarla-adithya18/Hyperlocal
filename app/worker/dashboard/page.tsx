@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { WorkerNav } from '@/components/worker/WorkerNav';
@@ -20,9 +20,11 @@ import {
   CheckCircle2,
   AlertCircle,
 } from 'lucide-react';
-import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps } from '@/lib/api';
+import { workerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
+import { getWorkerProfileCompletion } from '@/lib/profileCompletion';
+import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
@@ -47,11 +49,16 @@ export default function WorkerDashboardPage() {
     if (!user) return;
 
     try {
+      const findWorkerProfileByUserId = workerProfileOps?.findByUserId;
+      if (!findWorkerProfileByUserId) {
+        throw new Error('Worker profile API is unavailable. Please refresh and try again.');
+      }
+
       const [profile, trust, apps, allJobs] = await Promise.all([
-        mockWorkerProfileOps.findByUserId(user.id),
-        mockTrustScoreOps.findByUserId(user.id),
-        mockApplicationOps.findByWorkerId(user.id),
-        mockJobOps.getAll({ status: 'active' }),
+        findWorkerProfileByUserId(user.id),
+        trustScoreOps.findByUserId(user.id),
+        applicationOps.findByWorkerId(user.id),
+        jobOps.getAll({ status: 'active' }),
       ]);
 
       setWorkerProfile(profile);
@@ -76,14 +83,35 @@ export default function WorkerDashboardPage() {
     }
   };
 
-  const profileCompleteness = workerProfile
-    ? Math.round(
-        ((workerProfile.skills.length > 0 ? 25 : 0) +
-          (workerProfile.availability ? 25 : 0) +
-          (workerProfile.categories.length > 0 ? 25 : 0) +
-          (workerProfile.experience ? 25 : 0))
-      )
-    : 0;
+  const profileCompleteness = workerProfile ? getWorkerProfileCompletion(workerProfile) : 0;
+
+  // Analytics data for charts (deterministic from actual applications)
+  const applicationTrendData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (6 - i));
+      return day;
+    });
+
+    const countsByDay = new Map<string, number>();
+    for (const application of applications) {
+      const created = new Date(application.createdAt);
+      created.setHours(0, 0, 0, 0);
+      const key = created.toISOString().slice(0, 10);
+      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+    }
+
+    return days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        value: countsByDay.get(key) ?? 0,
+      };
+    });
+  }, [applications]);
 
   if (authLoading || loading) {
     return (
@@ -159,6 +187,17 @@ export default function WorkerDashboardPage() {
             </div>
           ))}
         </div>
+
+        {/* Application Activity Chart */}
+        {applications.length > 0 && (
+          <Card className="card-modern p-6">
+            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+              <TrendingUp className="w-5 h-5 text-primary" />
+              Your Activity (Last 7 Days)
+            </h3>
+            <SimpleLineChart data={applicationTrendData} color="#6366f1" />
+          </Card>
+        )}
 
         {/* AI Recommendations */}
         <div>

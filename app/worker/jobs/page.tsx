@@ -10,11 +10,13 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { mockDb, mockWorkerProfileOps } from '@/lib/api'
+import { applicationOps, jobOps, workerProfileOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User, WorkerProfile } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
+import { Slider } from '@/components/ui/slider'
 
 export default function WorkerJobsPage() {
   const router = useRouter()
@@ -28,6 +30,9 @@ export default function WorkerJobsPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [locationFilter, setLocationFilter] = useState('')
+  const [payRange, setPayRange] = useState([0, 5000])
+  const [experienceFilter, setExperienceFilter] = useState('all')
+  const [showGeolocationPrompt, setShowGeolocationPrompt] = useState(true)
 
   useEffect(() => {
     if (user) {
@@ -35,28 +40,17 @@ export default function WorkerJobsPage() {
     }
   }, [user])
 
-  useEffect(() => {
-    if (!navigator.geolocation) return
-    navigator.geolocation.getCurrentPosition(
-      (position) => {
-        setWorkerCoords({
-          lat: position.coords.latitude,
-          lng: position.coords.longitude,
-        })
-      },
-      () => {
-        setWorkerCoords(null)
-      },
-      { enableHighAccuracy: false, timeout: 5000 }
-    )
-  }, [])
+  const handleLocationGranted = (coords: { lat: number; lng: number }) => {
+    setWorkerCoords(coords)
+    setShowGeolocationPrompt(false)
+  }
 
   const loadJobs = async () => {
     try {
       const [allJobs, profile, myApplications] = await Promise.all([
-        mockDb.getAllJobs(),
-        user ? mockWorkerProfileOps.findByUserId(user.id) : Promise.resolve(null),
-        user ? mockDb.getApplicationsByWorker(user.id) : Promise.resolve([]),
+        jobOps.getAll(),
+        user ? workerProfileOps.findByUserId(user.id) : Promise.resolve(null),
+        user ? applicationOps.findByWorkerId(user.id) : Promise.resolve([]),
       ])
 
       const activeJobs = allJobs.filter((j) => j.status === 'active')
@@ -68,7 +62,7 @@ export default function WorkerJobsPage() {
         const matches = await matchJobs(
           user as User,
           activeJobs,
-          mockWorkerProfileOps.findByUserId
+          workerProfileOps.findByUserId
         )
         setMatchedJobs(matches)
       }
@@ -99,9 +93,14 @@ export default function WorkerJobsPage() {
     
     const matchesCategory = categoryFilter === 'all' || job.category === categoryFilter
     const matchesLocation = !locationFilter || job.location.toLowerCase().includes(locationFilter.toLowerCase())
+    
+    const jobPay = job.payAmount || job.pay || 0
+    const matchesPay = jobPay >= payRange[0] && jobPay <= payRange[1]
+    
+    const matchesExperience = experienceFilter === 'all' || job.experienceRequired === experienceFilter
 
-    return matchesSearch && matchesCategory && matchesLocation
-  }), [jobs, searchQuery, categoryFilter, locationFilter])
+    return matchesSearch && matchesCategory && matchesLocation && matchesPay && matchesExperience
+  }), [jobs, searchQuery, categoryFilter, locationFilter, payRange, experienceFilter])
 
   const filteredMatchedJobs = useMemo(() => {
     const allowedJobIds = new Set(filteredJobs.map((job) => job.id))
@@ -192,7 +191,6 @@ export default function WorkerJobsPage() {
   }
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
-    const employer = mockDb.getUserById(job.employerId)
     const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (
@@ -202,7 +200,7 @@ export default function WorkerJobsPage() {
             <div className="flex-1">
               <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {employer?.companyName || 'Company'}
+                Company
               </p>
             </div>
             {typeof matchScore === 'number' && (
@@ -318,7 +316,12 @@ export default function WorkerJobsPage() {
             ))}
           </div>
         </div>
-
+        {showGeolocationPrompt && !workerCoords && (
+          <GeolocationPrompt
+            onLocationGranted={handleLocationGranted}
+            onDismiss={() => setShowGeolocationPrompt(false)}
+          />
+        )}
         <Card className="mb-6">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-base">
@@ -373,6 +376,33 @@ export default function WorkerJobsPage() {
                   placeholder="Location"
                   value={locationFilter}
                   onChange={(e) => setLocationFilter(e.target.value)}
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <Select value={experienceFilter} onValueChange={setExperienceFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Experience Level" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Experience</SelectItem>
+                    <SelectItem value="entry">Entry Level</SelectItem>
+                    <SelectItem value="intermediate">Intermediate</SelectItem>
+                    <SelectItem value="expert">Expert</SelectItem>
+                  </SelectContent>
+                </Select>
+                <div className="flex items-center gap-2">
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">₹{payRange[0]} - ₹{payRange[1]}</span>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <label className="text-sm font-medium">Pay Range (₹)</label>
+                <Slider
+                  min={0}
+                  max={5000}
+                  step={100}
+                  value={payRange}
+                  onValueChange={setPayRange}
+                  className="w-full"
                 />
               </div>
             </div>
