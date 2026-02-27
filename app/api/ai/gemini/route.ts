@@ -18,13 +18,15 @@ export async function POST(req: NextRequest) {
     const systemInstruction = typeof body?.systemInstruction === 'string' && body.systemInstruction.trim()
       ? body.systemInstruction.trim()
       : SYSTEM_PROMPTS.API_PROXY_DEFAULT
+    // 'ollama' forces local Ollama, skipping Groq even if a key is present
+    const provider = typeof body?.provider === 'string' ? body.provider : 'auto'
 
     if (!prompt.trim()) {
       return NextResponse.json({ error: 'prompt is required' }, { status: 400 })
     }
 
-    // ── Groq (cloud — Vercel production) ────────────────────────────────────
-    if (GROQ_API_KEY) {
+    // ── Groq (cloud — Vercel production) — skipped when provider==='ollama' ──
+    if (GROQ_API_KEY && provider !== 'ollama') {
       const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
         method: 'POST',
         headers: {

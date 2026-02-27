@@ -4,16 +4,16 @@
  * In-memory vector store for resume search.
  * Architecture:
  *  - Each indexed resume is converted to a "document" with metadata
- *  - TF-IDF–style keyword scoring + Gemini semantic re-ranking for top results
+ *  - TF-IDF–style keyword scoring + Ollama semantic re-ranking for top results
  *  - Supports natural-language queries like "resumes with data analytics experience"
  *
  * Why not embeddings?
- *  - Gemini embedding API adds latency + cost for each query
+ *  - Embedding APIs add latency + cost for each query
  *  - For < 10k documents, TF-IDF + keyword overlap is faster and cheaper
- *  - Gemini re-ranks only the top-K candidates (hybrid approach)
+ *  - Ollama re-ranks only the top-K candidates (hybrid approach)
+ *
+ * AI backend: local Ollama (provider=ollama sent to /api/ai/generate)
  */
-
-import { generateWithGemini } from './gemini'
 
 import type { ResumeData } from './types'
 import { SYSTEM_PROMPTS } from './gemini'
@@ -126,6 +126,19 @@ class RAGStore {
     return results.slice(0, limit)
   }
 
+  /** Get all indexed workers as unscored results (fallback when search yields nothing) */
+  showAll(): RAGSearchResult[] {
+    return Array.from(this.documents.values()).map((doc) => ({
+      workerId: doc.workerId,
+      workerName: doc.workerName,
+      phone: doc.phone,
+      score: 0,
+      matchedSkills: doc.parsed.skills.slice(0, 5),
+      matchedKeywords: [],
+      parsed: doc.parsed,
+    }))
+  }
+
   /** Get all indexed workers (for debugging / admin) */
   getAllDocuments(): RAGDocument[] {
     return Array.from(this.documents.values())
@@ -217,17 +230,31 @@ class RAGStore {
 
 export const ragStore = new RAGStore()
 
-// ── AI-powered semantic re-ranking (uses shared Ollama / Groq layer) ────────
+// ── AI-powered semantic re-ranking (Groq cloud → Ollama local fallback) ──────
+// Uses auto-routing: Groq when GROQ_API_KEY is set (Vercel/prod),
+// falls back to local Ollama at OLLAMA_URL when no cloud key is present.
 
-async function callGeminiForRAG(prompt: string, systemInstruction: string): Promise<string> {
-  return (await generateWithGemini(prompt, { tier: 'lite', maxTokens: 512, systemInstruction })) ?? ''
+async function callAIForRAG(prompt: string, systemInstruction: string): Promise<string> {
+  try {
+    const res = await fetch('/api/ai/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      // No provider override — auto-routes: Groq first, Ollama fallback
+      body: JSON.stringify({ prompt, systemInstruction, maxTokens: 512 }),
+    })
+    if (!res.ok) return ''
+    const data = await res.json() as { text?: string }
+    return data.text ?? ''
+  } catch {
+    return ''
+  }
 }
 
 /**
- * Enhanced search: keyword search + Gemini re-ranking.
+ * Enhanced search: keyword search + Ollama re-ranking.
  *
  * 1. Keyword search returns top 20 candidates
- * 2. Gemini re-ranks and explains the top results
+ * 2. Ollama re-ranks and explains the top results
  * 3. Returns top-K with AI explanations
  */
 export async function ragSearch(query: RAGQuery): Promise<RAGSearchResult[]> {
@@ -236,14 +263,18 @@ export async function ragSearch(query: RAGQuery): Promise<RAGSearchResult[]> {
   // Step 1: Keyword search (fast, no API cost)
   const candidates = ragStore.search({ ...query, limit: 20 })
 
-  if (candidates.length === 0) return []
+  // If no keyword matches, return ALL indexed applicants so the employer
+  // can always see their pool (semantic gap between query and stored text)
+  if (candidates.length === 0) {
+    return ragStore.showAll().slice(0, limit)
+  }
 
   // If few candidates, skip AI re-ranking
   if (candidates.length <= 3) {
     return candidates.slice(0, limit)
   }
 
-  // Step 2: Gemini re-ranking for top candidates
+  // Step 2: Ollama re-ranking for top candidates
   const summaries = candidates.slice(0, 10).map((c, i) => {
     const skills = c.parsed.skills.slice(0, 8).join(', ')
     const exp = c.parsed.experience.slice(0, 2).map((e) => `${e.title} at ${e.company}`).join('; ')
@@ -278,14 +309,14 @@ Rules:
       )
     }
 
-    const raw = await callGeminiForRAG(prompt, SYSTEM_PROMPTS.RAG_RERANKER)
+    const raw = await callAIForRAG(prompt, SYSTEM_PROMPTS.RAG_RERANKER)
     let rankings: Array<{ index: number; relevance: number; reason: string }>
 
     try {
       rankings = parseRankings(raw)
     } catch {
       const retryPrompt = `Return ONLY valid JSON array with objects: {"index":number,"relevance":number,"reason":string}.\nPrevious output:\n${raw.slice(0, 3000)}`
-      const repaired = await callGeminiForRAG(retryPrompt, SYSTEM_PROMPTS.RAG_RERANKER)
+      const repaired = await callAIForRAG(retryPrompt, SYSTEM_PROMPTS.RAG_RERANKER)
       rankings = parseRankings(repaired)
     }
 
@@ -306,59 +337,37 @@ Rules:
     reranked.sort((a, b) => b.score - a.score)
     return reranked.slice(0, limit)
   } catch {
-    // Gemini failed — return keyword results
+    // Ollama failed — return keyword results
     return candidates.slice(0, limit)
   }
 }
 
 /**
  * Natural language query parser.
- * Extracts skills, experience requirements, and keywords from a free-text query.
+ * Uses simple tokenization — fast, no API cost, no failure modes.
+ * Gemini-based parsing was removed because it caused timeouts and failures
+ * that resulted in zero search results for valid queries.
  */
 export async function parseRAGQuery(naturalQuery: string): Promise<RAGQuery> {
-  // AI query parsing — if it fails, fall back to basic keyword search below
+  const text = naturalQuery.trim()
 
-  const prompt = `Parse this recruiter search query into structured filters.
-Query: "${naturalQuery}"
+  // Extract likely skill names: capitalised words, known patterns, quoted phrases
+  const skillPatterns = [
+    // Quoted phrases → treat as exact skills
+    ...([...text.matchAll(/"([^"]+)"/g)].map((m) => m[1])),
+    // CamelCase or all-caps tokens likely to be tech names
+    ...([...text.matchAll(/\b([A-Z][a-z]+(?:\.[a-z]+)*|[A-Z]{2,})\b/g)].map((m) => m[1])),
+  ]
 
-Return ONLY JSON:
-{"keywords": "search terms", "skills": ["skill1", "skill2"], "minExperience": <number or null>}
+  // Estimate minimum experience from phrases like "3 years", "5+ years"
+  const expMatch = text.match(/(\d+)\s*\+?\s*(?:years?|yrs?)/i)
+  const minExperience = expMatch ? parseInt(expMatch[1]) : undefined
 
-Examples:
-- "find python developers with 3 years experience" → {"keywords":"python developer","skills":["Python"],"minExperience":3}
-- "resumes with data analytics projects" → {"keywords":"data analytics","skills":["Data Analytics","Data Analysis"],"minExperience":null}
-- "experienced plumber who knows pipe fitting" → {"keywords":"plumber pipe fitting","skills":["Plumbing","Pipe Fitting"],"minExperience":null}`
-
-  try {
-    const parseQueryResult = (rawText: string): { keywords: string; skills: string[]; minExperience: number | null } => {
-      const cleaned = rawText.replace(/^```json\s*/i, '').replace(/^```\s*/i, '').replace(/```$/i, '').trim()
-      const parsed = JSON.parse(cleaned) as { keywords: string; skills: string[]; minExperience: number | null }
-      return {
-        keywords: typeof parsed?.keywords === 'string' ? parsed.keywords : naturalQuery,
-        skills: Array.isArray(parsed?.skills) ? parsed.skills.filter((s) => typeof s === 'string' && s.trim()) : [],
-        minExperience: typeof parsed?.minExperience === 'number' ? parsed.minExperience : null,
-      }
-    }
-
-    const raw = await callGeminiForRAG(prompt, SYSTEM_PROMPTS.RAG_QUERY_PARSER)
-    let parsed: { keywords: string; skills: string[]; minExperience: number | null }
-
-    try {
-      parsed = parseQueryResult(raw)
-    } catch {
-      const retryPrompt = `Return ONLY valid JSON: {"keywords":"...","skills":["..."],"minExperience":number|null}.\nPrevious output:\n${raw.slice(0, 2000)}`
-      const repaired = await callGeminiForRAG(retryPrompt, SYSTEM_PROMPTS.RAG_QUERY_PARSER)
-      parsed = parseQueryResult(repaired)
-    }
-
-    return {
-      text: parsed.keywords || naturalQuery,
-      skills: parsed.skills?.filter(Boolean),
-      minExperience: parsed.minExperience ?? undefined,
-      limit: 10,
-    }
-  } catch {
-    return { text: naturalQuery, limit: 10 }
+  return {
+    text,
+    skills: [...new Set(skillPatterns.filter(Boolean))],
+    minExperience,
+    limit: 10,
   }
 }
 

@@ -62,6 +62,7 @@ Deno.serve(async (req: Request) => {
         match_score: Number(body.matchScore || 0),
         cover_message: body.coverMessage || body.coverLetter || null,
         cover_letter: body.coverLetter || body.coverMessage || null,
+        resume_url: body.resumeUrl || null,
       }
 
       const { data, error } = await supabase.from('applications').insert(payload).select('*').single()
@@ -146,6 +147,7 @@ function mapApplication(row: Record<string, unknown>) {
     matchScore: Number(row.match_score || 0),
     coverMessage: row.cover_message || undefined,
     coverLetter: row.cover_letter || row.cover_message || undefined,
+    resumeUrl: row.resume_url || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

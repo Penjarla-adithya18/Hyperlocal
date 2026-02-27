@@ -10,9 +10,10 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { workerProfileOps, userOps } from '@/lib/api'
+import { workerProfileOps, userOps, jobOps, applicationOps } from '@/lib/api'
 import { ragStore, ragSearch, parseRAGQuery, type RAGSearchResult } from '@/lib/ragEngine'
-import type { ResumeData, User } from '@/lib/types'
+import { extractTextFromDataUrl } from '@/lib/resumeParser'
+import type { Application, ResumeData, User } from '@/lib/types'
 import {
   Search, Send, Bot, User as UserIcon, FileText, Briefcase,
   Star, ChevronRight, Loader2, Database, Sparkles
@@ -49,77 +50,107 @@ export default function ResumeSearchPage() {
   }, [user])
 
   const indexWorkerResumes = async () => {
+    if (!user) return
     setIndexing(true)
+    ragStore.clear()
     try {
-      // Profiles-first approach: get all worker profiles (employer-accessible endpoint),
-      // then fetch user name/phone per profile in parallel — avoids the admin-only GET /users.
-      const allProfiles = await workerProfileOps.getAll()
+      // Step 1: Get only this employer's jobs
+      const jobs = await jobOps.findByEmployerId(user.id)
 
-      // Also try userOps.getAll() as a fallback to get richer user data, but don't block on 403
-      let userMap: Map<string, { fullName: string; phoneNumber: string }> = new Map()
-      try {
-        const allUsers = await userOps.getAll()
-        allUsers.filter((u) => u.role === 'worker').forEach((u) => {
-          userMap.set(u.id, { fullName: u.fullName, phoneNumber: u.phoneNumber })
-        })
-      } catch {
-        // 403 for non-admins is expected — we'll look up names individually below
+      if (jobs.length === 0) {
+        setIndexedCount(0)
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: 'You have no jobs posted yet. Post a job first and applicants will appear here.',
+          timestamp: new Date(),
+        }])
+        return
       }
 
+      // Step 2: Fetch all applications for each job in parallel
+      const appArrays = await Promise.all(
+        jobs.map((j) => applicationOps.findByJobId(j.id).catch(() => [] as Application[]))
+      )
+      const allApps = appArrays.flat()
+
+      if (allApps.length === 0) {
+        setIndexedCount(0)
+        setMessages([{
+          id: 'welcome',
+          role: 'assistant',
+          content: 'No one has applied to your jobs yet. Come back once you have applicants.',
+          timestamp: new Date(),
+        }])
+        return
+      }
+
+      // Step 3: Deduplicate by worker — prefer the application that has a resumeUrl
+      const workerAppMap = new Map<string, Application>()
+      for (const app of allApps) {
+        const existing = workerAppMap.get(app.workerId)
+        if (!existing || (app.resumeUrl && !existing.resumeUrl)) {
+          workerAppMap.set(app.workerId, app)
+        }
+      }
+
+      // Step 4: Build index from profile skills/bio + cover letter (no AI parsing)
       let count = 0
+      const uniqueWorkerIds = Array.from(workerAppMap.keys())
       const BATCH = 6
-      for (let i = 0; i < allProfiles.length; i += BATCH) {
+      for (let i = 0; i < uniqueWorkerIds.length; i += BATCH) {
         await Promise.all(
-          allProfiles.slice(i, i + BATCH).map(async (profile) => {
+          uniqueWorkerIds.slice(i, i + BATCH).map(async (workerId) => {
             try {
-              // Get user info (name / phone) — either from bulk cache or individual lookup
-              let workerName = userMap.get(profile.userId)?.fullName
-              let phone = userMap.get(profile.userId)?.phoneNumber
-              if (!workerName) {
-                const wUser = await userOps.findById(profile.userId).catch(() => null)
-                if (!wUser) return
-                workerName = wUser.fullName
-                phone = wUser.phoneNumber
+              const app = workerAppMap.get(workerId)!
+              const appliedJob = jobs.find((j) => j.id === app.jobId)
+
+              const [wUser, profile] = await Promise.all([
+                userOps.findById(workerId).catch(() => null),
+                workerProfileOps.findByUserId(workerId).catch(() => null),
+              ])
+              if (!wUser) return
+
+              // Try to extract actual resume text from the stored data URL
+              // Priority: apply-time resumeUrl > profile resumeUrl
+              const resumeDataUrl = app.resumeUrl || profile?.resumeUrl || ''
+              const resumeText = resumeDataUrl.startsWith('data:')
+                ? await extractTextFromDataUrl(resumeDataUrl).catch(() => '')
+                : ''
+
+              // Build searchable text: resume content first, then profile fields
+              const parts: string[] = []
+              if (resumeText.length > 50) {
+                parts.push(resumeText)
+              }
+              // Always include profile fields for structured skill matching
+              if (profile?.bio) parts.push(`About: ${profile.bio}`)
+              if (profile?.skills?.length) parts.push(`Skills: ${profile.skills.join(', ')}`)
+              if (profile?.categories?.length) parts.push(`Work types: ${profile.categories.join(', ')}`)
+              if (profile?.experience) parts.push(`Experience: ${profile.experience}`)
+              if (profile?.location) parts.push(`Location: ${profile.location}`)
+              if (profile?.availability) parts.push(`Availability: ${profile.availability}`)
+              if (app.coverLetter) parts.push(`Cover letter: ${app.coverLetter}`)
+              if (appliedJob) parts.push(`Applied for: ${appliedJob.title} (${appliedJob.category})`)
+
+              if (parts.length === 0) return
+
+              const syntheticParsed: ResumeData = {
+                summary: profile?.bio,
+                skills: [...(profile?.skills ?? []), ...(profile?.categories ?? [])],
+                experience: [],
+                education: [],
+                projects: [],
               }
 
-              if (profile.resumeText && profile.resumeParsed) {
-                // Full resume indexing
-                ragStore.index({
-                  workerId: profile.userId,
-                  workerName,
-                  phone,
-                  text: profile.resumeText,
-                  parsed: profile.resumeParsed,
-                })
-                count++
-              } else if (profile.skills?.length || profile.categories?.length) {
-                // Synthetic indexing from skills / categories for non-technical workers
-                const parts: string[] = []
-                if (profile.bio) parts.push(`About: ${profile.bio}`)
-                if (profile.skills?.length) parts.push(`Skills: ${profile.skills.join(', ')}`)
-                if (profile.categories?.length) parts.push(`Work types: ${profile.categories.join(', ')}`)
-                if (profile.experience) parts.push(`Experience: ${profile.experience}`)
-                if (profile.location) parts.push(`Location: ${profile.location}`)
-                if (profile.availability) parts.push(`Availability: ${profile.availability}`)
-
-                const syntheticText = parts.join('\n')
-                const syntheticParsed: ResumeData = {
-                  summary: profile.bio,
-                  skills: [...(profile.skills ?? []), ...(profile.categories ?? [])],
-                  experience: [],
-                  education: [],
-                  projects: [],
-                }
-
-                ragStore.index({
-                  workerId: profile.userId,
-                  workerName,
-                  phone,
-                  text: syntheticText,
-                  parsed: syntheticParsed,
-                })
-                count++
-              }
+              ragStore.index({
+                workerId,
+                workerName: wUser.fullName,
+                phone: wUser.phoneNumber,
+                text: parts.join('\n'),
+                parsed: syntheticParsed,
+              })
+              count++
             } catch {
               // Skip workers we can't load
             }
@@ -128,18 +159,16 @@ export default function ResumeSearchPage() {
       }
 
       setIndexedCount(count)
-
-      // Add initial assistant message
       setMessages([{
         id: 'welcome',
         role: 'assistant',
         content: count > 0
-          ? `I've indexed **${count} worker profile${count > 1 ? 's' : ''}** (resumes + skill profiles). Ask me anything!\n\nTry:\n• "Show workers with Python or React experience"\n• "Find electricians available on weekends"\n• "Who has plumbing and pipe fitting skills?"\n• "Experienced workers in data analytics"`
-          : 'No worker profiles found yet. Once workers sign up and complete their profiles, they\'ll appear here.',
+          ? `Indexed **${count} applicant${count !== 1 ? 's' : ''}** across your ${jobs.length} job${jobs.length !== 1 ? 's' : ''}. Search by skills, experience, availability, or anything from their cover letter.\n\nTry:\n• "Show workers with React experience"\n• "Find applicants available on weekends"\n• "Who has plumbing skills?"\n• "Workers who mentioned data analytics"`
+          : 'Could not load applicant data. Please refresh and try again.',
         timestamp: new Date(),
       }])
-    } catch (err) {
-      toast({ title: 'Error loading data', description: 'Could not load worker resumes', variant: 'destructive' })
+    } catch {
+      toast({ title: 'Error loading applicants', description: 'Could not load job applicants', variant: 'destructive' })
     } finally {
       setIndexing(false)
     }
@@ -161,18 +190,22 @@ export default function ResumeSearchPage() {
     setSearching(true)
 
     try {
-      // Parse natural language query into structured filters
+      // Parse query into structured filters (fast, no AI)
       const parsedQuery = await parseRAGQuery(query)
 
-      // Search with RAG engine (keyword + AI re-ranking)
+      // Search with RAG engine — falls back to all applicants if no keyword match
       const results = await ragSearch(parsedQuery)
 
-      // Build assistant response
+      // Detect whether we got real keyword matches or the fallback "show all"
+      const hasMatches = results.some((r) => r.score > 0)
+
       let response = ''
       if (results.length === 0) {
-        response = `No matching resumes found for "${query}". Try broadening your search or using different keywords.`
+        response = `No applicants indexed yet. Please refresh the page.`
+      } else if (hasMatches) {
+        response = `Found ${results.length} matching applicant${results.length > 1 ? 's' : ''} for "${query}":`
       } else {
-        response = `Found ${results.length} matching resume${results.length > 1 ? 's' : ''}:`
+        response = `No exact matches for "${query}" — showing all ${results.length} applicant${results.length > 1 ? 's' : ''} (their profiles may use different terminology):`
       }
 
       const assistantMsg: ChatMessage = {

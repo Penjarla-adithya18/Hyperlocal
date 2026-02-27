@@ -24,24 +24,90 @@ async function callGemini(prompt: string, systemInstruction?: string): Promise<s
 
 /** Keyword → skill taxonomy for deterministic extraction */
 const SKILL_TAXONOMY: Record<string, string[]> = {
+  // Culinary — "chef", "khansama", "cook", "bake", "kitchen"
   hotel: ['Hospitality', 'Customer Service', 'Cleaning', 'Housekeeping'],
   restaurant: ['Food Service', 'Customer Service', 'Kitchen Work', 'Hospitality'],
   cook: ['Cooking', 'Food Preparation', 'Kitchen Management', 'Recipe Knowledge'],
+  chef: ['Cooking', 'Food Preparation', 'Kitchen Management', 'Recipe Knowledge'],
+  khansama: ['Cooking', 'Food Preparation', 'Kitchen Management'],
+  kitchen: ['Cooking', 'Food Preparation', 'Kitchen Work'],
+  baking: ['Baking', 'Food Preparation', 'Cooking'],
   waiter: ['Customer Service', 'Communication', 'Food Service', 'Hospitality'],
+  steward: ['Hospitality', 'Customer Service', 'Food Service'],
+
+  // Cleaning / Domestic
   clean: ['Cleaning', 'Housekeeping', 'Maintenance', 'Attention to Detail'],
+  maid: ['Housekeeping', 'Cleaning', 'Domestic Work'],
+  bai: ['Housekeeping', 'Cleaning', 'Domestic Work'],
+  housekeeper: ['Housekeeping', 'Cleaning', 'Domestic Work'],
+  sweeper: ['Cleaning', 'Sanitation', 'Maintenance'],
+  janitor: ['Cleaning', 'Maintenance', 'Sanitation'],
+
+  // Driving / Transport
   driver: ['Driving', 'Navigation', 'Vehicle Maintenance', 'Time Management'],
+  chauffeur: ['Driving', 'Navigation', 'Customer Service'],
   delivery: ['Delivery', 'Logistics', 'Customer Service', 'Time Management'],
-  sales: ['Sales', 'Communication', 'Customer Relations', 'Negotiation'],
-  shop: ['Retail', 'Customer Service', 'Sales', 'Inventory Management'],
-  computer: ['Computer Skills', 'Data Entry', 'Office Work', 'Technology'],
-  teaching: ['Teaching', 'Communication', 'Patience', 'Subject Knowledge'],
+  'auto driver': ['Driving', 'Navigation'],
+
+  // Security
+  security: ['Security', 'Surveillance', 'Safety', 'Communication'],
+  guard: ['Security', 'Surveillance', 'Safety'],
+  watchman: ['Security', 'Surveillance', 'Safety'],
+  chowkidar: ['Security', 'Surveillance', 'Safety'],
+  bouncer: ['Security', 'Crowd Management', 'Safety'],
+
+  // Technical / Skilled Trades
   carpenter: ['Carpentry', 'Woodwork', 'Tool Handling', 'Construction'],
+  woodwork: ['Carpentry', 'Woodwork', 'Furniture Making'],
   plumber: ['Plumbing', 'Pipe Fitting', 'Maintenance', 'Problem Solving'],
+  'pipe fitting': ['Plumbing', 'Pipe Fitting', 'Maintenance'],
   electrician: ['Electrical Work', 'Wiring', 'Troubleshooting', 'Safety'],
+  wireman: ['Electrical Work', 'Wiring', 'Safety'],
+  lineman: ['Electrical Work', 'Wiring', 'Safety'],
   painter: ['Painting', 'Color Mixing', 'Surface Preparation', 'Decoration'],
   mechanic: ['Mechanical Work', 'Vehicle Repair', 'Troubleshooting', 'Tool Handling'],
-  security: ['Security', 'Surveillance', 'Safety', 'Communication'],
+  fitter: ['Mechanical Work', 'Tool Handling', 'Maintenance'],
+  welder: ['Welding', 'Fabrication', 'Tool Handling'],
+  mason: ['Construction', 'Masonry', 'Tool Handling'],
+
+  // Office / Admin / IT
+  computer: ['Computer Skills', 'Data Entry', 'Office Work', 'Technology'],
+  typing: ['Data Entry', 'Computer Skills', 'Office Work'],
+  clerk: ['Data Entry', 'Office Work', 'Computer Skills'],
+  peon: ['Office Work', 'Errand Running', 'Maintenance'],
+  'office boy': ['Office Work', 'Errand Running'],
+
+  // Teaching / Training
+  teaching: ['Teaching', 'Communication', 'Patience', 'Subject Knowledge'],
+  tutor: ['Teaching', 'Communication', 'Subject Knowledge'],
+  trainer: ['Teaching', 'Communication', 'Training'],
+  instructor: ['Teaching', 'Instruction', 'Communication'],
+  coach: ['Teaching', 'Coaching', 'Communication'],
+
+  // Sales / Retail
+  sales: ['Sales', 'Communication', 'Customer Relations', 'Negotiation'],
+  salesman: ['Sales', 'Communication', 'Negotiation'],
+  shop: ['Retail', 'Customer Service', 'Sales', 'Inventory Management'],
+
+  // Healthcare / Wellness
+  nurse: ['Healthcare', 'Patient Care', 'Medical Assistance'],
+  nursing: ['Healthcare', 'Patient Care', 'Medical Assistance'],
+  caretaker: ['Healthcare', 'Patient Care', 'Senior Care'],
+
+  // Beauty & Wellness
+  beautician: ['Beauty & Wellness', 'Grooming', 'Salon Work'],
+  hairdresser: ['Beauty & Wellness', 'Hair Styling', 'Grooming'],
+  parlour: ['Beauty & Wellness', 'Grooming', 'Salon Work'],
+  salon: ['Beauty & Wellness', 'Hair Styling', 'Grooming'],
+
+  // Gardening
   gardener: ['Gardening', 'Landscaping', 'Plant Care', 'Maintenance'],
+  landscap: ['Gardening', 'Landscaping', 'Plant Care'],
+
+  // Photography
+  photographer: ['Photography', 'Videography', 'Camera Operation'],
+  videograph: ['Photography', 'Videography', 'Camera Operation'],
+  cameraman: ['Photography', 'Videography', 'Camera Operation'],
 } as const;
 
 /** Contextual keyword → skill inferences */
@@ -84,7 +150,7 @@ export function extractSkills(description: string): string[] {
  * Truncates input to 500 chars to stay within token budget.
  */
 export async function extractSkillsWithAI(description: string): Promise<string[]> {
-  const systemInstruction = 'You are a skill extraction assistant for a job platform. Extract professional skills from job descriptions or worker experience text. Return ONLY a valid JSON array of skill name strings — no markdown, no explanation, no code fences. Example: ["Cooking","Customer Service","Food Preparation"]';
+  const systemInstruction = 'You are a skill extraction assistant for HyperLocal, India\'s hyperlocal job platform. Extract professional skills from job descriptions or worker experience text. Be aware of Indian job market synonyms: "chef/cook/khansama" = Cooking; "driver/chauffeur/cab driver" = Driving; "maid/bai/domestic help" = Housekeeping; "guard/watchman/bouncer/chowkidar" = Security; "sweeper/janitor" = Cleaning; "electrician/wireman/lineman" = Electrical Work; "fitter/mechanic/technician" = Mechanical Work; "carpenter/woodworker/furniture maker" = Carpentry; "plumber/pipe fitter" = Plumbing; "painter/colour work" = Painting; "tutor/trainer/instructor/coach" = Teaching; "peon/helper/attendant/office boy" = Office Work; "receptionist/front desk/customer representative" = Customer Service; "beautician/hairdresser/parlour work" = Beauty & Wellness; "videographer/cameraman" = Photography. Return ONLY a valid JSON array of canonical skill name strings — no markdown, no explanation, no code fences.';
   const prompt = `Extract professional skills from the following text. Return ONLY a JSON array of skill names.
 Text: "${description.slice(0, 500)}"`;
   const result = await callGemini(prompt, systemInstruction);
@@ -108,7 +174,7 @@ export async function generateMatchExplanationWithAI(
   matchScore: number,
 ): Promise<string> {
   const quality = matchScore >= 70 ? 'great' : matchScore >= 40 ? 'good' : 'possible';
-  const systemInstruction = 'You are a job match explanation assistant for HyperLocal, India\'s hyperlocal job platform. Write a single, short, encouraging sentence (maximum 20 words) explaining why a worker is a match for a job. No markdown, no greetings, no extra text — just the explanation sentence.';
+  const systemInstruction = 'You are a job match explanation assistant for HyperLocal, India\'s hyperlocal job platform. Write a single, short, encouraging sentence (maximum 20 words) explaining why a worker is a match for a job. Treat synonymous skills as equivalent when explaining: chef/cook/khansama = Cooking; driver/chauffeur = Driving; guard/watchman/chowkidar/bouncer = Security; electrician/wireman = Electrical Work; plumber/pipe fitter = Plumbing; carpenter/woodworker = Carpentry; painter = Painting; maid/bai/domestic = Housekeeping; tutor/trainer/instructor = Teaching; beautician/hairdresser = Beauty & Wellness; peon/office boy/helper = Office Work. No markdown, no greetings, no extra text — just the explanation sentence.';
   const prompt = `Worker skills: ${workerProfile.skills.join(', ')} | Categories: ${workerProfile.categories.join(', ')}
 Job requires: ${job.requiredSkills.join(', ')} in ${job.category} at ${job.location}
 Match score: ${matchScore}%. Write ONE sentence (max 20 words) explaining why this is a ${quality} match.`;
@@ -179,14 +245,111 @@ function tokenize(skill: string): string[] {
     .filter((t) => t.length > 1);
 }
 
+// ── Skill synonym map ─────────────────────────────────────────────────────
+// Maps alternate / regional / Indian-English terms → canonical skill name.
+// Both the worker skill and job skill are normalised before similarity scoring,
+// so "Chef" on a worker profile correctly matches a job requiring "Cooking".
+const SKILL_SYNONYMS: Record<string, string> = {
+  // Culinary
+  chef: 'cooking', cook: 'cooking', khansama: 'cooking', 'head cook': 'cooking',
+  baker: 'baking', barista: 'food service', bartender: 'food service',
+  'food preparation': 'cooking', 'kitchen work': 'cooking',
+
+  // Driving / Transport
+  driver: 'driving', chauffeur: 'driving', 'cab driver': 'driving',
+  'auto driver': 'driving', 'truck driver': 'driving', 'bike rider': 'driving',
+
+  // Cleaning / Domestic
+  maid: 'housekeeping', bai: 'housekeeping', 'domestic help': 'housekeeping',
+  housekeeper: 'housekeeping', sweeper: 'cleaning', janitor: 'cleaning',
+  'cleaning staff': 'cleaning',
+
+  // Security
+  guard: 'security', watchman: 'security', chowkidar: 'security',
+  bouncer: 'security', 'security guard': 'security',
+
+  // Construction / Civil
+  mason: 'construction', bricklayer: 'construction', 'civil work': 'construction',
+
+  // Electrical
+  wireman: 'electrical work', lineman: 'electrical work',
+  'electrical technician': 'electrical work',
+
+  // Mechanical / Repair
+  fitter: 'mechanical work', repairer: 'maintenance', 'motor mechanic': 'mechanical work',
+  'two-wheeler mechanic': 'mechanical work',
+
+  // Plumbing
+  'pipe fitter': 'plumbing', 'pipe work': 'plumbing',
+
+  // Carpentry / Woodwork
+  woodworker: 'carpentry', 'furniture maker': 'carpentry', 'wood work': 'carpentry',
+
+  // Painting
+  'colour work': 'painting', 'wall painting': 'painting',
+
+  // Teaching / Training
+  tutor: 'teaching', trainer: 'teaching', instructor: 'teaching',
+  coach: 'teaching', 'home tutor': 'teaching',
+
+  // Office / Admin
+  peon: 'office work', 'office boy': 'office work', helper: 'office work',
+  attendant: 'office work', clerk: 'data entry', typist: 'data entry',
+
+  // Customer Service / Hospitality
+  receptionist: 'customer service', 'front desk': 'customer service',
+  steward: 'hospitality', 'hotel staff': 'hospitality',
+
+  // Sales
+  salesman: 'sales', salesperson: 'sales', 'sales executive': 'sales',
+  'field sales': 'sales',
+
+  // Beauty & Wellness
+  beautician: 'beauty & wellness', hairdresser: 'beauty & wellness',
+  stylist: 'beauty & wellness', 'parlour work': 'beauty & wellness',
+  'beauty parlour': 'beauty & wellness', 'salon work': 'beauty & wellness',
+
+  // IT / Tech
+  developer: 'software development', programmer: 'software development',
+  coder: 'software development', it: 'computer skills',
+  'tech support': 'it & tech support',
+
+  // Healthcare
+  nurse: 'healthcare', nursing: 'healthcare', caretaker: 'healthcare',
+  'patient care': 'healthcare',
+
+  // Photography
+  videographer: 'photography', cameraman: 'photography',
+
+  // Gardening / Landscaping
+  landscaper: 'gardening',
+} as const;
+
+/**
+ * Resolve a skill name to its canonical form using the synonym map.
+ * e.g. "Chef" → "cooking", "Watchman" → "security"
+ */
+function normalizeSkill(skill: string): string {
+  const lower = skill.toLowerCase().trim();
+  return SKILL_SYNONYMS[lower] ?? lower;
+}
+
 /**
  * Calculate similarity between two skills using token overlap (Jaccard-like).
+ * Normalises synonyms first so "Chef" ↔ "Cooking" = 1.0,
+ * "Wireman" ↔ "Electrical Work" = 1.0, etc.
  * Returns a value between 0 and 1.
- * This avoids false positives from naive `includes()` (e.g. "Data" matching "Update Database").
  */
 function skillSimilarity(skillA: string, skillB: string): number {
-  const tokensA = tokenize(skillA);
-  const tokensB = tokenize(skillB);
+  // Resolve synonyms before tokenising
+  const normA = normalizeSkill(skillA);
+  const normB = normalizeSkill(skillB);
+
+  // Exact match after normalisation
+  if (normA === normB) return 1;
+
+  const tokensA = tokenize(normA);
+  const tokensB = tokenize(normB);
   if (tokensA.length === 0 || tokensB.length === 0) return 0;
 
   const setA = new Set(tokensA);

@@ -68,6 +68,7 @@ export function mapApplication(row: AnyRecord): Application {
     matchScore: Number(row.match_score || 0),
     coverMessage: row.cover_message || undefined,
     coverLetter: row.cover_letter || row.cover_message || undefined,
+    resumeUrl: row.resume_url || undefined,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }

@@ -200,6 +200,36 @@ export async function extractTextFromFile(file: File): Promise<string> {
   try { return await file.text() } catch { return '' }
 }
 
+/**
+ * Extract raw text from a data URL (base64-encoded file) without any AI.
+ * Works for PDF, DOCX, and plain-text data URLs.
+ * Returns empty string on failure — safe to call speculatively.
+ */
+export async function extractTextFromDataUrl(dataUrl: string): Promise<string> {
+  try {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return ''
+    const [header, base64] = dataUrl.split(',')
+    if (!base64) return ''
+    const mimeType = header.replace('data:', '').replace(/;base64$/, '') || 'application/octet-stream'
+
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+    // Determine file extension from MIME type
+    let ext = 'bin'
+    if (mimeType.includes('pdf')) ext = 'pdf'
+    else if (mimeType.includes('vnd.openxmlformats') || mimeType.includes('docx')) ext = 'docx'
+    else if (mimeType.includes('msword')) ext = 'doc'
+    else if (mimeType.includes('text')) ext = 'txt'
+
+    const file = new File([bytes], `resume.${ext}`, { type: mimeType })
+    return await extractTextFromFile(file)
+  } catch {
+    return ''
+  }
+}
+
 // ── Gemini prompt ────────────────────────────────────────────────────────────
 
 function buildResumePrompt(text: string): string {
