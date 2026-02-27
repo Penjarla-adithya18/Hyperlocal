@@ -906,18 +906,45 @@ export const ratingOps = {
 
 // ─── WATI WhatsApp Notifications ──────────────────────────────────────────
 
+/** All supported WATI notification templates */
+export type WATITemplate =
+  | 'application_accepted'
+  | 'application_rejected'
+  | 'new_application'
+  | 'job_posted'
+  | 'job_completed'
+  | 'escrow_locked'
+  | 'escrow_released'
+  | 'trust_score_update'
+
 /**
  * Send a WhatsApp/WATI notification for key platform events.
  * Silently fails — never blocks the main action.
+ *
+ * @param template - One of the WATI template keys
+ * @param phoneNumber - Worker/employer phone (will be normalised server-side)
+ * @param params - Ordered params array matching the template (e.g. [workerName, jobTitle])
  */
 export async function sendWATIAlert(
-  action: 'application_accepted' | 'payment_released' | 'job_matched' | 'job_completed',
+  template: WATITemplate,
   phoneNumber: string,
-  vars?: Record<string, string>
+  params: string[] = [],
 ): Promise<void> {
   try {
-    await call('wati', 'POST', {}, { action, phoneNumber, ...vars })
-  } catch {
+    if (!phoneNumber) {
+      console.warn(`[WATI] sendWATIAlert skipped — no phone number (template=${template})`)
+      return
+    }
+    console.log(`[WATI] sendWATIAlert → template=${template}  phone=${phoneNumber}  params=${JSON.stringify(params)}`)
+    const res = await call('wati', 'POST', {}, {
+      action: 'notify',
+      phone: phoneNumber,
+      template,
+      params,
+    })
+    console.log('[WATI] sendWATIAlert response:', JSON.stringify(res))
+  } catch (err) {
+    console.error('[WATI] sendWATIAlert failed:', err)
     // Fire-and-forget: never block the UI for notification failures
   }
 }

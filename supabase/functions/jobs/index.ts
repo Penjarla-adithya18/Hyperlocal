@@ -158,11 +158,18 @@ Deno.serve(async (req: Request) => {
       const { data, error } = await supabase.from('jobs').insert(payload).select('*').single()
       if (error) throw error
 
+      const mappedJob = mapJob(data)
+
       try {
-        await notifyMatchingWorkersBySms(supabase, mapJob(data))
+        await notifyMatchingWorkersBySms(supabase, mappedJob)
       } catch (smsErr) {
         console.error('jobs sms notify error:', smsErr)
       }
+
+      // WhatsApp notification to matching workers (fire-and-forget)
+      notifyMatchingWorkersViaWhatsApp(supabase, mappedJob).catch((e: unknown) => {
+        console.error('jobs whatsapp notify error:', e)
+      })
 
       // Push notification to all subscribed workers (fire-and-forget)
       const jobTitle = (data as Record<string, unknown>).title as string || 'New Job'
@@ -176,7 +183,7 @@ Deno.serve(async (req: Request) => {
         'new-job'
       ).catch(() => {})
 
-      return jsonResponse({ data: mapJob(data) })
+      return jsonResponse({ data: mappedJob })
     }
 
     if (method === 'PATCH' && id) {
@@ -427,4 +434,161 @@ async function notifyMatchingWorkersBySms(
   const sentCount = settled.filter((result) => result.status === 'fulfilled').length
   const failedCount = settled.length - sentCount
   console.log(`jobs sms notify: job=${job.id} recipients=${recipients.length} sent=${sentCount} failed=${failedCount}`)
+}
+
+// ── WhatsApp (WATI) notification — routes through the central /wati edge fn ──
+
+/**
+ * Call the central /wati edge function to send a WhatsApp notification.
+ * This ensures ALL WhatsApp messages flow through the single, tested wati function
+ * (phone normalisation, template rendering, and WATI API key all live there).
+ */
+async function callWatiFunction(template: string, phone: string, params: string[]): Promise<void> {
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+  const serviceKey  = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+
+  if (!supabaseUrl || !serviceKey) {
+    console.error('[WATI-JOBS] Cannot call /wati — SUPABASE_URL or SERVICE_ROLE_KEY missing')
+    return
+  }
+
+  const endpoint = `${supabaseUrl}/functions/v1/wati`
+  console.log(`[WATI-JOBS] → /wati  template=${template}  phone=${phone}  params=${JSON.stringify(params)}`)
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${serviceKey}`,
+    },
+    body: JSON.stringify({ action: 'notify', phone, template, params }),
+  })
+
+  const text = await res.text()
+  if (!res.ok) {
+    console.error(`[WATI-JOBS] /wati returned ${res.status}: ${text.substring(0, 300)}`)
+    throw new Error(`/wati failed: ${res.status} ${text.substring(0, 100)}`)
+  }
+  console.log(`[WATI-JOBS] ✅ /wati success: ${text.substring(0, 200)}`)
+}
+
+/**
+ * Notify matching workers via WhatsApp when a new job is posted.
+ * Reuses the same matching logic as SMS but sends via the central /wati edge function.
+ */
+async function notifyMatchingWorkersViaWhatsApp(
+  supabase: ReturnType<typeof createServiceClient>,
+  job: ReturnType<typeof mapJob>
+): Promise<void> {
+  console.log(`[WATI-JOBS] ── notifyMatchingWorkersViaWhatsApp START  jobId=${job.id}  title="${job.title}"  skills=${JSON.stringify(job.requiredSkills)}  category=${job.category}`)
+
+  const requiredSkills = Array.isArray(job.requiredSkills) ? job.requiredSkills : []
+  const category = typeof job.category === 'string' ? job.category : ''
+
+  // ── Strategy 1: Try worker_profiles table first (has skills, categories, location) ──
+  const { data: profileRows, error: profileError } = await supabase
+    .from('worker_profiles')
+    .select('user_id, skills, categories, location')
+  if (profileError) {
+    console.error('[WATI-JOBS] worker_profiles query failed:', profileError.message)
+  }
+  const profiles = (profileRows || []) as WorkerProfileRow[]
+  console.log(`[WATI-JOBS] worker_profiles found: ${profiles.length}`)
+
+  type Recipient = { name: string; phone: string; score: number }
+  let recipients: Recipient[] = []
+
+  if (profiles.length > 0) {
+    const userIds = profiles.map((p) => p.user_id)
+    const { data: workerRows, error: workerError } = await supabase
+      .from('users')
+      .select('id, full_name, phone_number, role, is_verified')
+      .in('id', userIds)
+      .eq('role', 'worker')
+    if (workerError) console.error('[WATI-JOBS] users query (profiles) failed:', workerError.message)
+
+    const workers = (workerRows || []) as WorkerUserRow[]
+    console.log(`[WATI-JOBS] worker users from profiles: ${workers.length}`)
+    const workerById = new Map(workers.map((w) => [w.id, w]))
+
+    recipients = profiles
+      .map((profile) => {
+        const worker = workerById.get(profile.user_id)
+        if (!worker) return null
+        if (!worker.phone_number) { console.log(`[WATI-JOBS]   skip ${profile.user_id}: no phone`); return null }
+
+        const skillMatch    = intersectsCaseInsensitive(requiredSkills, profile.skills || [])
+        const categoryMatch = intersectsCaseInsensitive(category ? [category] : [], profile.categories || [])
+        if (!skillMatch && !categoryMatch) return null
+
+        return {
+          name: worker.full_name || 'Worker',
+          phone: worker.phone_number,
+          score: (skillMatch ? 2 : 0) + (categoryMatch ? 1 : 0),
+        }
+      })
+      .filter((r): r is Recipient => !!r)
+  }
+
+  // ── Strategy 2: Fallback — query users table directly for skills match ──
+  // This covers workers who registered with skills but never created a worker_profile row
+  if (recipients.length === 0) {
+    console.log('[WATI-JOBS] No matches from worker_profiles — falling back to users.skills')
+    const { data: allWorkers, error: wErr } = await supabase
+      .from('users')
+      .select('id, full_name, phone_number, skills, is_verified')
+      .eq('role', 'worker')
+    if (wErr) console.error('[WATI-JOBS] users fallback query failed:', wErr.message)
+
+    const workersList = (allWorkers || []) as Array<{
+      id: string; full_name: string | null; phone_number: string | null;
+      skills: string[] | null; is_verified: boolean | null
+    }>
+    console.log(`[WATI-JOBS] fallback: ${workersList.length} workers total`)
+
+    recipients = workersList
+      .map((w) => {
+        if (!w.phone_number) return null
+        const skillMatch = intersectsCaseInsensitive(requiredSkills, w.skills || [])
+        if (!skillMatch) return null
+        return { name: w.full_name || 'Worker', phone: w.phone_number, score: skillMatch ? 2 : 0 }
+      })
+      .filter((r): r is Recipient => !!r)
+
+    // If STILL no skill matches, send to ALL workers with phone numbers (up to 50) — broad alert
+    if (recipients.length === 0 && workersList.length > 0) {
+      console.log('[WATI-JOBS] No skill matches either — broadcasting to all workers with phones')
+      recipients = workersList
+        .filter((w) => !!w.phone_number)
+        .map((w) => ({ name: w.full_name || 'Worker', phone: w.phone_number!, score: 0 }))
+    }
+  }
+
+  recipients = recipients.sort((a, b) => b.score - a.score).slice(0, 50)
+
+  if (!recipients.length) {
+    console.log(`[WATI-JOBS] 0 recipients for job ${job.id} — no workers with phone numbers exist`)
+    return
+  }
+
+  console.log(`[WATI-JOBS] Sending to ${recipients.length} workers`)
+
+  const pay      = String(job.payAmount || job.pay || 'Negotiable')
+  const location = job.location || 'Flexible'
+
+  const settled = await Promise.allSettled(
+    recipients.map((r) =>
+      callWatiFunction('job_posted', r.phone, [r.name, job.title, location, pay])
+    )
+  )
+
+  const sent   = settled.filter((s) => s.status === 'fulfilled').length
+  const failed = recipients.length - sent
+  if (failed > 0) {
+    const errs = settled
+      .filter((s): s is PromiseRejectedResult => s.status === 'rejected')
+      .map((s) => (s.reason as Error)?.message ?? String(s.reason))
+    console.error(`[WATI-JOBS] Failed notifications:`, errs.slice(0, 5))
+  }
+  console.log(`[WATI-JOBS] ── notifyMatchingWorkersViaWhatsApp DONE  job=${job.id}  sent=${sent}  failed=${failed}`)
 }

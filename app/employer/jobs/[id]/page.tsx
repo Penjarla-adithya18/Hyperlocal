@@ -136,7 +136,7 @@ export default function EmployerJobDetailPage() {
         const worker = await userOps.findById(acceptedApp.workerId).catch(() => null)
         const amount = job?.payAmount ?? job?.pay ?? 0
         if (worker) {
-          sendWATIAlert('payment_released', worker.phoneNumber, { jobTitle: job?.title ?? '', amount: String(amount) })
+          sendWATIAlert('escrow_released', worker.phoneNumber, [worker.fullName, String(Math.round(amount * 0.9)), job?.title ?? ''])
         }
         // In-app notification
         try {
@@ -207,7 +207,7 @@ export default function EmployerJobDetailPage() {
         // Send WhatsApp alert
         const worker = await userOps.findById(app.workerId).catch(() => null)
         if (worker) {
-          sendWATIAlert('application_accepted', worker.phoneNumber, { jobTitle: job.title })
+          sendWATIAlert('application_accepted', worker.phoneNumber, [worker.fullName, job.title, user?.fullName ?? 'Employer'])
         }
       }
 
@@ -235,6 +235,12 @@ export default function EmployerJobDetailPage() {
             link: `/worker/jobs`,
           })
         } catch (e) { console.error('Notification failed', e) }
+
+        // Send WhatsApp rejection alert
+        const worker = await userOps.findById(app.workerId).catch(() => null)
+        if (worker) {
+          sendWATIAlert('application_rejected', worker.phoneNumber, [worker.fullName, job.title, user?.fullName ?? 'Employer'])
+        }
       }
 
       toast({ title: 'Application Rejected', description: 'The worker has been notified.' })

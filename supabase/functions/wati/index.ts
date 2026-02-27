@@ -6,8 +6,10 @@
 import { handleCors, jsonResponse, errorResponse } from '../_shared/cors.ts'
 import { createServiceClient } from '../_shared/auth.ts'
 
-const WATI_API_URL  = Deno.env.get('WATI_API_URL')  ?? ''  // e.g. https://live-mt-server.wati.io/12345
+const WATI_API_URL  = Deno.env.get('WATI_API_URL')  ?? ''  // e.g. https://live-mt-server.wati.io
 const WATI_API_KEY  = Deno.env.get('WATI_API_KEY')  ?? ''  // Bearer token from WATI dashboard
+const TENANT_ID     = Deno.env.get('TENANT_ID')     ?? ''  // WATI tenant ID
+const WATI_TEMPLATE = Deno.env.get('WATI_TEMPLATE_NAME') ?? 'sih' // approved template name
 const OTP_TTL_MS    = 5 * 60 * 1000                        // 5 minutes
 
 // In-memory fallback store — used when otp_verifications table is unavailable
@@ -19,15 +21,36 @@ function generateOTP(): string {
   return Math.floor(100000 + Math.random() * 900000).toString()
 }
 
-// Normalise to E.164 without + for WATI (WATI expects 91XXXXXXXXXX format)
+// Normalise to E.164 without + for WATI (WATI expects 91XXXXXXXXXX for India)
 function normalisePhone(phone: string): string {
-  return phone.replace(/^\+/, '')
+  // Strip all non-digit characters
+  let digits = phone.replace(/\D/g, '')
+  // 10-digit Indian mobile (starts with 6–9) → prepend 91
+  if (digits.length === 10 && /^[6-9]/.test(digits)) {
+    return '91' + digits
+  }
+  // Already full 12-digit Indian number (91XXXXXXXXXX)
+  if (digits.length === 12 && digits.startsWith('91')) {
+    return digits
+  }
+  // Fallback: return cleaned digits as-is
+  return digits
 }
 
 async function sendWhatsAppMessage(phone: string, message: string): Promise<void> {
   if (!WATI_API_URL || !WATI_API_KEY) {
-    console.log(`[WATI MOCK] Would send to ${phone}: ${message}`)
+    console.warn(`[WATI MOCK] WATI_API_URL or WATI_API_KEY not set! Would send to ${phone}: ${message.substring(0, 80)}`)
     return
+  }
+
+  // Try template API first (works outside 24h session window), fall back to session message
+  if (TENANT_ID) {
+    try {
+      await sendWhatsAppTemplate(phone, message)
+      return
+    } catch (e) {
+      console.warn('[WATI] Template send failed, falling back to session message:', (e as Error).message)
+    }
   }
 
   const url = `${WATI_API_URL}/api/v1/sendSessionMessage/${normalisePhone(phone)}?messageText=${encodeURIComponent(message)}`
@@ -41,9 +64,43 @@ async function sendWhatsAppMessage(phone: string, message: string): Promise<void
 
   if (!res.ok) {
     const text = await res.text()
-    console.error('[WATI] Send failed:', res.status, text)
+    console.error('[WATI] Session send failed:', res.status, text)
     throw new Error(`WATI delivery failed: ${res.status}`)
   }
+}
+
+/**
+ * Send via WATI Template Message API (works outside 24h window).
+ * Uses the approved template with a single "message_body" parameter.
+ */
+async function sendWhatsAppTemplate(phone: string, message: string): Promise<void> {
+  const formattedPhone = normalisePhone(phone)
+  const sanitizedMessage = message.replace(/[\n\r\t]/g, ' ').replace(/\s+/g, ' ').trim()
+
+  const endpoint = `${WATI_API_URL}/${TENANT_ID}/api/v1/sendTemplateMessage?whatsappNumber=${formattedPhone}`
+  const payload = {
+    template_name: WATI_TEMPLATE,
+    broadcast_name: 'HyperLocal Notification',
+    parameters: [{ name: 'message_body', value: sanitizedMessage }],
+  }
+
+  console.log(`[WATI] Sending template to ${formattedPhone} via ${endpoint}`)
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${WATI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(payload),
+  })
+
+  const text = await res.text()
+  if (!res.ok) {
+    console.error('[WATI] Template send failed:', res.status, text)
+    throw new Error(`WATI template failed: ${res.status} ${text.substring(0, 200)}`)
+  }
+  console.log(`[WATI] ✅ Template message sent to ${formattedPhone}, response: ${text.substring(0, 200)}`)
 }
 
 // ── Template messages ─────────────────────────────────────────────────────────
@@ -60,6 +117,9 @@ const TEMPLATES: Record<string, (params: string[]) => string> = {
 
   new_application: ([employerName, workerName, jobTitle]) =>
     `📩 *New Application Received*\n\nHi ${employerName},\n\n*${workerName}* has applied for your job: *${jobTitle}*\n\nLogin to review the application and match score. 👀`,
+
+  job_posted: ([workerName, jobTitle, location, pay]) =>
+    `🆕 *New Job Alert!*\n\nHi ${workerName},\n\nA new job matching your skills has been posted:\n\n*${jobTitle}*\n📍 ${location}\n💰 ₹${pay}\n\nOpen HyperLocal Jobs to apply before it fills up! 🏃`,
 
   job_completed: ([userName, jobTitle]) =>
     `✅ *Job Completed*\n\nHi ${userName}, the job *${jobTitle}* has been marked as completed.\n\nEscrow payment will be released shortly. Please rate your experience! ⭐`,
@@ -201,17 +261,27 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── ACTION: notify ───────────────────────────────────────────────────────
-    if (action === 'notify') {
-      const { template, params = [] } = body
-      if (!template || !TEMPLATES[template]) {
-        return errorResponse(`Unknown template: ${template}`, 400)
-      }
+    // Support BOTH formats:
+    //   NEW: { action: 'notify', phone, template: 'application_accepted', params: [...] }
+    //   OLD: { action: 'application_accepted', phone, params: [...] }  (backward-compat)
+    const isNotifyAction = action === 'notify'
+    const templateKey = isNotifyAction ? (body.template ?? '') : action
+    const templateParams = body.params ?? []
 
-      const message = TEMPLATES[template](params)
+    if (TEMPLATES[templateKey]) {
+      console.log(`[WATI] notify: template=${templateKey}, phone=${phone}, params=${JSON.stringify(templateParams)}`)
+      const message = TEMPLATES[templateKey](templateParams)
       await sendWhatsAppMessage(phone, message)
       return jsonResponse({ success: true, message: 'Notification sent via WhatsApp' })
     }
 
+    // If action was 'notify' but template is unknown
+    if (isNotifyAction) {
+      console.error(`[WATI] Unknown template: ${body.template}`)
+      return errorResponse(`Unknown template: ${body.template}`, 400)
+    }
+
+    console.error(`[WATI] Unknown action: ${action}`)
     return errorResponse(`Unknown action: ${action}`, 400)
 
   } catch (err) {
