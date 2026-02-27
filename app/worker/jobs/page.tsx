@@ -27,6 +27,7 @@ export default function WorkerJobsPage() {
   const [matchedJobs, setMatchedJobs] = useState<Array<{ job: Job; score: number }>>([])
   const [workerProfile, setWorkerProfile] = useState<WorkerProfile | null>(null)
   const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null)
+  const [searchCoords, setSearchCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [authError, setAuthError] = useState(false)
@@ -102,6 +103,26 @@ export default function WorkerJobsPage() {
     }
   }
 
+  // ── Distance helpers (must be before useMemo blocks that use them) ──────
+  const activeCoords = workerCoords ?? searchCoords
+
+  const getDistanceKm = (job: Job): number | null => {
+    if (!activeCoords || job.latitude === undefined || job.longitude === undefined) return null
+    const toRad = (v: number) => (v * Math.PI) / 180
+    const dLat = toRad(job.latitude - activeCoords.lat)
+    const dLng = toRad(job.longitude - activeCoords.lng)
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(activeCoords.lat)) * Math.cos(toRad(job.latitude)) * Math.sin(dLng / 2) ** 2
+    return 6371 * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
+  }
+
+  const getDistanceText = (job: Job) => {
+    const km = getDistanceKm(job)
+    if (km === null) return null
+    return km < 1 ? `${Math.round(km * 1000)} m away` : `${km.toFixed(1)} km away`
+  }
+
   const isProfileReady = useMemo(() => {
     if (!workerProfile) return false
     return Boolean(
@@ -146,15 +167,22 @@ export default function WorkerJobsPage() {
 
   const topFiveMatches = useMemo(() => filteredMatchedJobs.slice(0, 5), [filteredMatchedJobs])
 
-  // For "All Jobs" tab, sort escrow-backed jobs before non-escrow, then by recency
+  // For "All Jobs" tab, sort by distance when coords available, then escrow, then recency
   const sortedFilteredJobs = useMemo(() => {
     return [...filteredJobs].sort((a, b) => {
+      // Distance sort first when location coords are available
+      const distA = getDistanceKm(a)
+      const distB = getDistanceKm(b)
+      if (distA !== null && distB !== null) return distA - distB
+      if (distA !== null) return -1
+      if (distB !== null) return 1
+      // Escrow-backed jobs next
       const aEscrow = a.escrowRequired !== false ? 1 : 0
       const bEscrow = b.escrowRequired !== false ? 1 : 0
       if (aEscrow !== bEscrow) return bEscrow - aEscrow
       return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
     })
-  }, [filteredJobs])
+  }, [filteredJobs, activeCoords])
 
   const uniqueCategories = useMemo(() => {
     const categories = Array.from(new Set(jobs.map((job) => job.category).filter(Boolean)))
@@ -210,24 +238,6 @@ export default function WorkerJobsPage() {
     return insights.slice(0, 3)
   }, [isProfileReady, topFiveMatches.length, missingSkills])
 
-  const getDistanceText = (job: Job) => {
-    if (!workerCoords || job.latitude === undefined || job.longitude === undefined) {
-      return 'Distance unavailable'
-    }
-
-    const toRad = (value: number) => (value * Math.PI) / 180
-    const earthKm = 6371
-    const dLat = toRad(job.latitude - workerCoords.lat)
-    const dLng = toRad(job.longitude - workerCoords.lng)
-    const a =
-      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(toRad(workerCoords.lat)) * Math.cos(toRad(job.latitude)) *
-      Math.sin(dLng / 2) * Math.sin(dLng / 2)
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-    const km = earthKm * c
-    return `${km.toFixed(1)} km away`
-  }
-
   const getMatchBadgeClass = (score: number) => {
     if (score >= 80) return 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-200'
     if (score >= 60) return 'bg-blue-100 text-blue-800 dark:bg-blue-950/40 dark:text-blue-200'
@@ -272,10 +282,17 @@ export default function WorkerJobsPage() {
               <MapPin className="h-4 w-4 text-muted-foreground" />
               <span className="truncate">{job.location}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <Route className="h-4 w-4 text-muted-foreground" />
-              <span>{getDistanceText(job)}</span>
-            </div>
+            {getDistanceText(job) ? (
+              <div className="flex items-center gap-2 text-sm text-blue-600 dark:text-blue-400 font-medium">
+                <Route className="h-4 w-4 shrink-0" />
+                <span className="truncate">{getDistanceText(job)}</span>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground/60">
+                <Route className="h-4 w-4 shrink-0" />
+                <span className="truncate text-xs">Enable location for distance</span>
+              </div>
+            )}
             <div className="flex items-center gap-2 text-sm">
               <IndianRupee className="h-4 w-4 text-muted-foreground" />
               <span className="font-semibold truncate">₹{job.payAmount}/{job.payType === 'hourly' ? 'hr' : 'fixed'}</span>
@@ -480,13 +497,17 @@ export default function WorkerJobsPage() {
                       ))}
                   </SelectContent>
                 </Select>
-                <LocationInput
+              <LocationInput
                   value={locationFilter}
-                  onChange={(value) => setLocationFilter(value)}
-                  placeholder="Location"
+                  onChange={(value, latLng) => {
+                    setLocationFilter(value)
+                    if (latLng) setSearchCoords(latLng)
+                    else if (!value) setSearchCoords(null)
+                  }}
+                  placeholder="Filter by location"
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 gap-3">
                 <Select value={experienceFilter} onValueChange={setExperienceFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="Experience Level" />
@@ -508,12 +529,12 @@ export default function WorkerJobsPage() {
                     <SelectItem value="remote">Remote</SelectItem>
                   </SelectContent>
                 </Select>
-                <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">₹{payRange[0].toLocaleString('en-IN')} – ₹{payRange[1].toLocaleString('en-IN')}</span>
-                </div>
               </div>
               <div className="space-y-2">
-                <label className="text-sm font-medium">Pay Range (₹)</label>
+                <div className="flex items-center justify-between">
+                  <label className="text-sm font-medium">Pay Range (₹)</label>
+                  <span className="text-sm text-muted-foreground">₹{payRange[0].toLocaleString('en-IN')} – ₹{payRange[1].toLocaleString('en-IN')}</span>
+                </div>
                 <Slider
                   min={0}
                   max={100000}
@@ -528,7 +549,7 @@ export default function WorkerJobsPage() {
         </Card>
 
         <Tabs defaultValue="recommended" className="w-full">
-          <TabsList className="mb-6 w-full flex-wrap">
+          <TabsList className="w-full flex-wrap">
             <TabsTrigger value="recommended" className="gap-2 flex-1 min-w-[140px]">
               <Sparkles className="h-4 w-4" />
               <span className="hidden sm:inline">Recommended</span><span className="sm:hidden">AI Match</span> ({topFiveMatches.length})
@@ -537,6 +558,15 @@ export default function WorkerJobsPage() {
               All Jobs ({filteredJobs.length})
             </TabsTrigger>
           </TabsList>
+          {activeCoords && (
+            <div className="flex items-center gap-1.5 mt-2 mb-4 text-xs text-blue-600 dark:text-blue-400">
+              <Route className="h-3.5 w-3.5" />
+              <span>Sorted by distance from selected location</span>
+            </div>
+          )}
+          {!activeCoords && (
+            <div className="mt-2 mb-4" />
+          )}
 
           <TabsContent value="recommended">
             {topFiveMatches.length === 0 ? (

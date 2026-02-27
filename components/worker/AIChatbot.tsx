@@ -762,7 +762,7 @@ export default function AIChatbot() {
       {/* Floating Action Button */}
       <button
         onClick={() => setOpen(!open)}
-        className={`fixed bottom-20 md:bottom-6 right-4 md:right-6 z-50 h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 ${
+        className={`fixed bottom-24 md:bottom-8 right-4 md:right-6 z-[60] h-14 w-14 rounded-full shadow-lg flex items-center justify-center transition-all duration-300 ${
           open
             ? 'bg-destructive text-destructive-foreground rotate-0'
             : 'bg-primary text-primary-foreground hover:scale-110'
@@ -777,7 +777,7 @@ export default function AIChatbot() {
 
       {/* Chat Panel */}
       {open && (
-        <div className="fixed bottom-36 md:bottom-22 right-4 md:right-6 z-50 w-[calc(100vw-2rem)] sm:w-[400px] h-[500px] md:h-[550px] bg-background border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
+        <div className="fixed bottom-44 md:bottom-24 right-4 md:right-6 z-[60] w-[calc(100vw-2rem)] sm:w-[400px] h-[500px] md:h-[550px] bg-background border rounded-2xl shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-bottom-4 fade-in duration-300">
           {/* Header */}
           <div className="bg-primary text-primary-foreground px-4 py-3 flex items-center gap-3 shrink-0">
             <div className="h-9 w-9 rounded-full bg-primary-foreground/20 flex items-center justify-center">
