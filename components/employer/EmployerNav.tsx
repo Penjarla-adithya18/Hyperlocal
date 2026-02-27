@@ -131,10 +131,10 @@ export function EmployerNav() {
                 size="sm"
                 onClick={logout}
                 className="gap-2 touch-target"
-                title={t('nav.logout')}
+                title="Logout"
               >
                 <LogOut className="w-4 h-4" />
-                <span>{t('nav.logout')}</span>
+                <span>Logout</span>
               </Button>
             </div>
 
@@ -180,7 +180,7 @@ export function EmployerNav() {
                   className="w-full justify-start gap-3 touch-target text-destructive"
                 >
                   <LogOut className="w-4 h-4" />
-                  {t('nav.logout')}
+                  Logout
                 </Button>
               </div>
             </div>
