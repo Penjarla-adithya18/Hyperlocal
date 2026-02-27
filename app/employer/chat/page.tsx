@@ -757,7 +757,7 @@ function EmployerChatPage() {
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
-                <CardContent className="border-t pt-4 pb-4 bg-background/50">
+                <CardContent className="border-t pt-4 pb-4 bg-background">
                   {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-2xl text-sm text-muted-foreground">
                       <AlertCircle className="h-4 w-4 shrink-0" />

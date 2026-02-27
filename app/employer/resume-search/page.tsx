@@ -10,9 +10,9 @@ import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { db, workerProfileOps, userOps, applicationOps } from '@/lib/api'
+import { workerProfileOps, userOps } from '@/lib/api'
 import { ragStore, ragSearch, parseRAGQuery, type RAGSearchResult } from '@/lib/ragEngine'
-import type { WorkerProfile, User } from '@/lib/types'
+import type { ResumeData, User } from '@/lib/types'
 import {
   Search, Send, Bot, User as UserIcon, FileText, Briefcase,
   Star, ChevronRight, Loader2, Database, Sparkles
@@ -51,39 +51,63 @@ export default function ResumeSearchPage() {
   const indexWorkerResumes = async () => {
     setIndexing(true)
     try {
-      // Get all applications for employer's jobs
-      const allJobs = await db.getJobsByEmployer(user!.id)
-      const workerIds = new Set<string>()
+      // Index ALL workers on the platform (not just applicants to this employer's jobs)
+      const allUsers = await userOps.getAll()
+      const workerUsers = allUsers.filter((u) => u.role === 'worker')
 
-      // Collect all worker IDs from applications
-      for (const job of allJobs) {
-        const jobApps = await applicationOps.findByJobId(job.id).catch(() => [])
-        for (const app of jobApps) {
-          workerIds.add(app.workerId)
-        }
-      }
-
-      // Fetch and index each worker's profile
       let count = 0
-      for (const wId of workerIds) {
-        try {
-          const [profile, wUser] = await Promise.all([
-            workerProfileOps.findByUserId(wId),
-            userOps.findById(wId),
-          ])
-          if (profile?.resumeText && profile?.resumeParsed) {
-            ragStore.index({
-              workerId: wId,
-              workerName: wUser?.fullName || 'Worker',
-              phone: wUser?.phoneNumber,
-              text: profile.resumeText,
-              parsed: profile.resumeParsed,
-            })
-            count++
-          }
-        } catch {
-          // Skip workers we can't load
-        }
+      // Process in small parallel batches to avoid overloading the API
+      const BATCH = 6
+      for (let i = 0; i < workerUsers.length; i += BATCH) {
+        await Promise.all(
+          workerUsers.slice(i, i + BATCH).map(async (wUser) => {
+            try {
+              const profile = await workerProfileOps.findByUserId(wUser.id)
+              if (!profile) return
+
+              if (profile.resumeText && profile.resumeParsed) {
+                // Full resume indexing
+                ragStore.index({
+                  workerId: wUser.id,
+                  workerName: wUser.fullName,
+                  phone: wUser.phoneNumber,
+                  text: profile.resumeText,
+                  parsed: profile.resumeParsed,
+                })
+                count++
+              } else if (profile.skills?.length || profile.categories?.length) {
+                // Synthetic indexing from skills / categories for non-technical workers
+                const parts: string[] = []
+                if (profile.bio) parts.push(`About: ${profile.bio}`)
+                if (profile.skills?.length) parts.push(`Skills: ${profile.skills.join(', ')}`)
+                if (profile.categories?.length) parts.push(`Work types: ${profile.categories.join(', ')}`)
+                if (profile.experience) parts.push(`Experience: ${profile.experience}`)
+                if (profile.location) parts.push(`Location: ${profile.location}`)
+                if (profile.availability) parts.push(`Availability: ${profile.availability}`)
+
+                const syntheticText = parts.join('\n')
+                const syntheticParsed: ResumeData = {
+                  summary: profile.bio,
+                  skills: [...(profile.skills ?? []), ...(profile.categories ?? [])],
+                  experience: [],
+                  education: [],
+                  projects: [],
+                }
+
+                ragStore.index({
+                  workerId: wUser.id,
+                  workerName: wUser.fullName,
+                  phone: wUser.phoneNumber,
+                  text: syntheticText,
+                  parsed: syntheticParsed,
+                })
+                count++
+              }
+            } catch {
+              // Skip workers we can't load
+            }
+          })
+        )
       }
 
       setIndexedCount(count)
@@ -93,8 +117,8 @@ export default function ResumeSearchPage() {
         id: 'welcome',
         role: 'assistant',
         content: count > 0
-          ? `I've indexed ${count} worker resume${count > 1 ? 's' : ''} from your job applicants. Ask me anything!\n\nTry:\n• "Show resumes with Python experience"\n• "Find workers skilled in data analytics"\n• "Who has experience with React and Node.js?"`
-          : 'No worker resumes found yet. Once workers apply to your technical jobs with resumes, you\'ll be able to search through them here.\n\nTry posting a technical job to start collecting resumes!',
+          ? `I've indexed **${count} worker profile${count > 1 ? 's' : ''}** (resumes + skill profiles). Ask me anything!\n\nTry:\n• "Show workers with Python or React experience"\n• "Find electricians available on weekends"\n• "Who has plumbing and pipe fitting skills?"\n• "Experienced workers in data analytics"`
+          : 'No worker profiles found yet. Once workers sign up and complete their profiles, they\'ll appear here.',
         timestamp: new Date(),
       }])
     } catch (err) {
@@ -196,7 +220,7 @@ export default function ResumeSearchPage() {
 
         {/* Chat Area */}
         <Card className="flex-1 flex flex-col overflow-hidden">
-          <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-100 max-h-[calc(100vh-320px)]">
+          <CardContent className="flex-1 overflow-y-auto p-4 space-y-4 min-h-64 max-h-[calc(100vh-320px)]">
             {messages.map((msg) => (
               <div
                 key={msg.id}
@@ -319,15 +343,15 @@ export default function ResumeSearchPage() {
               className="flex gap-2"
             >
               <Input
-                placeholder={indexedCount > 0 ? 'Search resumes... e.g., "Python developers with ML experience"' : 'No resumes indexed yet...'}
+                placeholder={indexedCount > 0 ? 'Ask anything… e.g. "electricians available weekends" or "Python ML developers"' : 'Loading worker profiles...'}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
-                disabled={searching || indexing || indexedCount === 0}
+                disabled={searching || indexing}
                 className="flex-1"
               />
               <Button
                 type="submit"
-                disabled={searching || !input.trim() || indexedCount === 0}
+                disabled={searching || !input.trim() || indexing}
               >
                 {searching ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               </Button>
@@ -340,10 +364,12 @@ export default function ResumeSearchPage() {
           <div className="mt-4 flex flex-wrap gap-2">
             <p className="text-sm text-muted-foreground w-full mb-1">Quick searches:</p>
             {[
-              'Show all resumes with Python skills',
-              'Find workers with data analytics experience',
-              'Resumes with project management background',
-              'Who knows JavaScript and React?',
+              'Find available electricians',
+              'Workers with plumbing skills',
+              'Python developers with ML experience',
+              'React and Node.js engineers',
+              'Experienced data analysts',
+              'Construction workers near me',
             ].map((suggestion) => (
               <Button
                 key={suggestion}

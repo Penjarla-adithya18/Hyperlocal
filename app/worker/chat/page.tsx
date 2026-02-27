@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useRouter } from 'next/navigation'
 import WorkerNav from '@/components/worker/WorkerNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -28,6 +29,7 @@ import { useI18n } from '@/contexts/I18nContext'
 import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerChatPage() {
+  const router = useRouter()
   const { user } = useAuth()
   const { toast } = useToast()
   const { locale } = useI18n()
@@ -437,12 +439,17 @@ export default function WorkerChatPage() {
                     {getOtherUser(selectedConversation)?.fullName.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-base truncate">
+                <div
+                  className={`flex-1 min-w-0 ${selectedConversation.jobId ? 'cursor-pointer group' : ''}`}
+                  onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
+                >
+                  <p className="font-semibold text-base truncate group-hover:text-primary transition-colors">
                     {getOtherUser(selectedConversation)?.fullName}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
-                    {getOtherUser(selectedConversation)?.companyName || 'Employer'}
+                    {selectedConversation.jobId && jobsById[selectedConversation.jobId]
+                      ? jobsById[selectedConversation.jobId].title
+                      : (getOtherUser(selectedConversation)?.companyName || 'Tap to view job')}
                   </p>
                 </div>
                 <Button
@@ -655,11 +662,16 @@ export default function WorkerChatPage() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <CardTitle className="text-lg">
+                        <CardTitle
+                          className={`text-lg ${selectedConversation.jobId ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
+                          onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
+                        >
                           {getOtherUser(selectedConversation)?.fullName}
                         </CardTitle>
                         <p className="text-sm text-muted-foreground">
-                          {getOtherUser(selectedConversation)?.companyName || 'Employer'}
+                          {selectedConversation.jobId && jobsById[selectedConversation.jobId]
+                            ? jobsById[selectedConversation.jobId].title
+                            : (getOtherUser(selectedConversation)?.companyName || 'Employer')}
                         </p>
                       </div>
                       <Button
@@ -734,7 +746,7 @@ export default function WorkerChatPage() {
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
-                <CardContent className="border-t pt-4 pb-4 bg-background/50">
+                <CardContent className="border-t pt-4 pb-4 bg-background">
                   {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-2xl text-sm text-muted-foreground">
                       <AlertCircle className="h-4 w-4 shrink-0" />

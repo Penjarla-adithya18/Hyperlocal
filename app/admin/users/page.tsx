@@ -12,6 +12,10 @@ import { useAuth } from '@/contexts/AuthContext'
 import { userOps } from '@/lib/api'
 import { User } from '@/lib/types'
 import { Search, Star, CheckCircle, ShieldOff, ShieldCheck, Trash2 } from 'lucide-react'
+
+/** Returns true if the user signed up within the last 7 days */
+const isNewUser = (createdAt: string) =>
+  Date.now() - new Date(createdAt).getTime() < 7 * 24 * 60 * 60 * 1000
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -117,6 +121,11 @@ export default function AdminUsersPage() {
               <h3 className="font-semibold truncate">{user.fullName}</h3>
               {user.isVerified && (
                 <CheckCircle className="h-4 w-4 text-green-600" />
+              )}
+              {isNewUser(user.createdAt) && (
+                <Badge className="text-[10px] px-1.5 py-0 h-4 bg-emerald-500 hover:bg-emerald-500 text-white shrink-0">
+                  New
+                </Badge>
               )}
             </div>
             <p className="text-sm text-muted-foreground truncate">{user.email || 'N/A'}</p>
