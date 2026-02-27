@@ -32,6 +32,10 @@ create table if not exists worker_profiles (
   location text,
   profile_picture_url text,
   bio text,
+  resume_url text,
+  resume_text text,
+  resume_parsed jsonb,
+  profile_completed boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

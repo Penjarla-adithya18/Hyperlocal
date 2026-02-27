@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface NavItem {
   href: string;
@@ -25,11 +25,6 @@ export function EmployerNav() {
   const { logout } = useAuth();
   const { t } = useI18n();
   const [showMenu, setShowMenu] = useState(false);
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
 
   const primaryNavItems: NavItem[] = [
     { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home, mobileLabel: 'Home', badge: undefined, highlight: false },
@@ -42,16 +37,6 @@ export function EmployerNav() {
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [
     { href: '/employer/profile', label: t('nav.profile'), icon: User },
   ];
-
-  if (!mounted) {
-    return (
-      <nav className="border-b glass sticky top-0 z-50 shadow-soft">
-        <div className="container mx-auto px-4">
-          <div className="flex items-center justify-between h-14" />
-        </div>
-      </nav>
-    );
-  }
 
   return (
     <>
