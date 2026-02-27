@@ -31,6 +31,8 @@ export interface User {
   trustLevel: TrustLevel;
   isVerified: boolean;
   companyName?: string;
+  companyAddress?: string;
+  companyWebsite?: string;
   companyDescription?: string;
   skills?: string[];
   /** GSTIN number for business verification (employer only) */

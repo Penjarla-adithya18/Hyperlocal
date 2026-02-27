@@ -1,6 +1,7 @@
 ﻿'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import { useSearchParams } from 'next/navigation'
 import EmployerNav from '@/components/employer/EmployerNav'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -27,10 +28,14 @@ import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
 import { FileUpload } from '@/components/ui/file-upload'
 import { uploadChatAttachment, getSignedUrl, isImageFile, isPdfFile, formatFileSize } from '@/lib/supabase/storage'
 import { Download, FileText, Image as ImageIcon, File } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
+import { useI18n } from '@/contexts/I18nContext'
 
 export default function EmployerChatPage() {
   const { user } = useAuth()
   const { toast } = useToast()
+  const { locale } = useI18n()
+  const searchParams = useSearchParams()
   const [conversations, setConversations] = useState<ChatConversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<ChatConversation | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
@@ -45,15 +50,21 @@ export default function EmployerChatPage() {
   const [voiceListening, setVoiceListening] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [loadingConversations, setLoadingConversations] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (user) {
-      loadConversations()
+      const convId = searchParams.get('convId')
+      const workerId = searchParams.get('workerId')
+      const jobId = searchParams.get('jobId')
+      const appId = searchParams.get('appId')
+      loadConversations(convId, workerId, jobId, appId)
     }
-  }, [user])
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user, searchParams])
 
   // Poll for new messages every 3s for lower latency (replaces Supabase realtime)
   useEffect(() => {
@@ -68,51 +79,95 @@ export default function EmployerChatPage() {
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
 
+  // Poll for new conversations every 10s
+  useEffect(() => {
+    if (!user) return
+    const convInterval = setInterval(() => {
+      loadConversations()
+    }, 10000)
+    return () => clearInterval(convInterval)
+  }, [user])
+
   useEffect(() => {
     scrollToBottom()
   }, [messages])
 
-  const loadConversations = async () => {
+  const loadConversations = async (
+    targetConvId?: string | null,
+    targetWorkerId?: string | null,
+    targetJobId?: string | null,
+    targetAppId?: string | null,
+  ) => {
     if (!user) return
-    const userConvs = await mockDb.getConversationsByUser(user.id)
-    setConversations(userConvs)
-    const participantIds = [...new Set(
-      userConvs
-        .flatMap((conversation) => conversation.participants)
-        .filter((participantId) => participantId !== user.id)
-    )]
-    if (participantIds.length > 0) {
-      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
-      setUsersById((previous) => {
-        const next = { ...previous }
-        for (const fetched of fetchedUsers) {
-          if (fetched) next[fetched.id] = fetched
+    setLoadingConversations(true)
+    try {
+      const userConvs = await mockDb.getConversationsByUser(user.id)
+      setConversations(userConvs)
+      const participantIds = [...new Set(
+        userConvs
+          .flatMap((conversation) => conversation.participants)
+          .filter((participantId) => participantId !== user.id)
+      )]
+      if (participantIds.length > 0) {
+        const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+        setUsersById((previous) => {
+          const next = { ...previous }
+          for (const fetched of fetchedUsers) {
+            if (fetched) next[fetched.id] = fetched
+          }
+          return next
+        })
+      }
+
+      // Load jobs for completion status checks (include targetJobId in case it's a new conv)
+      const jobIds = [...new Set(
+        [...userConvs.map(c => c.jobId), targetJobId].filter(Boolean) as string[]
+      )]
+      if (jobIds.length > 0) {
+        const allJobs = await mockDb.getAllJobs()
+        const jMap: Record<string, Job> = {}
+        for (const j of allJobs) { if (jobIds.includes(j.id)) jMap[j.id] = j }
+        setJobsById(jMap)
+      }
+
+      const hasTarget = !!(targetConvId || targetWorkerId)
+
+      // 1. Exact conversation ID (passed via URL param ?convId=xxx from handleChatWithWorker)
+      if (targetConvId) {
+        const found = userConvs.find(c => c.id === targetConvId)
+        if (found) { setSelectedConversation(found); return }
+      }
+
+      // 2. Fallback: find existing conv by worker + job (when convId lookup misses)
+      if (targetWorkerId) {
+        let found: typeof userConvs[0] | null = userConvs.find(c =>
+          c.participants.includes(targetWorkerId) &&
+          (!targetJobId || c.jobId === targetJobId)
+        ) ?? null
+
+        // 2b. No existing conv found — create it now (handles failed creation on job detail page)
+        if (!found) {
+          try {
+            found = await mockDb.createConversation({
+              workerId: targetWorkerId,
+              employerId: user.id,
+              jobId: targetJobId || '',
+              applicationId: targetAppId || undefined,
+              participants: [targetWorkerId, user.id],
+            })
+            if (found) setConversations(prev => [found!, ...prev])
+          } catch { /* ignore */ }
         }
-        return next
-      })
-    }
-    // Check sessionStorage for a conversation to pre-select (from employer/jobs chat button)
-    const targetConvId = sessionStorage.getItem('targetChatConvId')
-    if (targetConvId) {
-      sessionStorage.removeItem('targetChatConvId')
-      const targetConv = userConvs.find(c => c.id === targetConvId)
-      if (targetConv) {
-        setSelectedConversation(targetConv)
-        return
+
+        if (found) { setSelectedConversation(found); return }
       }
-    }
-    if (userConvs.length > 0 && !selectedConversation) {
-      setSelectedConversation(userConvs[0])
-    }
-    // Load jobs for completion check
-    const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
-    if (jobIds.length > 0) {
-      const allJobs = await mockDb.getAllJobs()
-      const jMap: Record<string, Job> = {}
-      for (const j of allJobs) {
-        if (jobIds.includes(j.id)) jMap[j.id] = j
+
+      // 3. No specific target — auto-select first conversation (direct /employer/chat navigation)
+      if (!hasTarget && userConvs.length > 0 && !selectedConversation) {
+        setSelectedConversation(userConvs[0])
       }
-      setJobsById(jMap)
+    } finally {
+      setLoadingConversations(false)
     }
   }
 
@@ -204,7 +259,7 @@ export default function EmployerChatPage() {
       loadConversations()
     } catch (error) {
       // Remove temp message on error
-      setMessages((prev) => prev.filter(m => m.id.startsWith('temp-')))
+      setMessages((prev) => prev.filter(m => !m.id.startsWith('temp-')))
       toast({
         title: 'Failed to send message',
         description: error instanceof Error ? error.message : 'Please try again',
@@ -261,7 +316,8 @@ export default function EmployerChatPage() {
     }
 
     const recognition = new SpeechRecognitionAPI()
-    recognition.lang = 'hi-IN'
+    const localeToSpeechLang: Record<string, string> = { en: 'en-IN', hi: 'hi-IN', te: 'te-IN' }
+    recognition.lang = localeToSpeechLang[locale] ?? 'en-IN'
     recognition.continuous = false
     recognition.interimResults = false
     recognition.maxAlternatives = 1
@@ -320,7 +376,19 @@ export default function EmployerChatPage() {
                 />
               </div>
               <div className="flex-1 overflow-y-auto space-y-2">
-                {filteredConversations.length === 0 ? (
+                {loadingConversations ? (
+                  <div className="space-y-3">
+                    {[...Array(4)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-4">
+                        <Skeleton className="h-12 w-12 rounded-full shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-32" />
+                          <Skeleton className="h-3 w-48" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="text-center py-12">
                     <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -569,7 +637,19 @@ export default function EmployerChatPage() {
               </CardHeader>
               <ScrollArea className="h-[calc(100vh-380px)]">
                 <CardContent className="space-y-2">
-                  {filteredConversations.length === 0 ? (
+                  {loadingConversations ? (
+                    <div className="space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3">
+                          <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3.5 w-28" />
+                            <Skeleton className="h-3 w-40" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredConversations.length === 0 ? (
                     <div className="text-center py-8">
                       <MessageCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -678,6 +758,39 @@ export default function EmployerChatPage() {
                                   : 'bg-muted/80 text-foreground rounded-[20px] rounded-bl-md'
                               }`}
                             >
+                              {message.attachmentUrl && (
+                                <div className="mb-2 rounded-lg overflow-hidden">
+                                  {isImageFile(message.attachmentName || '') ? (
+                                    <img
+                                      src={message.attachmentUrl}
+                                      alt={message.attachmentName}
+                                      className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
+                                    />
+                                  ) : (
+                                    <a
+                                      href={message.attachmentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`flex items-center gap-2 p-2 rounded-lg ${
+                                        isSent ? 'bg-accent-foreground/10' : 'bg-background/50'
+                                      } hover:opacity-80 transition-opacity`}
+                                    >
+                                      {isPdfFile(message.attachmentName || '') ? (
+                                        <FileText className="h-5 w-5" />
+                                      ) : (
+                                        <File className="h-5 w-5" />
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium truncate">{message.attachmentName}</p>
+                                        {message.attachmentSize && (
+                                          <p className="text-[10px] opacity-70">{formatFileSize(message.attachmentSize)}</p>
+                                        )}
+                                      </div>
+                                      <Download className="h-4 w-4" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                               <p className="text-[15px] leading-relaxed break-words">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
                               <p className={`text-[11px] mt-1.5 ${
                                 isSent ? 'text-accent-foreground/60' : 'text-muted-foreground/60'
@@ -744,13 +857,21 @@ export default function EmployerChatPage() {
               </>
             ) : (
               <CardContent className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
-                  <p className="text-muted-foreground">
-                    Choose a conversation from the list to start chatting
-                  </p>
-                </div>
+                {loadingConversations ? (
+                  <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+                    <Skeleton className="h-16 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
+                    <p className="text-muted-foreground">
+                      Choose a conversation from the list to start chatting
+                    </p>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>

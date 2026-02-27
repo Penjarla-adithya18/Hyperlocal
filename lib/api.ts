@@ -95,11 +95,15 @@ async function refreshSessionIfNeeded(): Promise<void> {
 
   if (!res.ok) {
     if (res.status === 401) {
-      setSessionToken(null)
-      if (typeof window !== 'undefined') {
-        localStorage.removeItem('currentUser')
-        // Redirect to login on session refresh failure
-        window.location.href = '/login'
+      // Only force logout if the token has genuinely expired.
+      // A transient 401 from the refresh endpoint should NOT kick out an active user.
+      const tokenExpired = Number.isFinite(expiryMs) && now >= expiryMs
+      if (tokenExpired) {
+        setSessionToken(null)
+        if (typeof window !== 'undefined') {
+          localStorage.removeItem('currentUser')
+          window.location.href = '/login'
+        }
       }
     }
     return
@@ -181,13 +185,26 @@ async function call<T>(
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Clear session and redirect to login
-          setSessionToken(null)
-          if (typeof window !== 'undefined') {
-            localStorage.removeItem('currentUser')
-            // Redirect to login on 401 (session expired or invalid)
-            window.location.href = '/login'
+          // Only redirect to login for critical auth calls, not secondary data calls
+          const criticalAuthFunctions = ['auth', 'users', 'worker-profiles', 'employer-profiles']
+          const isCritical = criticalAuthFunctions.includes(fn)
+          if (isCritical) {
+            // Only force logout if the stored token has actually expired;
+            // never kick the user out for a transient 401 while their session is still valid.
+            const storedExpiry = getSessionExpiresAt()
+            const expiryTime = storedExpiry ? new Date(storedExpiry).getTime() : 0
+            const tokenExpired = !expiryTime || Date.now() >= expiryTime
+            if (tokenExpired) {
+              setSessionToken(null)
+              if (typeof window !== 'undefined') {
+                localStorage.removeItem('currentUser')
+                window.location.href = '/login'
+              }
+            }
           }
+          // For non-critical calls (or unexpired token), just throw so caller can handle it
+          const text = await res.text()
+          throw new Error(`Edge function ${fn} error 401: ${text}`)
         }
         // Retry on 5xx server errors
         if (res.status >= 500 && attempt < MAX_RETRIES) {

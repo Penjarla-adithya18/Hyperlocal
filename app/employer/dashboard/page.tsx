@@ -106,10 +106,22 @@ export default function EmployerDashboardPage() {
     return date.toLocaleDateString('en-US', { weekday: 'short' });
   });
 
-  const applicationTrendData = last7Days.map((day, i) => ({
-    label: day,
-    value: Math.floor(Math.random() * 5) + (i < 3 ? 1 : 2)
-  }));
+  // Build real application trend from actual application data
+  const applicationTrendData = last7Days.map((day, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const dayEnd = dayStart + 86400000;
+    // Count applications created on this day across all employer jobs
+    const jobIds = new Set(jobs.map(j => j.id));
+    // We don't have per-day application data in memory, so use applicationCount from jobs created that day
+    const count = jobs.reduce((sum, job) => {
+      const created = new Date(job.createdAt).getTime();
+      if (created >= dayStart && created < dayEnd) return sum + (appCountByJob[job.id] || 0);
+      return sum;
+    }, 0);
+    return { label: day, value: count };
+  });
 
   const jobPerformanceData = jobs.slice(0, 5).map((job) => ({
     label: job.title.slice(0, 15) + (job.title.length > 15 ? '...' : ''),
@@ -367,7 +379,7 @@ export default function EmployerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-accent">?{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-accent">₹{(job.pay ?? 0).toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground flex items-center gap-1">
                         {job.paymentStatus === 'locked' ? (
                           <>

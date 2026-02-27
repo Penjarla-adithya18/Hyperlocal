@@ -48,7 +48,27 @@ Deno.serve(async (req: Request) => {
 
       const { data, error } = await query
       if (error) throw error
-      return jsonResponse({ data: (data || []).map(mapJob) })
+
+      const jobs = data || []
+
+      // For employer queries, compute accurate application counts from applications table
+      // This ensures counts are always correct even if application_count column drifts
+      if (employerId && jobs.length > 0) {
+        const jobIds = jobs.map((j: Record<string, unknown>) => j.id as string)
+        const { data: appRows } = await supabase
+          .from('applications')
+          .select('job_id')
+          .in('job_id', jobIds)
+
+        const countMap: Record<string, number> = {}
+        for (const row of (appRows || []) as Array<{ job_id: string }>) {
+          countMap[row.job_id] = (countMap[row.job_id] || 0) + 1
+        }
+
+        return jsonResponse({ data: jobs.map((row: Record<string, unknown>) => mapJob(row, countMap)) })
+      }
+
+      return jsonResponse({ data: jobs.map((row: Record<string, unknown>) => mapJob(row)) })
     }
 
     if (method === 'POST') {
@@ -190,10 +210,11 @@ Deno.serve(async (req: Request) => {
   }
 })
 
-function mapJob(row: Record<string, unknown>) {
+function mapJob(row: Record<string, unknown>, countOverride?: Record<string, number>) {
   const pay = Number((row.pay as number) ?? (row.pay_amount as number) ?? 0)
+  const jobId = row.id as string
   return {
-    id: row.id,
+    id: jobId,
     employerId: row.employer_id,
     title: row.title,
     description: row.description,
@@ -219,7 +240,8 @@ function mapJob(row: Record<string, unknown>) {
     status: row.status,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    applicationCount: Number(row.application_count || 0),
+    // Prefer live count from applications table (countOverride) if available
+    applicationCount: countOverride ? (countOverride[jobId] ?? 0) : Number(row.application_count || 0),
     views: Number(row.views || 0),
   }
 }

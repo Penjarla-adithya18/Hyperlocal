@@ -15,9 +15,11 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { useToast } from '@/hooks/use-toast'
-import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound, Globe } from 'lucide-react'
+import { Shield, Lock, Phone, LogOut, Star, AlertTriangle, KeyRound, Globe, Building2, CheckCircle2, XCircle, Loader2 } from 'lucide-react'
 import { useI18n } from '@/contexts/I18nContext'
 import { localeLabels, localeNames, locales, SupportedLocale } from '@/i18n'
+import { verifyGSTIN, validateGSTINFormat } from '@/lib/gstinService'
+import type { GSTINDetails } from '@/lib/types'
 
 export default function SettingsPage() {
   const { user, updateUser, login } = useAuth()
@@ -34,6 +36,13 @@ export default function SettingsPage() {
   const [otpSent, setOtpSent] = useState(false)
   const [displayOtp, setDisplayOtp] = useState<string | null>(null)
   const [phoneLoading, setPhoneLoading] = useState(false)
+
+  // GSTIN verification (employer only)
+  const [gstinInput, setGstinInput] = useState(user?.gstin ?? '')
+  const [gstinLoading, setGstinLoading] = useState(false)
+  const [gstinDetails, setGstinDetails] = useState<GSTINDetails | null>(user?.gstinDetails ?? null)
+  const [gstinVerified, setGstinVerified] = useState(user?.gstinVerified ?? false)
+  const [gstinError, setGstinError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) router.replace('/login')
@@ -133,6 +142,49 @@ export default function SettingsPage() {
     }
   }
 
+  // ── GSTIN Verification (Employer) ──────────────────────────────
+  const handleVerifyGSTIN = async () => {
+    const formatErr = validateGSTINFormat(gstinInput)
+    if (formatErr) {
+      setGstinError(formatErr)
+      return
+    }
+    setGstinLoading(true)
+    setGstinError(null)
+    try {
+      const details = await verifyGSTIN(gstinInput.trim().toUpperCase())
+      setGstinDetails(details)
+      setGstinVerified(details.verified)
+      // Save GSTIN to user profile
+      const updated = await mockUserOps.update(user.id, {
+        gstin: gstinInput.trim().toUpperCase(),
+        gstinVerified: details.verified,
+        gstinDetails: details,
+      })
+      if (updated) {
+        updateUser({
+          gstin: gstinInput.trim().toUpperCase(),
+          gstinVerified: details.verified,
+          gstinDetails: details,
+        })
+      }
+      toast({
+        title: details.verified ? 'GSTIN Verified Successfully' : 'GSTIN Found (Inactive)',
+        description: details.verified
+          ? `Business: ${details.tradeName || details.legalName}`
+          : `Status: ${details.status}. This GSTIN is not currently active.`,
+        variant: details.verified ? 'default' : 'destructive',
+      })
+    } catch (err) {
+      setGstinError(err instanceof Error ? err.message : 'Verification failed')
+      setGstinDetails(null)
+      setGstinVerified(false)
+      toast({ title: 'GSTIN Verification Failed', description: err instanceof Error ? err.message : 'Unknown error', variant: 'destructive' })
+    } finally {
+      setGstinLoading(false)
+    }
+  }
+
   // ── Logout ───────────────────────────────────────────────────
   const handleLogout = () => {
     logout()
@@ -154,7 +206,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Globe className="h-5 w-5 text-primary" />
-              Language &amp; Region
+              Language & Region
             </CardTitle>
             <CardDescription>Choose your preferred display language</CardDescription>
           </CardHeader>
@@ -190,7 +242,7 @@ export default function SettingsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              Trust &amp; Reputation
+              Trust & Reputation
             </CardTitle>
             <CardDescription>Your current standing on the platform</CardDescription>
           </CardHeader>
@@ -214,6 +266,107 @@ export default function SettingsPage() {
             </p>
           </CardContent>
         </Card>
+
+        {/* ── GSTIN Verification (Employer Only) ──────────── */}
+        {user.role === 'employer' && (
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-primary" />
+                GSTIN Verification
+              </CardTitle>
+              <CardDescription>
+                Verify your business GSTIN to build trust with workers. Uses{' '}
+                <a href="https://cleartax.in/f/compliance-report/" target="_blank" rel="noopener noreferrer" className="text-primary underline">ClearTax</a> for verification.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {gstinVerified && gstinDetails ? (
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2 rounded-lg border-2 border-green-400 bg-green-50 dark:bg-green-950/30 px-4 py-3">
+                    <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-green-800 dark:text-green-300">GSTIN Verified</p>
+                      <p className="text-xs text-green-700 dark:text-green-400">{user.gstin}</p>
+                    </div>
+                  </div>
+                  <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-muted-foreground text-xs">Trade Name</p>
+                      <p className="font-medium">{gstinDetails.tradeName || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Legal Name</p>
+                      <p className="font-medium">{gstinDetails.legalName || '—'}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Status</p>
+                      <p className="font-medium">{gstinDetails.status}</p>
+                    </div>
+                    <div>
+                      <p className="text-muted-foreground text-xs">Taxpayer Type</p>
+                      <p className="font-medium">{gstinDetails.taxpayerType}</p>
+                    </div>
+                    {gstinDetails.address && (
+                      <div className="sm:col-span-2">
+                        <p className="text-muted-foreground text-xs">Address</p>
+                        <p className="font-medium">{gstinDetails.address}</p>
+                      </div>
+                    )}
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setGstinVerified(false)
+                      setGstinDetails(null)
+                    }}
+                  >
+                    Re-verify / Change GSTIN
+                  </Button>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <Label htmlFor="gstin-input">GSTIN Number</Label>
+                    <div className="flex gap-2 mt-1">
+                      <Input
+                        id="gstin-input"
+                        placeholder="29ABCDE1234F1Z5"
+                        maxLength={15}
+                        value={gstinInput}
+                        onChange={(e) => {
+                          setGstinInput(e.target.value.toUpperCase())
+                          setGstinError(null)
+                        }}
+                        className={gstinError ? 'border-destructive' : ''}
+                      />
+                      <Button onClick={handleVerifyGSTIN} disabled={gstinLoading || !gstinInput.trim()}>
+                        {gstinLoading ? (
+                          <>
+                            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                            Verifying…
+                          </>
+                        ) : (
+                          'Verify'
+                        )}
+                      </Button>
+                    </div>
+                    {gstinError && (
+                      <div className="flex items-center gap-1.5 mt-2 text-destructive text-sm">
+                        <XCircle className="h-4 w-4 shrink-0" />
+                        {gstinError}
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Enter your 15-character GSTIN (e.g., 29ABCDE1234F1Z5)
+                    </p>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        )}
 
         {/* ── Change Password ───────────────────────────────── */}
         <Card className="mb-6">
@@ -327,7 +480,7 @@ export default function SettingsPage() {
 
               {otpSent && (
                 <Button type="submit" disabled={phoneLoading}>
-                  {phoneLoading ? 'Verifying…' : 'Verify &amp; Update'}
+                  {phoneLoading ? 'Verifying…' : 'Verify & Update'}
                 </Button>
               )}
             </form>

@@ -17,6 +17,30 @@ const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
 
 let _keyIndex = 0
 let _rateLimitedUntil = 0
+let _lastRequestTime = 0
+const _minDelayBetweenRequests = 300 // ms — throttles requests to avoid rate limits
+const _invalidKeys = new Set<string>() // keys confirmed invalid
+
+/** Returns the next key that hasn't been marked invalid. Throws if all keys are bad. */
+function _getValidKey(): string {
+  const validKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
+  if (validKeys.length === 0) {
+    throw new Error('All Gemini API keys are invalid. Add valid keys to NEXT_PUBLIC_GEMINI_API_KEYS.')
+  }
+  const key = validKeys[_keyIndex % validKeys.length]
+  _keyIndex++
+  return key
+}
+
+/** Parse the Retry-After header (seconds or HTTP-date) → milliseconds */
+function _parseRetryAfter(res: Response): number {
+  const raw = res.headers.get('Retry-After')
+  if (!raw) return 0
+  const secs = parseInt(raw, 10)
+  if (!isNaN(secs)) return secs * 1000
+  const date = new Date(raw).getTime()
+  return isNaN(date) ? 0 : Math.max(0, date - Date.now())
+}
 
 function getNextKey(): string {
   if (GEMINI_KEYS.length === 0) {
@@ -71,9 +95,17 @@ const TTL = {
 // ── Core fetch helper ─────────────────────────────────────────────────────────
 
 async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Promise<string> {
-  if (Date.now() < _rateLimitedUntil) {
-    throw new Error('Gemini temporarily rate-limited')
+  // Honour shared rate-limit guard
+  const rlWait = _rateLimitedUntil - Date.now()
+  if (rlWait > 0) await new Promise(resolve => setTimeout(resolve, rlWait))
+
+  // Enforce minimum delay between requests to avoid rate limits
+  const now = Date.now()
+  const timeSinceLastRequest = now - _lastRequestTime
+  if (timeSinceLastRequest < _minDelayBetweenRequests) {
+    await new Promise(resolve => setTimeout(resolve, _minDelayBetweenRequests - timeSinceLastRequest))
   }
+  _lastRequestTime = Date.now()
 
   const url = ENDPOINT[tier]
   const body = JSON.stringify({
@@ -81,28 +113,77 @@ async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Pro
     generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
   })
 
-  const attempts = Math.max(1, Math.min(GEMINI_KEYS.length, 4))
+  // Backoff between full key-sweeps
+  const SWEEP_BACKOFFS = [5_000, 15_000, 30_000]
   let allRateLimited = true
   let lastStatus = 0
 
-  for (let i = 0; i < attempts; i++) {
-    const key = getNextKey()
-    const res = await fetch(`${url}?key=${key}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body,
-    })
-
-    if (res.ok) {
-      const data = await res.json()
-      return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-    }
-
-    lastStatus = res.status
-    if (res.status !== 429) {
+  for (let round = 0; round <= SWEEP_BACKOFFS.length; round++) {
+    const validKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
+    if (validKeys.length === 0) {
       allRateLimited = false
-      throw new Error(`Gemini ${tier} error: ${res.status}`)
+      throw new Error('All Gemini API keys are invalid.')
     }
+
+    let allGot429 = true  // becomes false if any non-429 failure occurs
+
+    for (const key of validKeys) {
+      try {
+        const res = await fetch(`${url}?key=${key}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body,
+        })
+
+        if (res.ok) {
+          const data = await res.json()
+          return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+        }
+
+        lastStatus = res.status
+        if (res.status === 429) {
+          const retryAfterMs = _parseRetryAfter(res)
+          if (retryAfterMs > 0) _rateLimitedUntil = Date.now() + retryAfterMs
+          console.warn(`Gemini ${tier} 429 – key …${key.slice(-4)} rate-limited (round ${round + 1})`)
+          // allGot429 stays true — continue sweeping remaining keys
+        } else if (res.status === 400) {
+          let msg = 'unknown'
+          try { const d = await res.json(); msg = d.error?.message ?? msg } catch { /* */ }
+          const isKeyError = /api key|apikey|not valid|invalid key/i.test(msg)
+          if (isKeyError) {
+            if (!_invalidKeys.has(key)) {
+              _invalidKeys.add(key)
+              console.warn(`Gemini: key …${key.slice(-6)} is invalid – skipping permanently`)
+            }
+            allGot429 = false
+            continue  // skip to next key
+          }
+          allRateLimited = false
+          throw new Error(`Gemini ${tier} 400: ${msg}`)
+        } else {
+          allRateLimited = false
+          throw new Error(`Gemini ${tier} error: ${res.status}`)
+        }
+      } catch (err) {
+        if (err instanceof Error && !err.message.includes('rate-limited') && !err.message.includes('429') && !err.message.includes('rate limit')) {
+          throw err
+        }
+      }
+    }
+
+    if (!allGot429) break  // some non-429 failures — stop trying this tier
+
+    if (round >= SWEEP_BACKOFFS.length) break  // all backoff rounds exhausted
+
+    const backoffMs = SWEEP_BACKOFFS[round]
+    const validCount = GEMINI_KEYS.filter(k => !_invalidKeys.has(k)).length
+    console.warn(
+      `Gemini ${tier}: all ${validCount} key(s) rate-limited, ` +
+      `waiting ${Math.round(backoffMs / 1000)}s (round ${round + 1}/${SWEEP_BACKOFFS.length})`
+    )
+    _rateLimitedUntil = Date.now() + backoffMs
+    await new Promise(resolve => setTimeout(resolve, backoffMs))
+    _rateLimitedUntil = 0
   }
 
   if (allRateLimited) {

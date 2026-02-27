@@ -17,6 +17,7 @@ import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, Trendi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
 import { Slider } from '@/components/ui/slider'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerJobsPage() {
   const router = useRouter()
@@ -32,6 +33,7 @@ export default function WorkerJobsPage() {
   const [locationFilter, setLocationFilter] = useState('')
   const [payRange, setPayRange] = useState([0, 5000])
   const [experienceFilter, setExperienceFilter] = useState('all')
+  const [jobModeFilter, setJobModeFilter] = useState('all')
   const [showGeolocationPrompt, setShowGeolocationPrompt] = useState(true)
 
   useEffect(() => {
@@ -98,9 +100,10 @@ export default function WorkerJobsPage() {
     const matchesPay = jobPay >= payRange[0] && jobPay <= payRange[1]
     
     const matchesExperience = experienceFilter === 'all' || job.experienceRequired === experienceFilter
+    const matchesJobMode = jobModeFilter === 'all' || job.jobMode === jobModeFilter
 
-    return matchesSearch && matchesCategory && matchesLocation && matchesPay && matchesExperience
-  }), [jobs, searchQuery, categoryFilter, locationFilter, payRange, experienceFilter])
+    return matchesSearch && matchesCategory && matchesLocation && matchesPay && matchesExperience && matchesJobMode
+  }), [jobs, searchQuery, categoryFilter, locationFilter, payRange, experienceFilter, jobModeFilter])
 
   const filteredMatchedJobs = useMemo(() => {
     const allowedJobIds = new Set(filteredJobs.map((job) => job.id))
@@ -263,8 +266,51 @@ export default function WorkerJobsPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <p className="text-center text-muted-foreground">Loading jobs...</p>
+        <div className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8">
+          <div className="mb-6 space-y-2">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          {/* Stats cards skeleton */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i}>
+                <CardContent className="pt-6">
+                  <Skeleton className="h-4 w-24 mb-2" />
+                  <Skeleton className="h-8 w-16" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+          {/* Search/filter skeleton */}
+          <div className="flex gap-2 mb-6">
+            <Skeleton className="h-10 flex-1 rounded-md" />
+            <Skeleton className="h-10 w-32 rounded-md" />
+          </div>
+          {/* Job cards skeleton */}
+          <div className="grid md:grid-cols-2 gap-4">
+            {[...Array(6)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="flex justify-between">
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-5 w-48" />
+                      <Skeleton className="h-4 w-32" />
+                    </div>
+                    <Skeleton className="h-6 w-16 rounded-full" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <Skeleton className="h-4 w-full" />
+                  <Skeleton className="h-4 w-3/4" />
+                  <div className="flex gap-2">
+                    {[...Array(3)].map((_, j) => <Skeleton key={j} className="h-5 w-20 rounded-full" />)}
+                  </div>
+                  <Skeleton className="h-9 w-full rounded-md" />
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -379,7 +425,7 @@ export default function WorkerJobsPage() {
                   onChange={(e) => setLocationFilter(e.target.value)}
                 />
               </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <Select value={experienceFilter} onValueChange={setExperienceFilter}>
                   <SelectTrigger>
                     <SelectValue placeholder="Experience Level" />
@@ -389,6 +435,16 @@ export default function WorkerJobsPage() {
                     <SelectItem value="entry">Entry Level</SelectItem>
                     <SelectItem value="intermediate">Intermediate</SelectItem>
                     <SelectItem value="expert">Expert</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Select value={jobModeFilter} onValueChange={setJobModeFilter}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Work Mode" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Modes</SelectItem>
+                    <SelectItem value="local">On-site</SelectItem>
+                    <SelectItem value="remote">Remote</SelectItem>
                   </SelectContent>
                 </Select>
                 <div className="flex items-center gap-2">

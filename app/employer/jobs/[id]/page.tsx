@@ -11,13 +11,14 @@ import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, sendWATIAlert } from '@/lib/api'
+import { mockDb, mockEscrowOps, mockApplicationOps, mockRatingOps, mockUserOps, mockWorkerProfileOps, mockNotificationOps, sendWATIAlert } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
-import { Job, Application, EscrowTransaction } from '@/lib/types'
+import { Job, Application, EscrowTransaction, WorkerProfile } from '@/lib/types'
 import {
   ArrowLeft, Lock, Unlock, RefreshCcw, MapPin, Clock, IndianRupee, Users,
   Briefcase, CheckCircle2, AlertCircle, Edit, Shield, Star, MessageSquare,
 } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 const COMMISSION_RATE = 0.10
 
@@ -32,6 +33,7 @@ export default function EmployerJobDetailPage() {
   const [escrow, setEscrow] = useState<EscrowTransaction | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [workersById, setWorkersById] = useState<Record<string, import('@/lib/types').User>>({})
+  const [workerProfilesById, setWorkerProfilesById] = useState<Record<string, WorkerProfile>>({})
   const [loading, setLoading] = useState(true)
   const [actionLoading, setActionLoading] = useState(false)
   const [disputeOpen, setDisputeOpen] = useState(false)
@@ -54,17 +56,22 @@ export default function EmployerJobDetailPage() {
     setApplications(allApps)
     setEscrow(escrowData)
 
-    // Load worker details for trust badges
+    // Load worker details + profiles for trust badges and match score computation
     if (allApps.length > 0) {
       const workerIds = [...new Set(allApps.map((a) => a.workerId))]
-      const workers = await Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null)))
+      const [workers, profiles] = await Promise.all([
+        Promise.all(workerIds.map((id) => mockUserOps.findById(id).catch(() => null))),
+        Promise.all(workerIds.map((id) => mockWorkerProfileOps.findByUserId(id).catch(() => null))),
+      ])
       const wMap: Record<string, import('@/lib/types').User> = {}
-      for (const w of workers) {
-        if (w) wMap[w.id] = w
-      }
+      const pMap: Record<string, WorkerProfile> = {}
+      for (const w of workers) { if (w) wMap[w.id] = w }
+      for (const p of profiles) { if (p) pMap[p.userId] = p }
       setWorkersById(wMap)
+      setWorkerProfilesById(pMap)
     } else {
       setWorkersById({})
+      setWorkerProfilesById({})
     }
   }, [jobId])
 
@@ -106,19 +113,32 @@ export default function EmployerJobDetailPage() {
     if (!confirm('Release payment to worker? This deducts the 10% platform commission.')) return
     setActionLoading(true)
     try {
+      const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
       await Promise.all([
-        mockEscrowOps.update(escrow.id, { status: 'released' }),
+        mockEscrowOps.update(escrow.id, { status: 'released', releasedAt: new Date().toISOString() }),
         mockDb.updateJob(jobId, { status: 'completed', paymentStatus: 'released' }),
+        // Mark application as completed
+        ...(acceptedApp ? [mockApplicationOps.update(acceptedApp.id, { status: 'completed' })] : []),
       ])
       toast({ title: 'Payment Released', description: 'Net payout sent to worker.' })
-      // Send WhatsApp notification to worker
-      const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
+      // Send notifications + WhatsApp
       if (acceptedApp) {
         const worker = await mockUserOps.findById(acceptedApp.workerId).catch(() => null)
+        const amount = job?.payAmount ?? job?.pay ?? 0
         if (worker) {
-          const amount = job?.payAmount ?? job?.pay ?? 0
           sendWATIAlert('payment_released', worker.phoneNumber, { jobTitle: job?.title ?? '', amount: String(amount) })
         }
+        // In-app notification
+        try {
+          await mockNotificationOps.create({
+            userId: acceptedApp.workerId,
+            type: 'payment',
+            title: 'Payment Received! 💰',
+            message: `₹${Math.round(amount * 0.9).toLocaleString()} has been released to your account for "${job?.title}".`,
+            isRead: false,
+            link: `/worker/earnings`,
+          })
+        } catch (e) { console.error('Notification failed', e) }
       }
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to release payment', variant: 'destructive' }) }
@@ -143,7 +163,43 @@ export default function EmployerJobDetailPage() {
   const handleAcceptApplication = async (appId: string) => {
     setActionLoading(true)
     try {
+      const app = applications.find(a => a.id === appId)
       await mockApplicationOps.update(appId, { status: 'accepted' })
+
+      // Create escrow transaction for this worker
+      if (job && app) {
+        const amount = job.payAmount ?? job.pay ?? 0
+        const commission = Math.round(amount * COMMISSION_RATE)
+        try {
+          await mockEscrowOps.create({
+            jobId: job.id,
+            employerId: job.employerId,
+            workerId: app.workerId,
+            amount,
+            commission,
+            status: 'pending',
+          })
+        } catch (e) { console.error('Escrow creation failed', e) }
+
+        // Send in-app notification to worker
+        try {
+          await mockNotificationOps.create({
+            userId: app.workerId,
+            type: 'application',
+            title: 'Application Accepted! 🎉',
+            message: `Your application for "${job.title}" has been accepted. The employer will contact you soon.`,
+            isRead: false,
+            link: `/worker/applications`,
+          })
+        } catch (e) { console.error('Notification failed', e) }
+
+        // Send WhatsApp alert
+        const worker = await mockUserOps.findById(app.workerId).catch(() => null)
+        if (worker) {
+          sendWATIAlert('application_accepted', worker.phoneNumber, { jobTitle: job.title })
+        }
+      }
+
       toast({ title: 'Application Accepted!', description: 'The worker has been notified.' })
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
@@ -153,7 +209,23 @@ export default function EmployerJobDetailPage() {
   const handleRejectApplication = async (appId: string) => {
     setActionLoading(true)
     try {
+      const app = applications.find(a => a.id === appId)
       await mockApplicationOps.update(appId, { status: 'rejected' })
+
+      // Send in-app notification to worker
+      if (job && app) {
+        try {
+          await mockNotificationOps.create({
+            userId: app.workerId,
+            type: 'application',
+            title: 'Application Update',
+            message: `Your application for "${job.title}" was not selected. Keep applying to other jobs!`,
+            isRead: false,
+            link: `/worker/jobs`,
+          })
+        } catch (e) { console.error('Notification failed', e) }
+      }
+
       toast({ title: 'Application Rejected', description: 'The worker has been notified.' })
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to update application', variant: 'destructive' }) }
@@ -163,13 +235,17 @@ export default function EmployerJobDetailPage() {
   const handleChatWithWorker = async (app: Application) => {
     if (!user || !job) return
     try {
+      // Step 1: find existing conv for this specific application
       let conv = await mockDb.findConversationByApplicationId(user.id, app.id).catch(() => null)
+      // Step 2: search existing convs by worker + job
       if (!conv) {
-        const jobConv = await mockDb.findConversationByJob(user.id, job.id).catch(() => null)
-        if (jobConv?.participants?.includes(app.workerId)) {
-          conv = jobConv
-        }
+        const allConvs = await mockDb.getConversationsByUser(user.id).catch(() => [])
+        conv = allConvs.find(c =>
+          c.participants.includes(app.workerId) &&
+          (c.jobId === job.id || c.applicationId === app.id)
+        ) ?? null
       }
+      // Step 3: create new conversation
       if (!conv) {
         conv = await mockDb.createConversation({
           workerId: app.workerId,
@@ -179,17 +255,81 @@ export default function EmployerJobDetailPage() {
           participants: [app.workerId, user.id]
         })
       }
-      if (conv) sessionStorage.setItem('targetChatConvId', conv.id)
-    } catch { /* ignore, just navigate */ }
-    router.push('/employer/chat')
+      // Navigate with convId in URL — most reliable way to pass state in Next.js App Router
+      if (conv?.id) {
+        router.push(`/employer/chat?convId=${encodeURIComponent(conv.id)}`)
+        return
+      }
+    } catch {
+      // fall through to workerId-based fallback navigation
+    }
+    // Fallback: navigate with worker+job context; chat page will find/create conv
+    router.push(`/employer/chat?workerId=${encodeURIComponent(app.workerId)}&jobId=${encodeURIComponent(job.id)}&appId=${encodeURIComponent(app.id)}`)
   }
 
   if (loading) return (
     <div className="app-surface">
       <EmployerNav />
-      <div className="flex items-center justify-center h-64">
-        <div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-      </div>
+      <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl space-y-6">
+        <div className="space-y-2">
+          <Skeleton className="h-4 w-28" />
+          <Skeleton className="h-8 w-72" />
+          <div className="flex gap-2 mt-2">
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-4 w-24" />
+          </div>
+        </div>
+        <div className="grid lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 space-y-4">
+            <Card>
+              <CardHeader><Skeleton className="h-5 w-24" /></CardHeader>
+              <CardContent className="space-y-3">
+                <div className="grid grid-cols-2 gap-3">
+                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-4 w-36" />)}
+                </div>
+                <Skeleton className="h-px w-full" />
+                <Skeleton className="h-4 w-20 mb-1" />
+                <Skeleton className="h-16 w-full" />
+              </CardContent>
+            </Card>
+            <Card>
+              <CardHeader>
+                <div className="flex justify-between items-center">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                {[...Array(2)].map((_, i) => (
+                  <div key={i} className="flex items-center justify-between p-3 border rounded-lg">
+                    <div className="flex items-center gap-3">
+                      <Skeleton className="h-9 w-9 rounded-full" />
+                      <div className="space-y-1">
+                        <Skeleton className="h-4 w-28" />
+                        <Skeleton className="h-3 w-40" />
+                      </div>
+                    </div>
+                    <div className="flex gap-1.5">
+                      <Skeleton className="h-8 w-20 rounded-md" />
+                      <Skeleton className="h-8 w-20 rounded-md" />
+                      <Skeleton className="h-8 w-16 rounded-md" />
+                    </div>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          </div>
+          <div className="space-y-4">
+            <Card>
+              <CardHeader><Skeleton className="h-5 w-32" /></CardHeader>
+              <CardContent className="space-y-3">
+                {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-4 w-full" />)}
+                <Skeleton className="h-10 w-full rounded-md mt-2" />
+              </CardContent>
+            </Card>
+          </div>
+        </div>
+      </main>
     </div>
   )
 
@@ -250,7 +390,7 @@ export default function EmployerJobDetailPage() {
                   <div className="flex items-center gap-2 text-muted-foreground"><MapPin className="w-4 h-4" /> {job.location || 'Not specified'}</div>
                   <div className="flex items-center gap-2 text-muted-foreground"><Clock className="w-4 h-4" /> {job.duration ?? job.timing}</div>
                   <div className="flex items-center gap-2 text-muted-foreground"><IndianRupee className="w-4 h-4" /> ₹{amount.toLocaleString()} / {job.payType === 'fixed' ? 'fixed' : 'hr'}</div>
-                  <div className="flex items-center gap-2 text-muted-foreground"><Users className="w-4 h-4" /> {job.applicationCount} applicants</div>
+                  <div className="flex items-center gap-2 text-muted-foreground"><Users className="w-4 h-4" /> {applications.length} applicants</div>
                 </div>
                 <Separator />
                 <div>
@@ -291,6 +431,20 @@ export default function EmployerJobDetailPage() {
                       const worker = workersById[app.workerId]
                       const trustColor = worker?.trustLevel === 'trusted' ? 'text-green-600' : worker?.trustLevel === 'active' ? 'text-blue-600' : 'text-amber-600'
                       const trustLabel = worker?.trustLevel === 'trusted' ? '✅ Trusted' : worker?.trustLevel === 'active' ? '👍 Active' : '🌱 New'
+
+                      // Compute skill-overlap match score — prefer DB value, then worker profile skills, then user skills
+                      let displayMatch = app.matchScore
+                      if (!displayMatch && job.requiredSkills?.length) {
+                        // Use worker_profiles.skills (the authoritative skills source)
+                        const profileSkills = workerProfilesById[app.workerId]?.skills
+                        const skillSource = (profileSkills?.length ? profileSkills : worker?.skills) ?? []
+                        if (skillSource.length > 0) {
+                          const workerSkillsLower = skillSource.map((s: string) => s.toLowerCase())
+                          const matchingSkills = job.requiredSkills.filter(s => workerSkillsLower.includes(s.toLowerCase()))
+                          displayMatch = Math.round((matchingSkills.length / job.requiredSkills.length) * 100)
+                        }
+                      }
+
                       return (
                         <div key={app.id} className="flex items-center justify-between p-3 border rounded-lg hover:border-primary/50">
                           <div className="flex items-center gap-3">
@@ -300,7 +454,7 @@ export default function EmployerJobDetailPage() {
                             <div>
                               <p className="text-sm font-medium">{worker?.fullName || 'Worker'}</p>
                               <div className="flex items-center gap-2 flex-wrap">
-                                <p className="text-xs text-muted-foreground">Match: <span className="text-primary font-semibold">{app.matchScore}%</span></p>
+                                <p className="text-xs text-muted-foreground">Match: <span className="text-primary font-semibold">{displayMatch > 0 ? `${displayMatch}%` : 'N/A'}</span></p>
                                 <Badge variant="outline" className="text-xs">{app.status}</Badge>
                                 {worker && <span className={`text-xs font-medium ${trustColor}`}>{trustLabel} · ⭐ {worker.trustScore.toFixed(1)}</span>}
                               </div>

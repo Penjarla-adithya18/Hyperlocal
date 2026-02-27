@@ -44,22 +44,18 @@ export default function AdminDashboardPage() {
 
   const jobPostingsData = last7Days.map((day, i) => ({
     label: day,
-    value: Math.floor(Math.random() * 15) + 5
+    value: Math.max(0, Math.floor(stats.totalJobs / 7) + (i % 3 === 0 ? 1 : 0))
   }))
 
   const applicationStatusData = [
-    { label: 'Accepted', value: Math.floor(stats.totalApplications * 0.35), color: '#22c55e' },
     { label: 'Pending', value: stats.pendingApplications, color: '#eab308' },
-    { label: 'Rejected', value: Math.floor(stats.totalApplications * 0.25), color: '#ef4444' },
-    { label: 'Completed', value: Math.floor(stats.totalApplications * 0.30), color: '#6366f1' },
+    { label: 'Others', value: Math.max(0, stats.totalApplications - stats.pendingApplications), color: '#6366f1' },
   ]
 
   const categoryData = [
-    { label: 'Plumbing', value: Math.floor(stats.totalJobs * 0.20) },
-    { label: 'Electrical', value: Math.floor(stats.totalJobs * 0.18) },
-    { label: 'Carpentry', value: Math.floor(stats.totalJobs * 0.15) },
-    { label: 'Delivery', value: Math.floor(stats.totalJobs * 0.12) },
-    { label: 'Other', value: Math.floor(stats.totalJobs * 0.35) },
+    { label: 'Active', value: stats.activeJobs },
+    { label: 'Completed', value: stats.completedJobs },
+    { label: 'Other', value: Math.max(0, stats.totalJobs - stats.activeJobs - stats.completedJobs) },
   ]
 
   useEffect(() => {
@@ -196,11 +192,11 @@ export default function AdminDashboardPage() {
             <CardContent className="space-y-4">
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Total Escrow Volume</p>
-                <p className="text-2xl font-bold">â‚¹{stats.totalEscrow.toLocaleString()}</p>
+                <p className="text-2xl font-bold">₹{stats.totalEscrow.toLocaleString()}</p>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Currently Held in Escrow</p>
-                <p className="text-xl font-semibold text-primary">â‚¹{stats.heldEscrow.toLocaleString()}</p>
+                <p className="text-xl font-semibold text-primary">₹{stats.heldEscrow.toLocaleString()}</p>
               </div>
             </CardContent>
           </Card>

@@ -26,6 +26,7 @@ export function NotificationBell() {
   const [loaded, setLoaded] = useState(false)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const delayRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const visHandlerRef = useRef<(() => void) | null>(null)
 
   const unreadCount = notifications.filter(n => !n.isRead).length
 
@@ -40,11 +41,11 @@ export function NotificationBell() {
 
   const startPolling = () => {
     if (timerRef.current) return
-    // Poll every 60s (was 30s), only when tab is visible
+    // Poll every 60s, only when tab is visible
     timerRef.current = setInterval(load, 60_000)
-    document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible') load()
-    })
+    const handler = () => { if (document.visibilityState === 'visible') load() }
+    visHandlerRef.current = handler
+    document.addEventListener('visibilitychange', handler)
   }
 
   useEffect(() => {
@@ -56,6 +57,7 @@ export function NotificationBell() {
     return () => {
       if (delayRef.current) clearTimeout(delayRef.current)
       if (timerRef.current) clearInterval(timerRef.current)
+      if (visHandlerRef.current) document.removeEventListener('visibilitychange', visHandlerRef.current)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user])

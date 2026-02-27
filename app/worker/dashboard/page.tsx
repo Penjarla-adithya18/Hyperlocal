@@ -24,6 +24,7 @@ import { mockWorkerProfileOps, mockJobOps, mockApplicationOps, mockTrustScoreOps
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
@@ -48,26 +49,31 @@ export default function WorkerDashboardPage() {
     if (!user) return;
 
     try {
-      const [profile, trust, apps, allJobs] = await Promise.all([
+      const [profile, trust, apps, allJobs] = await Promise.allSettled([
         mockWorkerProfileOps.findByUserId(user.id),
         mockTrustScoreOps.findByUserId(user.id),
         mockApplicationOps.findByWorkerId(user.id),
         mockJobOps.getAll({ status: 'active' }),
       ]);
 
-      setWorkerProfile(profile);
-      setTrustScore(trust);
-      setApplications(apps || []);
+      const profileVal = profile.status === 'fulfilled' ? profile.value : null;
+      const trustVal = trust.status === 'fulfilled' ? trust.value : null;
+      const appsVal = apps.status === 'fulfilled' ? apps.value : [];
+      const allJobsVal = allJobs.status === 'fulfilled' ? allJobs.value : [];
+
+      setWorkerProfile(profileVal);
+      setTrustScore(trustVal);
+      setApplications(appsVal || []);
 
       // Get job recommendations
-      if (profile && profile.profileCompleted) {
-        const recommended = getRecommendedJobs(profile, allJobs, 5);
+      if (profileVal && profileVal.profileCompleted) {
+        const recommended = getRecommendedJobs(profileVal, allJobsVal, 5);
         setRecommendedJobs(recommended);
-      } else if (profile) {
-        const basic = getBasicRecommendations(profile.categories, allJobs, 5);
+      } else if (profileVal) {
+        const basic = getBasicRecommendations(profileVal.categories, allJobsVal, 5);
         setRecommendedJobs(basic.map((job) => ({ job, matchScore: 0 })));
       } else {
-        const basic = getBasicRecommendations([], allJobs, 5);
+        const basic = getBasicRecommendations([], allJobsVal, 5);
         setRecommendedJobs(basic.map((job) => ({ job, matchScore: 0 })));
       }
     } catch (error) {
@@ -93,21 +99,54 @@ export default function WorkerDashboardPage() {
     return date.toLocaleDateString('en-US', { weekday: 'short' });
   });
 
-  const applicationTrendData = last7Days.map((day, i) => ({
-    label: day,
-    value: Math.floor(Math.random() * 3) + (i < 3 ? 0 : 1)
-  }));
+  const applicationTrendData = last7Days.map((day, i) => {
+    const date = new Date();
+    date.setDate(date.getDate() - (6 - i));
+    const dayStart = new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
+    const dayEnd = dayStart + 86400000;
+    const count = applications.filter(a => {
+      const created = new Date(a.createdAt).getTime();
+      return created >= dayStart && created < dayEnd;
+    }).length;
+    return { label: day, value: count };
+  });
 
   if (authLoading || loading) {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading your dashboard...</p>
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-8">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-64" />
+              <Skeleton className="h-4 w-48" />
             </div>
+            <Skeleton className="h-10 w-40 rounded-md" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="card-modern p-5">
+                <Skeleton className="h-10 w-10 rounded-xl mb-3" />
+                <Skeleton className="h-7 w-12 mb-1" />
+                <Skeleton className="h-3 w-20" />
+              </div>
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {[...Array(3)].map((_, i) => (
+              <Card key={i} className="p-6 space-y-4">
+                <div className="flex justify-between">
+                  <div className="space-y-2">
+                    <Skeleton className="h-5 w-40" />
+                    <Skeleton className="h-4 w-24" />
+                  </div>
+                  <Skeleton className="h-6 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+                <Skeleton className="h-10 w-full rounded-md" />
+              </Card>
+            ))}
           </div>
         </div>
       </div>
@@ -243,7 +282,7 @@ export default function WorkerDashboardPage() {
 
                   <div className="flex items-center justify-between pt-4 border-t">
                     <div>
-                      <div className="text-xl font-bold text-primary">₹{job.pay.toLocaleString()}</div>
+                      <div className="text-xl font-bold text-primary">₹{(job.pay ?? 0).toLocaleString()}</div>
                       <div className="text-xs text-muted-foreground">{job.timing}</div>
                     </div>
                     <Link href={`/worker/jobs/${job.id}`}>

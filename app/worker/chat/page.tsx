@@ -28,6 +28,7 @@ import { useI18n } from '@/contexts/I18nContext'
 import { FileUpload } from '@/components/ui/file-upload'
 import { uploadChatAttachment, getSignedUrl, isImageFile, isPdfFile, formatFileSize } from '@/lib/supabase/storage'
 import { Download, FileText, Image as ImageIcon, File } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerChatPage() {
   const { user } = useAuth()
@@ -47,6 +48,7 @@ export default function WorkerChatPage() {
   const [voiceListening, setVoiceListening] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [loadingConversations, setLoadingConversations] = useState(true)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -65,10 +67,19 @@ export default function WorkerChatPage() {
 
     const interval = setInterval(() => {
       loadMessages(selectedConversation.id)
-    }, 3000) // Reduced from 5s to 3s for lower latency
+    }, 3000)
 
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
+
+  // Poll for new conversations every 10s
+  useEffect(() => {
+    if (!user) return
+    const convInterval = setInterval(() => {
+      loadConversations()
+    }, 10000)
+    return () => clearInterval(convInterval)
+  }, [user])
 
   useEffect(() => {
     scrollToBottom()
@@ -76,35 +87,70 @@ export default function WorkerChatPage() {
 
   const loadConversations = async () => {
     if (!user) return
-    const userConvs = await mockDb.getConversationsByUser(user.id)
-    setConversations(userConvs)
-    const participantIds = [...new Set(
-      userConvs
-        .flatMap((conversation) => conversation.participants)
-        .filter((participantId) => participantId !== user.id)
-    )]
-    if (participantIds.length > 0) {
-      const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
-      setUsersById((previous) => {
-        const next = { ...previous }
-        for (const fetched of fetchedUsers) {
-          if (fetched) next[fetched.id] = fetched
-        }
-        return next
-      })
-    }
-    if (userConvs.length > 0 && !selectedConversation) {
-      setSelectedConversation(userConvs[0])
-    }
-    // Load jobs for all conversations (to check completion status)
-    const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
-    if (jobIds.length > 0) {
-      const allJobs = await mockDb.getAllJobs()
-      const jMap: Record<string, Job> = {}
-      for (const j of allJobs) {
-        if (jobIds.includes(j.id)) jMap[j.id] = j
+    setLoadingConversations(true)
+    try {
+      const userConvs = await mockDb.getConversationsByUser(user.id)
+      setConversations(userConvs)
+      const participantIds = [...new Set(
+        userConvs
+          .flatMap((conversation) => conversation.participants)
+          .filter((participantId) => participantId !== user.id)
+      )]
+      if (participantIds.length > 0) {
+        const fetchedUsers = await Promise.all(participantIds.map((id) => mockUserOps.findById(id)))
+        setUsersById((previous) => {
+          const next = { ...previous }
+          for (const fetched of fetchedUsers) {
+            if (fetched) next[fetched.id] = fetched
+          }
+          return next
+        })
       }
-      setJobsById(jMap)
+
+      // Check sessionStorage for navigation target (from job application button)
+      const targetConvId = sessionStorage.getItem('targetChatConvId')
+      const targetEmployerId = sessionStorage.getItem('targetChatEmployerId')
+      const targetJobId = sessionStorage.getItem('targetChatJobId')
+      sessionStorage.removeItem('targetChatConvId')
+      sessionStorage.removeItem('targetChatEmployerId')
+      sessionStorage.removeItem('targetChatJobId')
+
+      // 1. Try exact conv ID
+      if (targetConvId) {
+        const targetConv = userConvs.find(c => c.id === targetConvId)
+        if (targetConv) {
+          setSelectedConversation(targetConv)
+          return
+        }
+      }
+      // 2. Fall back to employer + job lookup
+      if (targetEmployerId) {
+        const found = userConvs.find(c =>
+          c.participants.includes(targetEmployerId) &&
+          (!targetJobId || c.jobId === targetJobId)
+        )
+        if (found) {
+          setSelectedConversation(found)
+          return
+        }
+      }
+      // 3. Only auto-select first if no target was requested
+      if (!targetConvId && !targetEmployerId && userConvs.length > 0 && !selectedConversation) {
+        setSelectedConversation(userConvs[0])
+      }
+
+      // Load jobs for all conversations (to check completion status)
+      const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
+      if (jobIds.length > 0) {
+        const allJobs = await mockDb.getAllJobs()
+        const jMap: Record<string, Job> = {}
+        for (const j of allJobs) {
+          if (jobIds.includes(j.id)) jMap[j.id] = j
+        }
+        setJobsById(jMap)
+      }
+    } finally {
+      setLoadingConversations(false)
     }
   }
 
@@ -197,7 +243,7 @@ export default function WorkerChatPage() {
       loadConversations() // Update conversation list
     } catch (error) {
       // Remove temp message on error
-      setMessages((prev) => prev.filter(m => m.id.startsWith('temp-')))
+      setMessages((prev) => prev.filter(m => !m.id.startsWith('temp-')))
       toast({
         title: 'Failed to send',
         description: error instanceof Error ? error.message : 'Please try again',
@@ -319,7 +365,19 @@ export default function WorkerChatPage() {
                 </div>
               </div>
               <div className="flex-1 overflow-y-auto">
-                {filteredConversations.length === 0 ? (
+                {loadingConversations ? (
+                  <div className="p-2 space-y-2">
+                    {[...Array(5)].map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-3">
+                        <Skeleton className="h-11 w-11 rounded-full shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-28" />
+                          <Skeleton className="h-3 w-44" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="text-center py-12">
                     <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -562,7 +620,19 @@ export default function WorkerChatPage() {
               </CardHeader>
               <div className="flex-1 overflow-y-auto">
                 <CardContent className="space-y-2">
-                  {filteredConversations.length === 0 ? (
+                  {loadingConversations ? (
+                    <div className="space-y-2">
+                      {[...Array(5)].map((_, i) => (
+                        <div key={i} className="flex items-start gap-3 p-3">
+                          <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-3.5 w-28" />
+                            <Skeleton className="h-3 w-40" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredConversations.length === 0 ? (
                     <div className="text-center py-8">
                       <MessageCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -673,6 +743,39 @@ export default function WorkerChatPage() {
                                   : 'bg-muted/80 text-foreground rounded-[20px] rounded-bl-md'
                               }`}
                             >
+                              {message.attachmentUrl && (
+                                <div className="mb-2 rounded-lg overflow-hidden">
+                                  {isImageFile(message.attachmentName || '') ? (
+                                    <img
+                                      src={message.attachmentUrl}
+                                      alt={message.attachmentName}
+                                      className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
+                                    />
+                                  ) : (
+                                    <a
+                                      href={message.attachmentUrl}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className={`flex items-center gap-2 p-2 rounded-lg ${
+                                        isSent ? 'bg-primary-foreground/10' : 'bg-background/50'
+                                      } hover:opacity-80 transition-opacity`}
+                                    >
+                                      {isPdfFile(message.attachmentName || '') ? (
+                                        <FileText className="h-5 w-5" />
+                                      ) : (
+                                        <File className="h-5 w-5" />
+                                      )}
+                                      <div className="flex-1 min-w-0">
+                                        <p className="text-xs font-medium truncate">{message.attachmentName}</p>
+                                        {message.attachmentSize && (
+                                          <p className="text-[10px] opacity-70">{formatFileSize(message.attachmentSize)}</p>
+                                        )}
+                                      </div>
+                                      <Download className="h-4 w-4" />
+                                    </a>
+                                  )}
+                                </div>
+                              )}
                               <p className="text-[15px] leading-relaxed break-words">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
                               <p className={`text-[11px] mt-1.5 ${
                                 isSent ? 'text-primary-foreground/60' : 'text-muted-foreground/60'
@@ -739,13 +842,21 @@ export default function WorkerChatPage() {
               </>
             ) : (
               <CardContent className="flex items-center justify-center h-full">
-                <div className="text-center">
-                  <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
-                  <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
-                  <p className="text-muted-foreground">
-                    Choose a conversation from the list to start chatting
-                  </p>
-                </div>
+                {loadingConversations ? (
+                  <div className="flex flex-col items-center gap-4 w-full max-w-xs">
+                    <Skeleton className="h-16 w-16 rounded-full" />
+                    <Skeleton className="h-5 w-48" />
+                    <Skeleton className="h-4 w-64" />
+                  </div>
+                ) : (
+                  <div className="text-center">
+                    <MessageCircle className="h-16 w-16 mx-auto mb-4 text-muted-foreground" />
+                    <h3 className="text-lg font-semibold mb-2">Select a Conversation</h3>
+                    <p className="text-muted-foreground">
+                      Choose a conversation from the list to start chatting
+                    </p>
+                  </div>
+                )}
               </CardContent>
             )}
           </Card>

@@ -12,6 +12,7 @@ import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function EmployerJobsPage() {
   const router = useRouter()
@@ -169,7 +170,45 @@ export default function EmployerJobsPage() {
       <div className="app-surface">
         <EmployerNav />
         <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <p className="text-center text-muted-foreground">Loading jobs...</p>
+          <div className="flex justify-between items-center mb-8">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-48" />
+              <Skeleton className="h-4 w-72" />
+            </div>
+            <Skeleton className="h-10 w-36" />
+          </div>
+          <div className="flex gap-2 mb-6">
+            {[...Array(3)].map((_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1 space-y-2">
+                      <Skeleton className="h-6 w-48" />
+                      <div className="flex gap-2">
+                        {[...Array(3)].map((_, j) => <Skeleton key={j} className="h-5 w-20 rounded-full" />)}
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-20 rounded-full" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <Skeleton className="h-4 w-full mb-2" />
+                  <Skeleton className="h-4 w-3/4 mb-4" />
+                  <div className="grid grid-cols-2 gap-4 mb-4">
+                    {[...Array(4)].map((_, j) => <Skeleton key={j} className="h-4 w-32" />)}
+                  </div>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-9 flex-1 rounded-md" />
+                    <Skeleton className="h-9 w-9 rounded-md" />
+                    <Skeleton className="h-9 w-9 rounded-md" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     )

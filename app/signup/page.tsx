@@ -211,9 +211,9 @@ function SignupPageContent() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:p-6">
-      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-blue-50/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
-        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
+    <div suppressHydrationWarning className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 md:p-6">
+      <div suppressHydrationWarning className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-slate-200/70 bg-blue-50/95 shadow-2xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+        <section suppressHydrationWarning className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
               H
@@ -250,7 +250,7 @@ function SignupPageContent() {
           </div>
         </section>
 
-        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
+        <section suppressHydrationWarning className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-6 shadow-2xl md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
           <Link href="/" className="absolute left-6 top-6 inline-flex items-center text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:left-8 md:top-8">
             ← Back to Home
           </Link>

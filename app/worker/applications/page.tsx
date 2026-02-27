@@ -9,8 +9,9 @@ import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb } from '@/lib/api'
 import { Application, Job } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Eye } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Eye, CheckCircle2 } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerApplicationsPage() {
   const router = useRouter()
@@ -47,6 +48,7 @@ export default function WorkerApplicationsPage() {
   const pendingApps = applications.filter(a => a.status === 'pending')
   const acceptedApps = applications.filter(a => a.status === 'accepted')
   const rejectedApps = applications.filter(a => a.status === 'rejected')
+  const completedApps = applications.filter(a => a.status === 'completed')
 
   const ApplicationCard = ({ application }: { application: Application }) => {
     const job = jobsById[application.jobId]
@@ -65,8 +67,9 @@ export default function WorkerApplicationsPage() {
             <Badge variant={
               application.status === 'accepted' ? 'default' :
               application.status === 'rejected' ? 'destructive' :
+              application.status === 'completed' ? 'default' :
               'secondary'
-            }>
+            } className={application.status === 'completed' ? 'bg-green-100 text-green-700 border-green-200' : ''}>
               {application.status}
             </Badge>
           </div>
@@ -117,8 +120,38 @@ export default function WorkerApplicationsPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <p className="text-center text-muted-foreground">Loading applications...</p>
+        <div className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8">
+          <div className="mb-6 space-y-2">
+            <Skeleton className="h-8 w-48" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="flex gap-2 mb-6">
+            {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-9 w-24 rounded-md" />)}
+          </div>
+          <div className="space-y-4">
+            {[...Array(4)].map((_, i) => (
+              <Card key={i}>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-2">
+                      <Skeleton className="h-5 w-48" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-4 w-24" />
+                        <Skeleton className="h-4 w-20" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-6 w-24 rounded-full" />
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex gap-2">
+                    <Skeleton className="h-9 flex-1 rounded-md" />
+                    <Skeleton className="h-9 w-9 rounded-md" />
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -144,6 +177,9 @@ export default function WorkerApplicationsPage() {
             </TabsTrigger>
             <TabsTrigger value="rejected" className="flex-1 min-w-[90px]">
               <span className="hidden sm:inline">Rejected</span><span className="sm:hidden">Reject.</span> ({rejectedApps.length})
+            </TabsTrigger>
+            <TabsTrigger value="completed" className="flex-1 min-w-[90px]">
+              <span className="hidden sm:inline">Completed</span><span className="sm:hidden">Done</span> ({completedApps.length})
             </TabsTrigger>
           </TabsList>
 
@@ -194,6 +230,24 @@ export default function WorkerApplicationsPage() {
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
                 {rejectedApps.map((app) => (
+                  <ApplicationCard key={app.id} application={app} />
+                ))}
+              </div>
+            )}
+          </TabsContent>
+
+          <TabsContent value="completed">
+            {completedApps.length === 0 ? (
+              <Card>
+                <CardContent className="py-12 text-center">
+                  <CheckCircle2 className="h-12 w-12 mx-auto mb-4 text-green-500" />
+                  <h3 className="text-lg font-semibold mb-2">No Completed Jobs Yet</h3>
+                  <p className="text-muted-foreground">Jobs you finish will appear here</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                {completedApps.map((app) => (
                   <ApplicationCard key={app.id} application={app} />
                 ))}
               </div>

@@ -1,15 +1,13 @@
 /**
  * Resume Parser Service
  *
- * Extracts structured data from resume text using Gemini AI.
- * Supports:
- *  - Text extraction from uploaded files (PDF text layer, .txt, .docx)
- *  - AI-powered parsing into ResumeData structure
- *  - Session caching to avoid re-parsing the same resume
+ * Pipeline:
+ *  1. Extract raw text from file using multi-strategy approach
+ *  2. Sanitize and clean the text
+ *  3. Send to Gemini with a comprehensive structured prompt
+ *  4. Return categorized skills + full ResumeData
  *
- * Architecture:
- *  - Client-side: reads file → extracts text → sends to Gemini for parsing
- *  - No server needed — Gemini API is called directly from the browser
+ * Handles: PDF (text layer + hex strings), DOCX (ZIP/XML), TXT, MD
  */
 
 import type { ResumeData } from './types'
@@ -32,333 +30,519 @@ function getNextKey(): string {
   return key
 }
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+const GEMINI_ENDPOINTS = {
+  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
+  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent',
+} as const
 
-async function callGemini(prompt: string, maxTokens = 2048): Promise<string> {
-  const key = getNextKey()
-  const res = await fetch(`${GEMINI_URL}?key=${key}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens },
-    }),
-  })
+let _lastRequestTime = 0
+const _minDelayBetweenRequests = 300   // ms between consecutive requests
+let _rateLimitedUntil = 0             // epoch ms — back-off until this time
+const _invalidKeys = new Set<string>() // keys confirmed invalid by Google API
 
-  if (!res.ok) {
-    if (res.status === 429) {
-      // Retry once with next key
-      const retryKey = getNextKey()
-      const retry = await fetch(`${GEMINI_URL}?key=${retryKey}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.1, maxOutputTokens: maxTokens },
-        }),
-      })
-      if (!retry.ok) throw new Error(`Gemini error: ${retry.status}`)
-      const d = await retry.json()
-      return d.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+/** Returns the next key that hasn't been marked invalid. Throws if all keys are bad. */
+function getValidKey(): string {
+  const allKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
+  if (allKeys.length === 0) {
+    throw new Error(
+      'All Gemini API keys are invalid or exhausted. ' +
+      'Please add valid keys to NEXT_PUBLIC_GEMINI_API_KEYS in .env.local'
+    )
+  }
+  const key = allKeys[_keyIndex % allKeys.length]
+  _keyIndex++
+  return key
+}
+
+/** Parse the Retry-After header (seconds integer or HTTP-date) → milliseconds */
+function parseRetryAfter(res: Response): number {
+  const raw = res.headers.get('Retry-After')
+  if (!raw) return 0
+  const secs = parseInt(raw, 10)
+  if (!isNaN(secs)) return secs * 1000
+  const date = new Date(raw).getTime()
+  return isNaN(date) ? 0 : Math.max(0, date - Date.now())
+}
+
+async function callGemini(prompt: string, maxTokens = 3000): Promise<string> {
+  // Honour shared rate-limit guard
+  const rlWait = _rateLimitedUntil - Date.now()
+  if (rlWait > 0) await new Promise(r => setTimeout(r, rlWait))
+
+  // Throttle consecutive calls
+  const throttleWait = _minDelayBetweenRequests - (Date.now() - _lastRequestTime)
+  if (throttleWait > 0) await new Promise(r => setTimeout(r, throttleWait))
+  _lastRequestTime = Date.now()
+
+  // Models to try in order: flash first, lite as fallback
+  const modelOrder: (keyof typeof GEMINI_ENDPOINTS)[] = ['flash', 'lite']
+  // Backoff between full key-sweeps: wait only after ALL keys get 429 in one round
+  const SWEEP_BACKOFFS = [5_000, 15_000, 30_000]
+
+  let lastError: Error | null = null
+
+  for (const model of modelOrder) {
+    const url = GEMINI_ENDPOINTS[model]
+
+    // Outer loop: backoff rounds — each round sweeps every valid key once
+    for (let round = 0; round <= SWEEP_BACKOFFS.length; round++) {
+      const validKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
+      if (validKeys.length === 0) break
+
+      let allGot429 = true  // becomes false if any non-429 failure occurs
+
+      // Inner loop: try every valid key once before backing off
+      for (const key of validKeys) {
+        try {
+          const res = await fetch(`${url}?key=${key}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: prompt }] }],
+              generationConfig: { temperature: 0.0, maxOutputTokens: maxTokens },
+            }),
+          })
+
+          if (res.ok) {
+            const data = await res.json()
+            return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+          }
+
+          if (res.status === 429) {
+            const retryAfterMs = parseRetryAfter(res)
+            if (retryAfterMs > 0) _rateLimitedUntil = Date.now() + retryAfterMs
+            lastError = new Error(`Gemini 429 – rate limited (${model}, round ${round + 1}, key …${key.slice(-4)})`)
+            // allGot429 stays true — keep sweeping remaining keys
+          } else if (res.status === 400) {
+            let msg = 'Bad request'
+            try { const d = await res.json(); msg = d.error?.message ?? msg } catch { /* */ }
+            const isKeyError = /api key|apikey|not valid|invalid key/i.test(msg)
+            if (isKeyError) {
+              _invalidKeys.add(key)
+              console.warn(`Gemini: key …${key.slice(-6)} is invalid – skipping permanently`)
+              allGot429 = false   // invalid key, not a rate-limit
+              continue            // skip to next key in sweep
+            }
+            // Genuine malformed request — throw immediately, no point retrying
+            console.error('Gemini 400 (bad request):', msg, 'prompt length:', prompt.length)
+            throw new Error(`Gemini 400: ${msg}`)
+          } else {
+            allGot429 = false
+            throw new Error(`Gemini ${res.status}: unexpected error`)
+          }
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err)
+          // Re-throw hard errors; let 429 flow fall through
+          if (!msg.includes('429') && !msg.includes('rate limit')) throw err
+          lastError = err instanceof Error ? err : new Error(msg)
+        }
+      }
+
+      // If none of the failures were hard errors, all keys gave 429
+      if (!allGot429) break  // non-429 failure on every key — move on to next model
+
+      if (round >= SWEEP_BACKOFFS.length) break  // all backoff rounds exhausted for this model
+
+      const backoffMs = SWEEP_BACKOFFS[round]
+      const validCount = GEMINI_KEYS.filter(k => !_invalidKeys.has(k)).length
+      console.warn(
+        `Gemini ${model}: all ${validCount} key(s) rate-limited, ` +
+        `waiting ${Math.round(backoffMs / 1000)}s before retry (round ${round + 1}/${SWEEP_BACKOFFS.length})`
+      )
+      _rateLimitedUntil = Date.now() + backoffMs
+      await new Promise(r => setTimeout(r, backoffMs))
+      _rateLimitedUntil = 0
     }
-    throw new Error(`Gemini error: ${res.status}`)
   }
 
-  const data = await res.json()
-  return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
+  throw lastError ?? new Error('Gemini failed: all keys rate-limited or exhausted')
 }
 
-// ── Text extraction from files ──────────────────────────────────────────────
+// ── Text sanitization ────────────────────────────────────────────────────────
 
-/**
- * Extract text content from a File object.
- * Supports .txt, .pdf (text layer), and falls back to reading as text.
- */
-export async function extractTextFromFile(file: File): Promise<string> {
-  const name = file.name.toLowerCase()
+function sanitize(text: string): string {
+  return text
+    .replace(/[\x00-\x08\x0B-\x0C\x0E-\x1F]/g, ' ')  // control chars (keep tab/newline)
+    .replace(/[\u200B-\u200D\uFEFF]/g, '')              // zero-width chars
+    .replace(/\r\n/g, '\n')
+    .replace(/\r/g, '\n')
+    .replace(/[ \t]{4,}/g, '  ')
+    .replace(/\n{4,}/g, '\n\n\n')
+    .trim()
+}
 
-  if (name.endsWith('.txt') || name.endsWith('.md')) {
-    return file.text()
+// ── PDF text extraction ──────────────────────────────────────────────────────
+
+/** Decode octal escapes and PDF special escapes inside parenthesized strings */
+function decodePDFEscapes(s: string): string {
+  return s
+    .replace(/\\([0-7]{1,3})/g, (_, oct) => String.fromCharCode(parseInt(oct, 8)))
+    .replace(/\\n/g, '\n')
+    .replace(/\\r/g, '\r')
+    .replace(/\\t/g, '\t')
+    .replace(/\\\(/g, '(')
+    .replace(/\\\)/g, ')')
+    .replace(/\\\\/g, '\\')
+}
+
+/** Decode a hex-encoded PDF string: 48656c6c6f → Hello */
+function decodePDFHex(hex: string): string {
+  const h = hex.length % 2 === 1 ? hex + '0' : hex
+  let out = ''
+  for (let i = 0; i < h.length; i += 2) {
+    const code = parseInt(h.slice(i, i + 2), 16)
+    if (code >= 32 && code < 127) out += String.fromCharCode(code)
+    else if (code > 127) out += ' '
+    // skip nulls and low control chars
   }
-
-  if (name.endsWith('.pdf')) {
-    return extractTextFromPDF(file)
-  }
-
-  // For .docx and other formats, try reading as text
-  // (Won't work perfectly for binary .docx but handles some cases)
-  if (name.endsWith('.docx') || name.endsWith('.doc')) {
-    return extractTextFromDocx(file)
-  }
-
-  // Fallback: try as plain text
-  return file.text()
+  return out
 }
 
 /**
- * Extract text from PDF using pdf.js–style text layer extraction.
- * Uses a lightweight approach: read as ArrayBuffer and extract text content.
+ * Multi-strategy PDF text extraction.
+ * Handles:
+ *   Strategy 1 – Literal strings (text) Tj / ' / "
+ *   Strategy 2 – TJ arrays [(literal)-123(literal)] TJ
+ *   Strategy 3 – Hex strings <DEADBEEF> Tj
+ *   Strategy 4 – TJ arrays with hex strings
  */
+function extractPDFTextFromRaw(raw: string): string {
+  const parts: string[] = []
+
+  // Strategy 1: (text) Tj / T' / T"
+  for (const m of raw.matchAll(/\(([^)]*(?:\\.[^)]*)*)\)\s*T[j'"]/g)) {
+    const t = decodePDFEscapes(m[1]).trim()
+    if (t) parts.push(t)
+  }
+
+  // Strategy 2: TJ arrays with literal strings
+  for (const m of raw.matchAll(/\[((?:[^[\]]|\((?:[^)\\]|\\.)*\))*)\]\s*TJ/g)) {
+    for (const sm of m[1].matchAll(/\(([^)]*(?:\\.[^)]*)*)\)/g)) {
+      const t = decodePDFEscapes(sm[1]).trim()
+      if (t) parts.push(t)
+    }
+  }
+
+  // Strategy 3: <hexstring> Tj
+  for (const m of raw.matchAll(/<([0-9a-fA-F]{2,})>\s*T[j'"]/g)) {
+    const t = decodePDFHex(m[1]).trim()
+    if (t.length > 1) parts.push(t)
+  }
+
+  // Strategy 4: TJ arrays with hex strings
+  for (const m of raw.matchAll(/\[((?:[^[\]]|<[0-9a-fA-F]*>)*)\]\s*TJ/g)) {
+    for (const sm of m[1].matchAll(/<([0-9a-fA-F]{2,})>/g)) {
+      const t = decodePDFHex(sm[1]).trim()
+      if (t.length > 1) parts.push(t)
+    }
+  }
+
+  return parts.join(' ').replace(/\s+/g, ' ').trim()
+}
+
 async function extractTextFromPDF(file: File): Promise<string> {
   const buffer = await file.arrayBuffer()
   const bytes = new Uint8Array(buffer)
-
-  // Simple PDF text extraction:
-  // PDF stores text in stream objects between BT and ET markers
-  // This is a lightweight extractor — handles ~80% of text-layer PDFs
-  const text = extractTextFromPDFBytes(bytes)
-
-  if (text.trim().length < 50) {
-    // Very little text extracted — might be image-based PDF
-    // Fall back to reading raw and sending to Gemini for OCR-like extraction
-    const rawText = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
-    return rawText.replace(/[^\x20-\x7E\n\r\t]/g, ' ').replace(/\s{3,}/g, '\n').trim()
-  }
-
-  return text
-}
-
-/**
- * Lightweight PDF text extraction from raw bytes.
- * Parses PDF stream operators (Tj, TJ, ') to extract visible text.
- */
-function extractTextFromPDFBytes(bytes: Uint8Array): string {
   const raw = new TextDecoder('latin1').decode(bytes)
-  const textParts: string[] = []
 
-  // Extract text from parenthesized strings in PDF content streams
-  // Pattern: (text) Tj  or  [(text)] TJ
-  const matches = raw.matchAll(/\(([^)]*)\)\s*T[jJ]/g)
-  for (const match of matches) {
-    const decoded = match[1]
-      .replace(/\\n/g, '\n')
-      .replace(/\\r/g, '\r')
-      .replace(/\\t/g, '\t')
-      .replace(/\\\(/g, '(')
-      .replace(/\\\)/g, ')')
-      .replace(/\\\\/g, '\\')
-    textParts.push(decoded)
+  const extracted = extractPDFTextFromRaw(raw)
+
+  if (extracted.length >= 100) {
+    return sanitize(extracted)
   }
 
-  // Also try TJ arrays: [(...) num (...)] TJ
-  const tjArrays = raw.matchAll(/\[((?:\([^)]*\)|[^[\]])*)\]\s*TJ/g)
-  for (const match of tjArrays) {
-    const inner = match[1]
-    const stringMatches = inner.matchAll(/\(([^)]*)\)/g)
-    for (const sm of stringMatches) {
-      textParts.push(sm[1])
-    }
-  }
-
-  return textParts.join(' ').replace(/\s+/g, ' ').trim()
+  // Fallback: strip binary, keep printable ASCII
+  const fallback = raw
+    .replace(/[^\x20-\x7E\n\r\t]/g, ' ')
+    .replace(/\s{3,}/g, '\n')
+    .trim()
+  return sanitize(fallback.length > extracted.length ? fallback : extracted)
 }
 
-/**
- * Basic .docx text extraction.
- * DOCX is a ZIP containing XML. We extract text from word/document.xml.
- */
+// ── DOCX text extraction ─────────────────────────────────────────────────────
+
 async function extractTextFromDocx(file: File): Promise<string> {
   try {
-    // Try to read the docx XML content
     const buffer = await file.arrayBuffer()
-    const bytes = new Uint8Array(buffer)
-    const raw = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+    const raw = new TextDecoder('utf-8', { fatal: false }).decode(new Uint8Array(buffer))
 
-    // Find XML text content within <w:t> tags (Word XML format)
-    const textParts: string[] = []
-    const matches = raw.matchAll(/<w:t[^>]*>([^<]*)<\/w:t>/g)
-    for (const match of matches) {
-      textParts.push(match[1])
+    const parts: string[] = []
+
+    // Parse paragraph by paragraph (preserves structure better)
+    for (const para of raw.matchAll(/<w:p[ >]([\s\S]*?)<\/w:p>/g)) {
+      const lineTokens: string[] = []
+      for (const run of para[1].matchAll(/<w:t[^>]*>([\s\S]*?)<\/w:t>/g)) {
+        if (run[1].trim()) lineTokens.push(run[1])
+      }
+      if (lineTokens.length > 0) parts.push(lineTokens.join(''))
     }
 
-    if (textParts.length > 0) {
-      return textParts.join(' ').trim()
-    }
+    if (parts.length > 5) return sanitize(parts.join('\n'))
 
-    // Fallback: strip all XML tags and return plain text
-    return raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    // Fallback: strip all tags
+    return sanitize(raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim())
   } catch {
     return file.text()
   }
 }
 
-// ── Resume parsing with Gemini ──────────────────────────────────────────────
+// ── Public entry: extract text ───────────────────────────────────────────────
 
-// Session cache for parsed resumes (keyed by first 200 chars of text)
-const _parseCache = new Map<string, ResumeData>()
+export async function extractTextFromFile(file: File): Promise<string> {
+  const name = file.name.toLowerCase()
+  if (name.endsWith('.pdf')) return extractTextFromPDF(file)
+  if (name.endsWith('.docx') || name.endsWith('.doc')) return extractTextFromDocx(file)
+  if (name.endsWith('.txt') || name.endsWith('.md') || name.endsWith('.rtf')) return file.text()
+  try { return await file.text() } catch { return '' }
+}
 
-/**
- * Parse resume text into structured ResumeData using Gemini AI.
- *
- * Steps:
- *  1. Check session cache
- *  2. Send text to Gemini with structured extraction prompt
- *  3. Parse JSON response into ResumeData
- *  4. Cache and return
- */
-export async function parseResume(resumeText: string): Promise<ResumeData> {
-  if (!resumeText || resumeText.trim().length < 20) {
-    return { skills: [], experience: [], education: [], projects: [] }
+// ── Gemini prompt ────────────────────────────────────────────────────────────
+
+function buildResumePrompt(text: string): string {
+  return `You are an expert resume/CV parser with deep knowledge of Indian job markets (tech, blue-collar, service industries) and global professional norms.
+
+Carefully read this resume and extract EVERY piece of information present.
+
+RESUME TEXT:
+---
+${text}
+---
+
+Return ONLY a single valid JSON object. No markdown fences, no explanation, no extra text before or after.
+
+{
+  "name": "full name or empty string",
+  "summary": "2-3 sentence professional summary based on the content",
+  "contact": {
+    "email": "email or empty",
+    "phone": "phone or empty",
+    "location": "city/state or empty",
+    "linkedin": "linkedin url or empty"
+  },
+  "skills": {
+    "technical": ["every programming language, framework, library, database, platform, cloud service, protocol mentioned anywhere"],
+    "soft": ["every soft skill: leadership, communication, teamwork, problem-solving, time management, etc."],
+    "domain": ["industry/domain knowledge: accounting, logistics, healthcare, construction, hospitality, teaching, etc."],
+    "tools": ["every specific software tool, ERP, CRM, hardware tool: Excel, Tally, SAP, AutoCAD, Photoshop, Figma, etc."]
+  },
+  "experience": [
+    {
+      "title": "exact job title",
+      "company": "company name",
+      "duration": "e.g. Jan 2020 – Mar 2023",
+      "location": "city or Remote",
+      "description": "key responsibilities and achievements"
+    }
+  ],
+  "education": [
+    {
+      "degree": "full degree name",
+      "institution": "college/university name",
+      "year": "graduation year or empty",
+      "grade": "CGPA/percentage or empty"
+    }
+  ],
+  "projects": [
+    {
+      "name": "project name",
+      "description": "what it does, your role, outcomes",
+      "technologies": ["tech1", "tech2"]
+    }
+  ],
+  "certifications": ["every certification, course, training, license"],
+  "languages": ["languages the person speaks or writes"]
+}
+
+IMPORTANT:
+- Include EVERY skill regardless of context — technical, soft, domain, or tools
+- Do NOT skip blue-collar skills (welding, driving, carpentry, cooking, security, data entry, etc.)
+- Normalize: "JS" → "JavaScript", "py" → "Python", "MS Excel" → "Excel"
+- If a field is missing use empty string "" or empty array []
+- Return ONLY valid JSON, nothing else`
+}
+
+// ── Session cache ─────────────────────────────────────────────────────────────
+
+const _parseCache = new Map<string, ParsedResume>()
+
+// ── Types ─────────────────────────────────────────────────────────────────────
+
+/** Extended result that includes categorized skills from Gemini */
+export interface ParsedResume extends ResumeData {
+  name?: string
+  contact?: {
+    email?: string
+    phone?: string
+    location?: string
+    linkedin?: string
   }
+  /** Skills split by category — available when Gemini parsing succeeds */
+  categorizedSkills?: {
+    technical: string[]
+    soft: string[]
+    domain: string[]
+    tools: string[]
+  }
+  certifications?: string[]
+  languages?: string[]
+}
 
-  // Cache check
-  const cacheKey = resumeText.slice(0, 200).trim()
+// ── Main parse function ───────────────────────────────────────────────────────
+
+export async function parseResume(resumeText: string): Promise<ParsedResume> {
+  const empty: ParsedResume = { skills: [], experience: [], education: [], projects: [] }
+  if (!resumeText || resumeText.trim().length < 30) return empty
+
+  const clean = sanitize(resumeText)
+  const cacheKey = clean.slice(0, 300)
   const cached = _parseCache.get(cacheKey)
   if (cached) return cached
 
-  const prompt = `You are a resume parser for HyperLocal Jobs (Indian job platform).
-Extract structured data from this resume text. Return ONLY valid JSON, no markdown.
-
-Resume text:
-"""
-${resumeText.slice(0, 6000)}
-"""
-
-Return this exact JSON structure:
-{
-  "summary": "1-2 sentence professional summary",
-  "skills": ["skill1", "skill2", ...],
-  "experience": [
-    {"title": "Job Title", "company": "Company Name", "duration": "e.g. Jan 2020 - Dec 2022", "description": "Brief role description"}
-  ],
-  "education": [
-    {"degree": "Degree Name", "institution": "College/University", "year": "2020"}
-  ],
-  "projects": [
-    {"name": "Project Name", "description": "What it does", "technologies": ["tech1", "tech2"]}
-  ],
-  "certifications": ["cert1", "cert2"]
-}
-
-Rules:
-- Extract ALL skills mentioned (technical and soft skills)
-- Include ALL work experience entries
-- Include ALL projects mentioned
-- If a field is missing, use empty string or empty array
-- Return valid JSON only`
+  const textForGemini = clean.slice(0, 5000)
 
   try {
-    const raw = await callGemini(prompt, 2048)
-    const cleaned = raw
+    const raw = await callGemini(buildResumePrompt(textForGemini), 3000)
+    if (!raw || raw.length < 20) throw new Error('Empty Gemini response')
+
+    const jsonStr = raw
       .replace(/^```json\s*/i, '')
       .replace(/^```\s*/i, '')
-      .replace(/```$/i, '')
+      .replace(/```\s*$/i, '')
       .trim()
 
-    const parsed = JSON.parse(cleaned) as ResumeData
+    const p = JSON.parse(jsonStr)
 
-    // Normalize and validate
-    const result: ResumeData = {
-      summary: parsed.summary || undefined,
-      skills: Array.isArray(parsed.skills) ? parsed.skills.filter(Boolean) : [],
-      experience: Array.isArray(parsed.experience)
-        ? parsed.experience.map((e) => ({
+    const techSkills: string[] = Array.isArray(p.skills?.technical) ? p.skills.technical.filter(Boolean) : []
+    const softSkills: string[] = Array.isArray(p.skills?.soft) ? p.skills.soft.filter(Boolean) : []
+    const domainSkills: string[] = Array.isArray(p.skills?.domain) ? p.skills.domain.filter(Boolean) : []
+    const toolSkills: string[] = Array.isArray(p.skills?.tools) ? p.skills.tools.filter(Boolean) : []
+    const projectTech = (p.projects ?? []).flatMap((pr: { technologies?: string[] }) => pr.technologies ?? [])
+    const allSkills = [...new Set([...techSkills, ...softSkills, ...domainSkills, ...toolSkills, ...projectTech])].filter(Boolean)
+
+    const result: ParsedResume = {
+      name: p.name || undefined,
+      summary: p.summary || undefined,
+      contact: p.contact || undefined,
+      skills: allSkills,
+      categorizedSkills: {
+        technical: techSkills,
+        soft: softSkills,
+        domain: domainSkills,
+        tools: toolSkills,
+      },
+      experience: Array.isArray(p.experience)
+        ? p.experience.map((e: Record<string, string>) => ({
             title: e.title || '',
             company: e.company || '',
             duration: e.duration || '',
             description: e.description || '',
           }))
         : [],
-      education: Array.isArray(parsed.education)
-        ? parsed.education.map((e) => ({
+      education: Array.isArray(p.education)
+        ? p.education.map((e: Record<string, string>) => ({
             degree: e.degree || '',
             institution: e.institution || '',
             year: e.year,
           }))
         : [],
-      projects: Array.isArray(parsed.projects)
-        ? parsed.projects.map((p) => ({
-            name: p.name || '',
-            description: p.description || '',
-            technologies: Array.isArray(p.technologies) ? p.technologies : [],
+      projects: Array.isArray(p.projects)
+        ? p.projects.map((pr: Record<string, unknown>) => ({
+            name: (pr.name as string) || '',
+            description: (pr.description as string) || '',
+            technologies: Array.isArray(pr.technologies) ? pr.technologies : [],
           }))
         : [],
-      certifications: Array.isArray(parsed.certifications) ? parsed.certifications : undefined,
+      certifications: Array.isArray(p.certifications) ? p.certifications.filter(Boolean) : undefined,
+      languages: Array.isArray(p.languages) ? p.languages.filter(Boolean) : undefined,
     }
 
     _parseCache.set(cacheKey, result)
     return result
   } catch (err) {
-    console.error('Resume parsing failed:', err)
-    // Return partially extracted data using regex fallbacks
-    return extractResumeDataFallback(resumeText)
+    console.error('Resume Gemini parsing failed:', err instanceof Error ? err.message : err)
+    return regexFallback(clean)
   }
 }
 
-/**
- * Fallback resume parser using regex patterns.
- * Used when Gemini API fails.
- */
-function extractResumeDataFallback(text: string): ResumeData {
-  // Common skill keywords to look for
-  const skillKeywords = [
-    'JavaScript', 'TypeScript', 'Python', 'Java', 'React', 'Node.js', 'SQL',
-    'HTML', 'CSS', 'Git', 'Docker', 'AWS', 'Azure', 'MongoDB', 'PostgreSQL',
-    'Excel', 'Power BI', 'Tableau', 'Photoshop', 'Figma', 'AutoCAD',
-    'Communication', 'Leadership', 'Problem Solving', 'Team Work',
-    'MS Office', 'Tally', 'SAP', 'C++', 'C#', '.NET', 'PHP', 'Ruby',
-    'Kubernetes', 'Linux', 'Networking', 'Cybersecurity',
-    'Data Analysis', 'Machine Learning', 'Deep Learning', 'NLP',
-  ]
+// ── Regex fallback ────────────────────────────────────────────────────────────
 
-  const foundSkills = skillKeywords.filter((skill) =>
-    text.toLowerCase().includes(skill.toLowerCase())
-  )
+function regexFallback(text: string): ParsedResume {
+  const lower = text.toLowerCase()
 
-  // Try to extract email-like education patterns
-  const educationMatches = text.match(
-    /(?:B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc|MBA|BCA|MCA|B\.?Com|M\.?Com|Ph\.?D|Diploma)[^.\n]*/gi
-  ) || []
+  const SKILL_PATTERNS: Record<string, string[]> = {
+    technical: [
+      'JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 'PHP', 'Ruby', 'Go', 'Rust', 'Swift', 'Kotlin',
+      'React', 'Next.js', 'Angular', 'Vue', 'Node.js', 'Express', 'Django', 'Flask', 'Spring', 'Laravel',
+      'HTML', 'CSS', 'SCSS', 'Tailwind', 'Bootstrap', 'jQuery',
+      'SQL', 'MySQL', 'PostgreSQL', 'MongoDB', 'Redis', 'Firebase', 'Supabase', 'SQLite',
+      'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Linux', 'Git', 'GitHub', 'CI/CD', 'REST', 'GraphQL',
+      'Machine Learning', 'Deep Learning', 'NLP', 'TensorFlow', 'PyTorch', 'Pandas', 'NumPy',
+      'Android', 'iOS', 'Flutter', 'React Native', 'Networking', 'TCP/IP', 'Cybersecurity',
+    ],
+    tools: [
+      'Excel', 'Word', 'PowerPoint', 'Outlook', 'MS Office', 'Google Sheets', 'Google Docs',
+      'Tally', 'SAP', 'QuickBooks', 'Zoho', 'HubSpot', 'Salesforce', 'Jira', 'Confluence', 'Slack',
+      'Photoshop', 'Illustrator', 'Figma', 'Canva', 'AutoCAD', 'Revit', 'SketchUp', 'Blender',
+      'Power BI', 'Tableau', 'Looker', 'MATLAB',
+    ],
+    domain: [
+      'Accounting', 'Finance', 'Banking', 'Insurance', 'Auditing', 'Taxation', 'GST',
+      'Sales', 'Marketing', 'SEO', 'SEM', 'Social Media', 'Content Writing', 'Digital Marketing',
+      'HR', 'Recruitment', 'Payroll', 'Training', 'Logistics', 'Supply Chain', 'Inventory', 'Procurement',
+      'Healthcare', 'Nursing', 'Pharmacy', 'Teaching', 'Education', 'Administration',
+      'Construction', 'Plumbing', 'Electrical', 'Welding', 'Carpentry', 'Painting', 'Masonry',
+      'Driving', 'Delivery', 'Cooking', 'Hospitality', 'Housekeeping', 'Security', 'Customer Service',
+      'Photography', 'Videography', 'Data Entry', 'Typing',
+    ],
+    soft: [
+      'Communication', 'Leadership', 'Teamwork', 'Problem Solving', 'Critical Thinking',
+      'Time Management', 'Creativity', 'Adaptability', 'Attention to Detail', 'Multitasking',
+      'Project Management', 'Decision Making', 'Conflict Resolution', 'Analytical',
+    ],
+  }
 
-  const education = educationMatches.map((match) => ({
-    degree: match.trim(),
-    institution: '',
-    year: match.match(/\b(19|20)\d{2}\b/)?.[0],
-  }))
+  const found: NonNullable<ParsedResume['categorizedSkills']> = { technical: [], soft: [], domain: [], tools: [] }
+  for (const [cat, keywords] of Object.entries(SKILL_PATTERNS)) {
+    found[cat as keyof typeof found] = keywords.filter(k => lower.includes(k.toLowerCase()))
+  }
+  const allSkills = [...new Set([...found.technical, ...found.soft, ...found.domain, ...found.tools])]
+
+  const eduMatches = text.match(
+    /(?:B\.?Tech|M\.?Tech|B\.?E|M\.?E|B\.?Sc|M\.?Sc|MBA|BCA|MCA|B\.?Com|M\.?Com|Ph\.?D|Diploma|10th|12th|SSC|HSC)[^\n]*/gi
+  ) ?? []
 
   return {
-    skills: foundSkills,
+    skills: allSkills,
+    categorizedSkills: found,
     experience: [],
-    education,
+    education: eduMatches.map(d => ({
+      degree: d.trim(),
+      institution: '',
+      year: d.match(/\b(19|20)\d{2}\b/)?.[0],
+    })),
     projects: [],
   }
 }
 
-/**
- * Process a resume file end-to-end: extract text → parse with AI → return structured data.
- */
-export async function processResumeFile(file: File): Promise<{
-  text: string
-  parsed: ResumeData
-}> {
+// ── Convenience exports ──────────────────────────────────────────────────────
+
+export { sanitize as sanitizeResumeText }
+
+export async function processResumeFile(file: File): Promise<{ text: string; parsed: ParsedResume }> {
   const text = await extractTextFromFile(file)
   const parsed = await parseResume(text)
   return { text, parsed }
 }
 
-/**
- * Get a human-readable summary of a parsed resume.
- */
 export function getResumeSummaryText(data: ResumeData): string {
-  const parts: string[] = []
-
-  if (data.summary) parts.push(data.summary)
-
-  if (data.skills.length > 0) {
-    parts.push(`Skills: ${data.skills.join(', ')}`)
-  }
-
-  if (data.experience.length > 0) {
-    parts.push(`Experience: ${data.experience.map((e) => `${e.title} at ${e.company} (${e.duration})`).join('; ')}`)
-  }
-
-  if (data.education.length > 0) {
-    parts.push(`Education: ${data.education.map((e) => `${e.degree} - ${e.institution}`).join('; ')}`)
-  }
-
-  if (data.projects.length > 0) {
-    parts.push(`Projects: ${data.projects.map((p) => `${p.name} [${p.technologies.join(', ')}]`).join('; ')}`)
-  }
-
-  return parts.join('\n')
+  const lines: string[] = []
+  if (data.summary) lines.push(data.summary)
+  if (data.skills.length > 0) lines.push(`Skills: ${data.skills.join(', ')}`)
+  if (data.experience.length > 0)
+    lines.push(`Experience: ${data.experience.map(e => `${e.title} at ${e.company}`).join('; ')}`)
+  if (data.education.length > 0)
+    lines.push(`Education: ${data.education.map(e => `${e.degree} – ${e.institution}`).join('; ')}`)
+  if (data.projects.length > 0)
+    lines.push(`Projects: ${data.projects.map(p => p.name).join(', ')}`)
+  return lines.join('\n')
 }

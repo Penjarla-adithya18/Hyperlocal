@@ -10,13 +10,13 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps } from '@/lib/api'
+import { mockDb, mockUserOps, mockWorkerProfileOps, mockReportOps, mockNotificationOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
 import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
 import { translateDynamic, SupportedLocale } from '@/lib/gemini'
 import { 
   Briefcase, MapPin, Clock, IndianRupee, Calendar, 
-  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag, MessageCircle
+  Building2, Star, Shield, ChevronLeft, Send, CheckCircle2, Sparkles, AlertTriangle, Flag, MessageCircle, FileText, Upload, Loader2, X
 } from 'lucide-react'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import {
@@ -24,6 +24,7 @@ import {
 } from '@/components/ui/dialog'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { useI18n } from '@/contexts/I18nContext'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function JobDetailsPage() {
   const router = useRouter()
@@ -50,6 +51,9 @@ export default function JobDetailsPage() {
   const [reportDesc, setReportDesc] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
   const [isReported, setIsReported] = useState(false)
+  // Resume for application
+  const [resumeFile, setResumeFile] = useState<File | null>(null)
+  const [resumeUploading, setResumeUploading] = useState(false)
 
   // Load reported state from localStorage
   useEffect(() => {
@@ -180,7 +184,8 @@ export default function JobDetailsPage() {
         jobId: job.id,
         workerId: user.id,
         coverLetter: coverLetter.trim() || undefined,
-        status: 'pending'
+        status: 'pending',
+        matchScore: matchScore ?? 0,
       })
 
       setApplication(newApplication)
@@ -194,6 +199,18 @@ export default function JobDetailsPage() {
         applicationId: newApplication.id,
         participants: [user.id, job.employerId]
       }).catch(() => {})
+
+      // Notify employer about new application
+      try {
+        await mockNotificationOps.create({
+          userId: job.employerId,
+          type: 'application',
+          title: 'New Application Received!',
+          message: `${user.fullName} applied for "${job.title}" with ${matchScore ?? 0}% match score.`,
+          isRead: false,
+          link: `/employer/jobs/${job.id}`,
+        })
+      } catch (e) { console.error('Notification failed', e) }
 
       toast({
         title: 'Success!',
@@ -246,8 +263,45 @@ export default function JobDetailsPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8">
-          <p className="text-center text-muted-foreground">Loading...</p>
+        <div className="container mx-auto px-4 py-6 pb-28 md:pb-8 max-w-4xl">
+          <Skeleton className="h-4 w-24 mb-6" />
+          <div className="grid lg:grid-cols-3 gap-6">
+            <div className="lg:col-span-2 space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-start">
+                    <div className="space-y-2 flex-1">
+                      <Skeleton className="h-7 w-56" />
+                      <div className="flex gap-2">
+                        <Skeleton className="h-5 w-20 rounded-full" />
+                        <Skeleton className="h-5 w-24 rounded-full" />
+                      </div>
+                    </div>
+                    <Skeleton className="h-8 w-28 rounded-md" />
+                  </div>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-4 w-36" />)}
+                  </div>
+                  <Skeleton className="h-px w-full" />
+                  <Skeleton className="h-4 w-24" />
+                  <Skeleton className="h-20 w-full" />
+                  <div className="flex gap-2 flex-wrap">
+                    {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-6 w-20 rounded-full" />)}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+            <div className="space-y-4">
+              <Card>
+                <CardContent className="pt-6 space-y-3">
+                  {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-4 w-full" />)}
+                  <Skeleton className="h-10 w-full rounded-md" />
+                </CardContent>
+              </Card>
+            </div>
+          </div>
         </div>
       </div>
     )
@@ -305,6 +359,11 @@ export default function JobDetailsPage() {
                   {job.requiredSkills.map((skill) => (
                     <Badge key={skill} variant="secondary">{skill}</Badge>
                   ))}
+                  {job.jobMode && (
+                    <Badge variant={job.jobMode === 'remote' ? 'default' : 'outline'} className={job.jobMode === 'remote' ? 'bg-blue-600' : ''}>
+                      {job.jobMode === 'remote' ? '🏠 Remote' : '📍 On-site'}
+                    </Badge>
+                  )}
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -480,7 +539,15 @@ export default function JobDetailsPage() {
                   <Button
                     className="w-full mt-4"
                     variant="outline"
-                    onClick={() => router.push('/worker/chat')}
+                    onClick={() => {
+                      // Set sessionStorage so worker chat page opens the right conversation
+                      if (application) {
+                        sessionStorage.setItem('targetChatConvId', application.id)
+                        sessionStorage.setItem('targetChatEmployerId', job!.employerId)
+                        sessionStorage.setItem('targetChatJobId', job!.id)
+                      }
+                      router.push('/worker/chat')
+                    }}
                   >
                     <MessageCircle className="h-4 w-4 mr-2" />
                     Message Employer
@@ -505,6 +572,62 @@ export default function JobDetailsPage() {
                     <p className="text-xs leading-5 text-muted-foreground text-left">
                       Optional: you can leave this blank, or add a short introduction to improve your chances.
                     </p>
+                  </div>
+
+                  {/* Resume Upload */}
+                  <div className="space-y-2">
+                    <Label>Resume / CV {job?.jobNature === 'technical' ? '(Recommended)' : '(Optional)'}</Label>
+                    {resumeFile ? (
+                      <div className="flex items-center gap-3 rounded-md border bg-muted/30 px-3 py-2">
+                        <FileText className="h-5 w-5 text-green-600 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{resumeFile.name}</p>
+                          <p className="text-xs text-muted-foreground">{(resumeFile.size / (1024 * 1024)).toFixed(1)} MB</p>
+                        </div>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => setResumeFile(null)}>
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ) : workerProfile?.resumeUrl ? (
+                      <div className="flex items-center gap-3 rounded-md border bg-green-50 dark:bg-green-950/30 px-3 py-2">
+                        <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-medium">Profile resume will be attached</p>
+                          <p className="text-xs text-muted-foreground">Or upload a different one below</p>
+                        </div>
+                        <input type="file" accept=".pdf,.doc,.docx,.txt" id="app-resume-input" className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f && f.size <= 5 * 1024 * 1024) setResumeFile(f);
+                            else if (f) toast({ title: 'File too large', description: 'Max 5MB', variant: 'destructive' });
+                          }}
+                        />
+                        <label htmlFor="app-resume-input">
+                          <Button type="button" variant="outline" size="sm" asChild>
+                            <span className="cursor-pointer">Replace</span>
+                          </Button>
+                        </label>
+                      </div>
+                    ) : (
+                      <div>
+                        <input type="file" accept=".pdf,.doc,.docx,.txt" id="app-resume-input" className="hidden"
+                          onChange={(e) => {
+                            const f = e.target.files?.[0];
+                            if (f && f.size <= 5 * 1024 * 1024) setResumeFile(f);
+                            else if (f) toast({ title: 'File too large', description: 'Max 5MB', variant: 'destructive' });
+                          }}
+                        />
+                        <label htmlFor="app-resume-input">
+                          <Button type="button" variant="outline" size="sm" asChild>
+                            <span className="cursor-pointer flex items-center gap-1.5">
+                              <Upload className="w-4 h-4" />
+                              Upload Resume
+                            </span>
+                          </Button>
+                        </label>
+                        <p className="text-xs text-muted-foreground mt-1">PDF, DOC, DOCX, or TXT — max 5 MB</p>
+                      </div>
+                    )}
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <Button
