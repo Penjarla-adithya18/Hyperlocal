@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { transcribeAudio, downloadMedia } from '@/lib/whisper'
 import { fetchWithRetry, isRetryableError } from '@/lib/fetchRetry'
+import { generateText } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createOpenAI } from '@ai-sdk/openai'
 
 /**
  * POST /api/ai/analyze-assessment
@@ -10,8 +13,8 @@ import { fetchWithRetry, isRetryableError } from '@/lib/fetchRetry'
  * ┌─────────────────────────────────────────────────────────────────┐
  * │  1. Analyze client-side audio metrics (volume, silence, peaks) │
  * │  2. Download video → Whisper transcription (multilingual)      │
- * │  3. Ollama: plagiarism / originality check on transcribed text │
- * │  4. If original → Ollama: answer correctness check             │
+ * │  3. AI SDK (Gemini): plagiarism / originality check on transcribed text │
+ * │  4. If original → AI SDK (Gemini): answer correctness check             │
  * │  5. AUTO-DECISION:                                             │
  * │     ✅ Original + correct (≥50)  → status = approved           │
  * │     ❌ Plagiarism/AI/read        → status = rejected           │
@@ -24,7 +27,16 @@ import { fetchWithRetry, isRetryableError } from '@/lib/fetchRetry'
  * Returns the analysis + auto-decision to the client immediately.
  */
 
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
+// ── Provider configuration (AI SDK — Gemini primary, Ollama fallback) ─────────
+const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
+  .split(',').map(k => k.trim()).filter(Boolean)
+let _keyIdx = 0
+function nextGeminiKey(): string | undefined {
+  if (GEMINI_KEYS.length === 0) return undefined
+  const k = GEMINI_KEYS[_keyIdx % GEMINI_KEYS.length]
+  _keyIdx++
+  return k
+}
 const OLLAMA_URL   = process.env.OLLAMA_URL   ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.1:8b'
 
@@ -79,47 +91,34 @@ interface AnalysisResult {
   auto_decision_reason: string
 }
 
-// ── AI Call Helper (Groq → Ollama fallback) ───────────────────────────────────
+// ── AI Call Helper (AI SDK — Gemini → Ollama fallback) ────────────────────────
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  if (GROQ_API_KEY) {
+  const geminiKey = nextGeminiKey()
+  if (geminiKey) {
     try {
-      const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: 'llama-3.1-8b-instant',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: prompt },
-          ],
-          temperature: 0.3,
-          max_tokens: 1000,
-        }),
-      }, { maxAttempts: 2, baseDelayMs: 1000, label: 'GroqLLM' })
-      if (res.ok) {
-        const data = await res.json()
-        return (data.choices?.[0]?.message?.content as string) ?? ''
-      }
+      const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+      const { text } = await generateText({
+        model: google('gemini-2.0-flash'),
+        system: systemPrompt,
+        prompt,
+        temperature: 0.3,
+        maxOutputTokens: 1000,
+      })
+      return text ?? ''
     } catch { /* fall through to Ollama */ }
   }
 
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt: `${systemPrompt}\n\nUser: ${prompt}`,
-      stream: false,
-      options: { temperature: 0.3, num_predict: 1000 },
-    }),
+  // Ollama fallback via OpenAI-compatible provider
+  const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
+  const { text } = await generateText({
+    model: ollama(OLLAMA_MODEL),
+    system: systemPrompt,
+    prompt,
+    temperature: 0.3,
+    maxOutputTokens: 1000,
   })
-  if (!res.ok) throw new Error(`Ollama error ${res.status}`)
-  const data = await res.json()
-  return (data.response as string) ?? ''
+  return text ?? ''
 }
 
 /** Safely parse JSON from AI output (handles markdown code blocks) */
@@ -260,9 +259,11 @@ async function deleteStorageFile(fileUrl: string): Promise<void> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question } = body
+    const { assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language } = body
+    // Worker's chosen UI language (en/hi/te) — used as Whisper language hint
+    const whisperLang: string | undefined = typeof language === 'string' && language !== 'en' ? language : undefined
 
-    console.log(`[analyze-assessment] ▶ Pipeline start — assessment ${assessmentId}, skill: ${skill}`)
+    console.log(`[analyze-assessment] ▶ Pipeline start — assessment ${assessmentId}, skill: ${skill}, lang: ${language ?? 'en'}`)
 
     // ── Step 1: Analyze client-side audio metrics ───────────────────────────
     const audioAnalysis = analyzeAudioMetrics(audioMetrics as AudioMetrics | null)
@@ -279,9 +280,9 @@ export async function POST(req: NextRequest) {
         const { buffer, mimeType } = await downloadMedia(videoUrl)
         console.log(`[analyze-assessment] Step 2a ✓ Downloaded ${(buffer.length / 1024 / 1024).toFixed(1)} MB (${mimeType})`)
 
-        console.log('[analyze-assessment] Step 2b: Transcribing with Whisper...')
+        console.log(`[analyze-assessment] Step 2b: Transcribing with Whisper${whisperLang ? ` (hint: ${whisperLang})` : ' (auto-detect)'}...`)
         const ext = mimeType.includes('mp4') ? 'mp4' : 'webm'
-        const transcription = await transcribeAudio(buffer, `assessment.${ext}`, mimeType)
+        const transcription = await transcribeAudio(buffer, `assessment.${ext}`, mimeType, whisperLang)
         transcribedText = transcription.text
         transcriptionLanguage = transcription.language
         console.log(`[analyze-assessment] Step 2b ✓ Transcribed (${transcriptionLanguage}): "${transcribedText.substring(0, 150)}..."`)

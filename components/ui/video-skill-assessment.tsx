@@ -202,6 +202,7 @@ export function VideoSkillAssessment({
   const currentSkillRef = useRef('')
   const questionRef = useRef<MultilingualQuestion | null>(null)
   const expectedAnswerRef = useRef('')
+  const languageRef = useRef<Language>('en')
   const submitRecordingRef = useRef<() => Promise<void>>(async () => {})
 
   const currentSkill = skills[currentSkillIdx] ?? ''
@@ -218,6 +219,7 @@ export function VideoSkillAssessment({
   useEffect(() => { currentSkillRef.current = currentSkill }, [currentSkill])
   useEffect(() => { questionRef.current = question }, [question])
   useEffect(() => { expectedAnswerRef.current = expectedAnswer }, [expectedAnswer])
+  useEffect(() => { languageRef.current = language }, [language])
 
   // Reset when dialog opens
   useEffect(() => {
@@ -402,6 +404,7 @@ export function VideoSkillAssessment({
       fd.append('skill', skill)
       fd.append('question', typeof q === 'string' ? q : JSON.stringify(q))
       fd.append('expectedAnswer', ea)
+      fd.append('language', languageRef.current)  // worker's chosen language → Whisper hint
       fd.append('videoDurationMs', String(RECORDING_TIME_S * 1000))
       fd.append('audioMetrics', JSON.stringify(audioMetricsRef.current))
 

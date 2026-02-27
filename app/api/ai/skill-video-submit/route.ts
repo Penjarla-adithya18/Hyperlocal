@@ -85,6 +85,7 @@ export async function POST(req: NextRequest) {
     // ── Parse request body (handle both JSON and FormData) ──────────────
     let workerId: string, skill: string, question: unknown, expectedAnswer: string
     let videoBase64: string, videoDurationMs: number, audioMetrics: unknown
+    let language = 'en'  // worker's chosen UI language — passed to Whisper as hint
     let videoRaw: { buffer: Buffer; mimeType: string } | null = null
 
     const contentType = req.headers.get('content-type') ?? ''
@@ -97,6 +98,7 @@ export async function POST(req: NextRequest) {
       const qRaw = form.get('question') as string || '{}'
       try { question = JSON.parse(qRaw) } catch { question = qRaw }
       expectedAnswer = form.get('expectedAnswer') as string || ''
+      language = (form.get('language') as string) || 'en'
       videoDurationMs = Number(form.get('videoDurationMs') || 0)
       const metricsRaw = form.get('audioMetrics') as string || 'null'
       try { audioMetrics = JSON.parse(metricsRaw) } catch { audioMetrics = null }
@@ -129,6 +131,7 @@ export async function POST(req: NextRequest) {
       skill = body.skill as string
       question = body.question
       expectedAnswer = (body.expectedAnswer as string) || ''
+      language = (body.language as string) || 'en'
       videoBase64 = body.videoBase64 as string
       videoDurationMs = (body.videoDurationMs as number) || 0
       audioMetrics = body.audioMetrics
@@ -183,7 +186,7 @@ export async function POST(req: NextRequest) {
       const analysisRes = await fetch(analysisUrl.toString(), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question }),
+        body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language }),
       })
 
       if (analysisRes.ok) {

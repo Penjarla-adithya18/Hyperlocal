@@ -1,7 +1,18 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { generateText } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createOpenAI } from '@ai-sdk/openai'
 
-// ── Provider configuration ────────────────────────────────────────────────────
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
+// ── Provider configuration (AI SDK — Gemini primary, Ollama fallback) ─────────
+const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
+  .split(',').map(k => k.trim()).filter(Boolean)
+let _keyIdx = 0
+function nextGeminiKey(): string | undefined {
+  if (GEMINI_KEYS.length === 0) return undefined
+  const k = GEMINI_KEYS[_keyIdx % GEMINI_KEYS.length]
+  _keyIdx++
+  return k
+}
 const OLLAMA_URL   = process.env.OLLAMA_URL   ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.1:8b'
 
@@ -28,44 +39,29 @@ Return ONLY a valid JSON array with this exact structure, no markdown, no code f
 ]`
 
 async function callAI(prompt: string): Promise<string> {
-  if (GROQ_API_KEY) {
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${GROQ_API_KEY}`,
-      },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages: [
-          { role: 'system', content: SYSTEM_PROMPT },
-          { role: 'user', content: prompt },
-        ],
-        temperature: 0.4,
-        max_tokens: 1200,
-      }),
+  const geminiKey = nextGeminiKey()
+  if (geminiKey) {
+    const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+    const { text } = await generateText({
+      model: google('gemini-2.0-flash'),
+      system: SYSTEM_PROMPT,
+      prompt,
+      temperature: 0.4,
+      maxOutputTokens: 1200,
     })
-    if (!res.ok) throw new Error(`Groq error ${res.status}`)
-    const data = await res.json()
-    return (data.choices?.[0]?.message?.content as string) ?? ''
+    return text ?? ''
   }
 
-  // Ollama fallback
-  const res = await fetch(`${OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: OLLAMA_MODEL,
-      prompt,
-      system: SYSTEM_PROMPT,
-      stream: false,
-      options: { temperature: 0.4, num_predict: 1200 },
-    }),
-    signal: AbortSignal.timeout(60_000),
+  // Ollama fallback via OpenAI-compatible provider
+  const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
+  const { text } = await generateText({
+    model: ollama(OLLAMA_MODEL),
+    system: SYSTEM_PROMPT,
+    prompt,
+    temperature: 0.4,
+    maxOutputTokens: 1200,
   })
-  if (!res.ok) throw new Error(`Ollama error ${res.status}`)
-  const data = await res.json()
-  return (data.response as string) ?? ''
+  return text ?? ''
 }
 
 function extractJSON(text: string): unknown {

@@ -1,25 +1,41 @@
 /**
  * AI integration layer supporting:
- *  - Ollama (local)  for development  — llama3.1:8b running at localhost:11434
- *  - Groq  (cloud)  for Vercel prod  — llama-3.1-8b-instant (free tier)
+ *  - Google Gemini (cloud) via Vercel AI SDK  — gemini-2.0-flash (primary)
+ *  - Ollama (local) via AI SDK OpenAI compat  — llama3.1:8b fallback
  *
  * How it routes:
  *  Browser / client components  → POST /api/ai/generate  (Next.js server proxy)
- *  Server components / actions  → Groq (if GROQ_API_KEY set) else Ollama directly
+ *  Server components / actions  → Gemini (if API key set) else Ollama directly
  *
  * Environment variables:
  *  Local dev  (.env.local)  : OLLAMA_URL=http://localhost:11434
- *  Vercel prod (dashboard)  : GROQ_API_KEY=gsk_...
+ *  Vercel prod (dashboard)  : NEXT_PUBLIC_GEMINI_API_KEYS=key1,key2,...
  *  Optional                 : OLLAMA_MODEL (default: llama3.1:8b)
  */
+
+import { generateText } from 'ai'
+import { createGoogleGenerativeAI } from '@ai-sdk/google'
+import { createOpenAI } from '@ai-sdk/openai'
 
 // ── Runtime context ───────────────────────────────────────────────────────────
 const _isServer = typeof window === 'undefined'
 
 // Server-only variables (never leaked to browser bundle)
-const _GROQ_KEY    = _isServer ? (process.env.GROQ_API_KEY ?? '') : ''
+const _GEMINI_KEYS = _isServer
+  ? (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '').split(',').map(k => k.trim()).filter(Boolean)
+  : []
+let _geminiKeyIdx = 0
+
 const _OLLAMA_URL  = _isServer ? (process.env.OLLAMA_URL   ?? 'http://localhost:11434') : ''
 const _OLLAMA_MDL  = _isServer ? (process.env.OLLAMA_MODEL ?? 'llama3.1:8b') : ''
+
+/** Round-robin key picker for Gemini to distribute rate limits */
+function _nextGeminiKey(): string {
+  if (!_GEMINI_KEYS.length) return ''
+  const key = _GEMINI_KEYS[_geminiKeyIdx % _GEMINI_KEYS.length]
+  _geminiKeyIdx++
+  return key
+}
 
 // ── Model tiering (kept for interface compat — both tiers use the same model) ─
 type ModelTier = 'lite' | 'flash'
@@ -114,46 +130,36 @@ export const SYSTEM_PROMPTS = {
   CHAT_TRANSLATOR: `You are a real-time chat translator for HyperLocal, a job platform. Translate messages between English, Hindi, and Telugu. Translations must be natural, informal, and appropriate for casual chat between workers and employers. Return ONLY the translated message text — no explanations, no quotes, no formatting.`,
 } as const
 
-// ── Server-side caller: Groq → Ollama ────────────────────────────────────────
+// ── Server-side caller: Gemini (AI SDK) → Ollama (AI SDK) ────────────────────
 async function _callModelServer(prompt: string, maxTokens: number, systemInstruction?: string): Promise<string> {
-  if (_GROQ_KEY) {
-    // ── Groq (Vercel / cloud) ────────────────────────────────────────────────
-    const messages: Array<{ role: string; content: string }> = []
-    if (systemInstruction) {
-      messages.push({ role: 'system', content: systemInstruction })
-    }
-    messages.push({ role: 'user', content: prompt })
+  const geminiKey = _nextGeminiKey()
 
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_GROQ_KEY}` },
-      body: JSON.stringify({
-        model: 'llama-3.1-8b-instant',
-        messages,
-        temperature: 0.2,
-        max_tokens: maxTokens,
-      }),
+  if (geminiKey) {
+    // ── Google Gemini via Vercel AI SDK ─────────────────────────────────────
+    const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+    const { text } = await generateText({
+      model: google('gemini-2.0-flash'),
+      system: systemInstruction,
+      prompt,
+      maxOutputTokens: maxTokens,
+      temperature: 0.2,
     })
-    if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
-    const d = await res.json()
-    return d.choices?.[0]?.message?.content ?? ''
+    return text ?? ''
   }
 
-  // ── Ollama (local / self-hosted) ─────────────────────────────────────────
-  const res = await fetch(`${_OLLAMA_URL}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: _OLLAMA_MDL,
-      prompt,
-      system: systemInstruction ?? undefined,
-      stream: false,
-      options: { temperature: 0.2, num_predict: maxTokens },
-    }),
+  // ── Ollama fallback via AI SDK OpenAI-compatible provider ─────────────────
+  const ollama = createOpenAI({
+    baseURL: `${_OLLAMA_URL}/v1`,
+    apiKey: 'ollama', // Ollama doesn't need a real key
   })
-  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
-  const d = await res.json()
-  return d.response ?? ''
+  const { text } = await generateText({
+    model: ollama(_OLLAMA_MDL),
+    system: systemInstruction,
+    prompt,
+    maxOutputTokens: maxTokens,
+    temperature: 0.2,
+  })
+  return text ?? ''
 }
 
 // ── Client-side caller: proxied through Next.js API route ─────────────────────
