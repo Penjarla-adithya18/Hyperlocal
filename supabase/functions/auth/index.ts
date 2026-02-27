@@ -27,7 +27,7 @@ Deno.serve(async (req: Request) => {
       }
 
       const normalizedRole = role as 'worker' | 'employer' | 'admin'
-      if (!['worker', 'employer', 'admin'].includes(normalizedRole)) {
+      if (!['worker', 'employer'].includes(normalizedRole)) {
         return errorResponse('Invalid role', 400)
       }
 
@@ -62,21 +62,23 @@ Deno.serve(async (req: Request) => {
       if (error) throw error
 
       if (normalizedRole === 'worker') {
-        await supabase.from('worker_profiles').insert({
+        const { error: profileErr } = await supabase.from('worker_profiles').insert({
           user_id: created.id,
           skills: [],
           availability: '',
           categories: [],
         })
+        if (profileErr) console.error('Failed to create worker profile:', profileErr)
       } else if (normalizedRole === 'employer') {
-        await supabase.from('employer_profiles').insert({
+        const { error: profileErr } = await supabase.from('employer_profiles').insert({
           user_id: created.id,
           business_name: businessName || '',
           organization_name: organizationName || null,
         })
+        if (profileErr) console.error('Failed to create employer profile:', profileErr)
       }
 
-      await supabase.from('trust_scores').insert({
+      const { error: trustErr } = await supabase.from('trust_scores').insert({
         user_id: created.id,
         score: 50,
         level: 'basic',
@@ -86,6 +88,7 @@ Deno.serve(async (req: Request) => {
         complaint_count: 0,
         successful_payments: 0,
       })
+      if (trustErr) console.error('Failed to create trust score:', trustErr)
 
       await supabase.from('user_sessions').delete().eq('user_id', created.id)
       const session = await createSessionForUser(supabase, created.id)
@@ -222,32 +225,6 @@ Deno.serve(async (req: Request) => {
         .eq('id', userRow.id)
       if (updateErr) throw updateErr
       // Invalidate all sessions for this user
-      await supabase.from('user_sessions').delete().eq('user_id', userRow.id)
-      return jsonResponse({ success: true, message: 'Password reset successful. Please log in.' })
-    }
-
-    // Unauthenticated password reset after OTP verification
-    if (action === 'forgot-password') {
-      const { phoneNumber, newPassword } = body
-      if (!phoneNumber || !newPassword) {
-        return errorResponse('phoneNumber and newPassword are required', 400)
-      }
-      if (String(newPassword).length < 8) {
-        return errorResponse('Password must be at least 8 characters', 400)
-      }
-      const { data: userRow, error: findErr } = await supabase
-        .from('users')
-        .select('id')
-        .eq('phone_number', phoneNumber)
-        .maybeSingle()
-      if (findErr || !userRow) return errorResponse('No account found with this phone number', 404)
-
-      const newHash = await hashPassword(newPassword)
-      const { error: updateErr } = await supabase
-        .from('users')
-        .update({ password_hash: newHash })
-        .eq('id', userRow.id)
-      if (updateErr) throw updateErr
       await supabase.from('user_sessions').delete().eq('user_id', userRow.id)
       return jsonResponse({ success: true, message: 'Password reset successful. Please log in.' })
     }

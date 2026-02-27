@@ -11,8 +11,8 @@ import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
 import { mockDb, mockWorkerProfileOps } from '@/lib/api'
-import { matchJobs } from '@/lib/aiMatching'
-import { Application, Job, User, WorkerProfile } from '@/lib/types'
+import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching'
+import { Application, Job, WorkerProfile } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
@@ -28,10 +28,11 @@ export default function WorkerJobsPage() {
   const [workerCoords, setWorkerCoords] = useState<{ lat: number; lng: number } | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
+  const [authError, setAuthError] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
   const [categoryFilter, setCategoryFilter] = useState('all')
   const [locationFilter, setLocationFilter] = useState('')
-  const [payRange, setPayRange] = useState([0, 5000])
+  const [payRange, setPayRange] = useState([0, 100000])
   const [experienceFilter, setExperienceFilter] = useState('all')
   const [jobModeFilter, setJobModeFilter] = useState('all')
   const [showGeolocationPrompt, setShowGeolocationPrompt] = useState(true)
@@ -60,16 +61,26 @@ export default function WorkerJobsPage() {
       setWorkerProfile(profile)
       setApplications(myApplications)
 
-      if (user) {
-        const matches = await matchJobs(
-          user as User,
-          activeJobs,
-          mockWorkerProfileOps.findByUserId
-        )
-        setMatchedJobs(matches)
+      // Use the same recommendation logic as the dashboard for consistency
+      if (profile && profile.profileCompleted) {
+        // Full AI scoring — same as dashboard
+        const recommended = getRecommendedJobs(profile, activeJobs, 50)
+        setMatchedJobs(recommended.map(({ job, matchScore }) => ({ job, score: matchScore })))
+      } else if (profile && profile.categories.length > 0) {
+        // Partial profile — category-only matching
+        const basic = getBasicRecommendations(profile.categories, activeJobs, 50)
+        setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
+      } else {
+        // No profile — show recent jobs
+        const basic = getBasicRecommendations([], activeJobs, 50)
+        setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
       }
     } catch (error) {
       console.error('Failed to load jobs:', error)
+      const msg = error instanceof Error ? error.message : ''
+      if (msg.includes('401') || msg.includes('Unauthorized') || msg.includes('session')) {
+        setAuthError(true)
+      }
     } finally {
       setLoading(false)
     }
@@ -262,6 +273,20 @@ export default function WorkerJobsPage() {
     )
   }
 
+  if (authError) {
+    return (
+      <div className="app-surface">
+        <WorkerNav />
+        <div className="container mx-auto px-4 py-20 text-center">
+          <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
+          <h2 className="text-xl font-semibold mb-2">Session Expired</h2>
+          <p className="text-muted-foreground mb-6">Your session has expired. Please log in again to continue.</p>
+          <Button onClick={() => router.push('/login')}>Log In Again</Button>
+        </div>
+      </div>
+    )
+  }
+
   if (loading) {
     return (
       <div className="app-surface">
@@ -448,15 +473,15 @@ export default function WorkerJobsPage() {
                   </SelectContent>
                 </Select>
                 <div className="flex items-center gap-2">
-                  <span className="text-sm text-muted-foreground whitespace-nowrap">₹{payRange[0]} - ₹{payRange[1]}</span>
+                  <span className="text-sm text-muted-foreground whitespace-nowrap">₹{payRange[0].toLocaleString('en-IN')} – ₹{payRange[1].toLocaleString('en-IN')}</span>
                 </div>
               </div>
               <div className="space-y-2">
                 <label className="text-sm font-medium">Pay Range (₹)</label>
                 <Slider
                   min={0}
-                  max={5000}
-                  step={100}
+                  max={100000}
+                  step={1000}
                   value={payRange}
                   onValueChange={setPayRange}
                   className="w-full"

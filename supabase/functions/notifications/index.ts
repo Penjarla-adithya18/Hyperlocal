@@ -64,11 +64,22 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'DELETE') {
-      const { error } = await supabase
-        .from('notifications')
-        .update({ is_read: true })
-        .eq('user_id', auth.user.id)
-      if (error) throw error
+      if (id) {
+        // Delete a single notification
+        const { error } = await supabase
+          .from('notifications')
+          .delete()
+          .eq('id', id)
+          .eq('user_id', auth.user.id)
+        if (error) throw error
+      } else {
+        // Mark all as read (bulk "clear" — keeps history for admin/reporting)
+        const { error } = await supabase
+          .from('notifications')
+          .update({ is_read: true })
+          .eq('user_id', auth.user.id)
+        if (error) throw error
+      }
       return jsonResponse({ data: { ok: true } })
     }
 

@@ -22,6 +22,19 @@ Deno.serve(async (req: Request) => {
         return errorResponse('jobId, applicationId, toUserId, rating are required', 400)
       }
 
+      // Verify the rater is actually involved in this job (employer or accepted worker)
+      const { data: application, error: appErr } = await supabase
+        .from('applications')
+        .select('worker_id, job_id, jobs!inner(employer_id)')
+        .eq('id', applicationId)
+        .eq('job_id', jobId)
+        .maybeSingle()
+      if (appErr) throw appErr
+      if (!application) return errorResponse('Application not found for this job', 404)
+      const jobRow = application.jobs as unknown as { employer_id: string }
+      const isInvolved = auth.user.id === application.worker_id || auth.user.id === jobRow.employer_id
+      if (!isInvolved) return errorResponse('You are not involved in this job', 403)
+
       const numericRating = Number(rating)
       if (!Number.isFinite(numericRating) || numericRating < 1 || numericRating > 5) {
         return errorResponse('rating must be between 1 and 5', 400)

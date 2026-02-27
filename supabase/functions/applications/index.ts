@@ -30,7 +30,10 @@ Deno.serve(async (req: Request) => {
           .maybeSingle()
         if (jobError) throw jobError
         if (!job) return jsonResponse({ data: [] })
-        if (!isAdmin && job.employer_id !== auth.user.id) return errorResponse('Forbidden', 403)
+        // Allow employer who owns the job OR the worker filtering their own applications
+        const isJobOwner = job.employer_id === auth.user.id
+        const isWorkerSelf = workerId && workerId === auth.user.id
+        if (!isAdmin && !isJobOwner && !isWorkerSelf) return errorResponse('Forbidden', 403)
       }
 
       if (!workerId && !jobId && !isAdmin) return errorResponse('Forbidden', 403)

@@ -26,6 +26,13 @@ Deno.serve(async (req: Request) => {
         .eq('id', id)
         .maybeSingle()
       if (error) throw error
+      // Hide draft/cancelled jobs from non-owners
+      if (data && !isAdmin && data.employer_id !== auth.user.id) {
+        const hiddenStatuses = ['draft', 'cancelled']
+        if (hiddenStatuses.includes(data.status)) {
+          return jsonResponse({ data: null })
+        }
+      }
       return jsonResponse({ data: data ? mapJob(data) : null })
     }
 
@@ -39,10 +46,13 @@ Deno.serve(async (req: Request) => {
         // Employer fetching their own jobs — show all statuses
         query = query.eq('employer_id', employerId)
       } else {
-        // Public browse (workers) — only show active + escrow locked jobs
-        query = query.eq('status', 'active').eq('payment_status', 'locked')
+        // Public browse (workers) — show all active jobs regardless of payment status.
+        // Jobs that require escrow will have payment_status='locked',
+        // but non-escrow jobs have payment_status='pending' and must still be visible.
+        query = query.eq('status', 'active')
       }
-      if (status) query = query.eq('status', status)
+      // Apply additional filters (don't re-apply status if already set for worker browse)
+      if (status && employerId) query = query.eq('status', status)
       if (category) query = query.eq('category', category)
       if (location) query = query.ilike('location', `%${location}%`)
 
@@ -180,6 +190,8 @@ Deno.serve(async (req: Request) => {
       if (body.benefits !== undefined) payload.benefits = body.benefits
       if (body.slots !== undefined) payload.slots = body.slots
       if (body.startDate !== undefined) payload.start_date = body.startDate
+      if (body.latitude !== undefined) payload.latitude = body.latitude
+      if (body.longitude !== undefined) payload.longitude = body.longitude
       if (body.status !== undefined) payload.status = body.status
       payload.updated_at = new Date().toISOString()
 

@@ -32,6 +32,16 @@ const SESSION_TOKEN_KEY = 'sessionToken'
 const SESSION_EXPIRES_AT_KEY = 'sessionExpiresAt'
 const SESSION_REFRESHED_AT_KEY = 'sessionRefreshedAt'
 
+/**
+ * Timestamp (Date.now()) of when the session token was last set.
+ * Used to prevent a 401 handler from clearing a token that was
+ * JUST obtained by a concurrent login/register call.
+ */
+let _sessionSetAt = 0
+
+/** Pending redirect timer — stored so it can be cancelled if a new login succeeds */
+let _pendingRedirectTimer: ReturnType<typeof setTimeout> | null = null
+
 function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null
   return localStorage.getItem(SESSION_TOKEN_KEY)
@@ -44,8 +54,15 @@ function getSessionExpiresAt(): string | null {
 
 function setSessionToken(token: string | null): void {
   if (typeof window === 'undefined') return
-  if (token) localStorage.setItem(SESSION_TOKEN_KEY, token)
-  else {
+  if (token) {
+    localStorage.setItem(SESSION_TOKEN_KEY, token)
+    _sessionSetAt = Date.now()
+    // Cancel any pending redirect since we just got a fresh session
+    if (_pendingRedirectTimer) {
+      clearTimeout(_pendingRedirectTimer)
+      _pendingRedirectTimer = null
+    }
+  } else {
     localStorage.removeItem(SESSION_TOKEN_KEY)
     localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
     localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
@@ -95,14 +112,13 @@ async function refreshSessionIfNeeded(): Promise<void> {
 
   if (!res.ok) {
     if (res.status === 401) {
-      // Only force logout if the token has genuinely expired.
-      // A transient 401 from the refresh endpoint should NOT kick out an active user.
-      const tokenExpired = Number.isFinite(expiryMs) && now >= expiryMs
-      if (tokenExpired) {
+      // Server rejected the refresh — token is stale.
+      // Only clear if the token hasn't been freshly set by a concurrent login.
+      const tokenAge = Date.now() - _sessionSetAt
+      if (tokenAge > 5000) {
         setSessionToken(null)
         if (typeof window !== 'undefined') {
           localStorage.removeItem('currentUser')
-          window.location.href = '/login'
         }
       }
     }
@@ -185,25 +201,31 @@ async function call<T>(
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Only redirect to login for critical auth calls, not secondary data calls
-          const criticalAuthFunctions = ['auth', 'users', 'worker-profiles', 'employer-profiles']
-          const isCritical = criticalAuthFunctions.includes(fn)
-          if (isCritical) {
-            // Only force logout if the stored token has actually expired;
-            // never kick the user out for a transient 401 while their session is still valid.
-            const storedExpiry = getSessionExpiresAt()
-            const expiryTime = storedExpiry ? new Date(storedExpiry).getTime() : 0
-            const tokenExpired = !expiryTime || Date.now() >= expiryTime
-            if (tokenExpired) {
+          const text = await res.text()
+          // Never redirect on auth calls — login/register send anon key and 401
+          // is a normal "bad credentials" response, not a stale session.
+          const isAuthCall = fn === 'auth'
+          if (!isAuthCall && typeof window !== 'undefined') {
+            const storedToken = getSessionToken()
+            // Only clear if the token is stale (set more than 5s ago).
+            // A freshly-obtained token (from a concurrent login) must not be cleared.
+            const tokenAge = Date.now() - _sessionSetAt
+            if (storedToken && tokenAge > 5000) {
               setSessionToken(null)
-              if (typeof window !== 'undefined') {
-                localStorage.removeItem('currentUser')
-                window.location.href = '/login'
+              localStorage.removeItem('currentUser')
+              // Schedule a redirect but make it cancellable — if a login
+              // succeeds before the timer fires, setSessionToken cancels it.
+              if (!_pendingRedirectTimer) {
+                _pendingRedirectTimer = setTimeout(() => {
+                  _pendingRedirectTimer = null
+                  // Double-check: only redirect if STILL logged out
+                  if (!getSessionToken()) {
+                    window.location.href = '/login?reason=session_expired'
+                  }
+                }, 500)
               }
             }
           }
-          // For non-critical calls (or unexpired token), just throw so caller can handle it
-          const text = await res.text()
           throw new Error(`Edge function ${fn} error 401: ${text}`)
         }
         // Retry on 5xx server errors

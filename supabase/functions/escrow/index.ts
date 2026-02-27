@@ -35,13 +35,17 @@ Deno.serve(async (req: Request) => {
       if (!body.jobId || !body.employerId || !body.workerId) {
         return errorResponse('jobId, employerId and workerId are required', 400)
       }
+      const amount = Number(body.amount)
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return errorResponse('amount must be a positive number', 400)
+      }
       if (!isAdmin && body.employerId !== auth.user.id) return errorResponse('Forbidden', 403)
 
       const payload = {
         job_id: body.jobId,
         employer_id: body.employerId,
         worker_id: body.workerId,
-        amount: Number(body.amount),
+        amount,
         status: body.status || 'pending',
       }
       const { data, error } = await supabase.from('escrow_transactions').insert(payload).select('*').single()
@@ -58,15 +62,37 @@ Deno.serve(async (req: Request) => {
       if (findError) throw findError
       if (!existing) return jsonResponse({ data: null })
 
-      const canUpdate = isAdmin || existing.employer_id === auth.user.id || existing.worker_id === auth.user.id
+      // Only employer or admin can update escrow status (workers cannot release/refund)
+      const canUpdate = isAdmin || existing.employer_id === auth.user.id
       if (!canUpdate) return errorResponse('Forbidden', 403)
 
       const body = await req.json()
+
+      // State machine: validate status transitions
+      if (body.status !== undefined) {
+        const { data: currentRow } = await supabase
+          .from('escrow_transactions')
+          .select('status')
+          .eq('id', id)
+          .maybeSingle()
+        const currentStatus = currentRow?.status
+        const validTransitions: Record<string, string[]> = {
+          pending: ['locked', 'refunded'],
+          locked: ['released', 'refunded'],
+          released: [],
+          refunded: [],
+        }
+        const allowed = validTransitions[currentStatus as string] ?? []
+        if (!allowed.includes(body.status)) {
+          return errorResponse(`Cannot transition from '${currentStatus}' to '${body.status}'`, 422)
+        }
+      }
+
       const payload: Record<string, unknown> = {}
       if (body.status !== undefined) payload.status = body.status
       if (body.status === 'released') {
         payload.released_at = new Date().toISOString()
-        // Deduct 10% platform commission — store net payout
+        // Calculate and store 10% platform commission without overwriting gross amount
         const { data: txRow } = await supabase
           .from('escrow_transactions')
           .select('amount')
@@ -75,7 +101,6 @@ Deno.serve(async (req: Request) => {
         if (txRow) {
           const gross = Number(txRow.amount || 0)
           const commission = Math.round(gross * 0.10)
-          payload.amount = gross - commission // net payout to worker
           payload.commission = commission
         }
       }
@@ -105,6 +130,7 @@ function mapEscrow(row: Record<string, unknown>) {
     employerId: row.employer_id,
     workerId: row.worker_id,
     amount: Number(row.amount || 0),
+    commission: Number(row.commission || 0),
     status: row.status,
     createdAt: row.created_at,
     releasedAt: row.released_at || undefined,

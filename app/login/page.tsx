@@ -15,7 +15,20 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   // Avoid SSR/client mismatch on theme-sensitive backdrop styles
   const [mounted, setMounted] = useState(false);
-  useEffect(() => { setMounted(true); }, []);
+  useEffect(() => {
+    setMounted(true)
+    // Show toast if redirected here due to session expiry
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      if (params.get('reason') === 'session_expired') {
+        setTimeout(() => toast({
+          title: 'Session Expired',
+          description: 'Your session has expired. Please log in again.',
+          variant: 'destructive',
+        }), 200)
+      }
+    }
+  }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     phoneNumber: '',

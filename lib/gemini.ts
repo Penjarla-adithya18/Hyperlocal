@@ -1,67 +1,28 @@
 /**
- * Gemini AI integration with:
- *  - Round-robin API key rotation (multiple keys = parallel quota)
- *  - Model tiering: flash-lite (cheaper) for simple tasks, flash (standard) for complex ones
- *  - Local-first detection: regex checks before API calls to avoid wasting tokens
- *  - TTL in-memory cache: prevents repeated calls for identical inputs
+ * AI integration layer supporting:
+ *  - Ollama (local)  for development  — llama3.1:8b running at localhost:11434
+ *  - Groq  (cloud)  for Vercel prod  — llama-3.1-8b-instant (free tier)
  *
- * Keys: set NEXT_PUBLIC_GEMINI_API_KEYS (comma-separated) in .env.local
+ * How it routes:
+ *  Browser / client components  → POST /api/ai/generate  (Next.js server proxy)
+ *  Server components / actions  → Groq (if GROQ_API_KEY set) else Ollama directly
+ *
+ * Environment variables:
+ *  Local dev  (.env.local)  : OLLAMA_URL=http://localhost:11434
+ *  Vercel prod (dashboard)  : GROQ_API_KEY=gsk_...
+ *  Optional                 : OLLAMA_MODEL (default: llama3.1:8b)
  */
 
-// ── API keys (round-robin rotation across multiple keys) ─────────────────────
+// ── Runtime context ───────────────────────────────────────────────────────────
+const _isServer = typeof window === 'undefined'
 
-const GEMINI_KEYS: string[] = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
-  .split(',')
-  .map((k) => k.trim())
-  .filter(Boolean)
+// Server-only variables (never leaked to browser bundle)
+const _GROQ_KEY    = _isServer ? (process.env.GROQ_API_KEY ?? '') : ''
+const _OLLAMA_URL  = _isServer ? (process.env.OLLAMA_URL   ?? 'http://localhost:11434') : ''
+const _OLLAMA_MDL  = _isServer ? (process.env.OLLAMA_MODEL ?? 'llama3.1:8b') : ''
 
-let _keyIndex = 0
-let _rateLimitedUntil = 0
-let _lastRequestTime = 0
-const _minDelayBetweenRequests = 300 // ms — throttles requests to avoid rate limits
-const _invalidKeys = new Set<string>() // keys confirmed invalid
-
-/** Returns the next key that hasn't been marked invalid. Throws if all keys are bad. */
-function _getValidKey(): string {
-  const validKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
-  if (validKeys.length === 0) {
-    throw new Error('All Gemini API keys are invalid. Add valid keys to NEXT_PUBLIC_GEMINI_API_KEYS.')
-  }
-  const key = validKeys[_keyIndex % validKeys.length]
-  _keyIndex++
-  return key
-}
-
-/** Parse the Retry-After header (seconds or HTTP-date) → milliseconds */
-function _parseRetryAfter(res: Response): number {
-  const raw = res.headers.get('Retry-After')
-  if (!raw) return 0
-  const secs = parseInt(raw, 10)
-  if (!isNaN(secs)) return secs * 1000
-  const date = new Date(raw).getTime()
-  return isNaN(date) ? 0 : Math.max(0, date - Date.now())
-}
-
-function getNextKey(): string {
-  if (GEMINI_KEYS.length === 0) {
-    throw new Error('No Gemini API keys configured. Set NEXT_PUBLIC_GEMINI_API_KEYS in .env.local')
-  }
-  const key = GEMINI_KEYS[_keyIndex % GEMINI_KEYS.length]
-  _keyIndex++
-  return key
-}
-
-// ── Model endpoints ───────────────────────────────────────────────────────────
-// LITE  (gemini-2.0-flash-lite): ~3x cheaper — used for language detection,
-//        simple translations, short prompts (< 200 token output)
-// FLASH (gemini-2.0-flash):      standard — used for intent extraction, summaries,
-//        longer explanations
-const ENDPOINT = {
-  lite:  'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent',
-  flash: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent',
-} as const
-
-type ModelTier = keyof typeof ENDPOINT
+// ── Model tiering (kept for interface compat — both tiers use the same model) ─
+type ModelTier = 'lite' | 'flash'
 
 interface GenerateWithGeminiOptions {
   tier?: ModelTier
@@ -69,9 +30,6 @@ interface GenerateWithGeminiOptions {
 }
 
 // ── TTL in-memory cache ───────────────────────────────────────────────────────
-// Prevents duplicate API calls for identical prompts within the session.
-// 30-minute TTL for translations/summaries; 5-minute TTL for intent extraction.
-
 interface CacheEntry { value: string; expiresAt: number }
 const _cache = new Map<string, CacheEntry>()
 
@@ -87,109 +45,65 @@ function setCached(key: string, value: string, ttlMs: number) {
 }
 
 const TTL = {
-  TRANSLATION: 30 * 60 * 1000,   // 30 min — translations are stable
-  SUMMARY:     30 * 60 * 1000,   // 30 min — match summaries are stable
-  INTENT:       5 * 60 * 1000,   // 5 min  — user intent can change quickly
+  TRANSLATION: 30 * 60 * 1000,
+  SUMMARY:     30 * 60 * 1000,
+  INTENT:       5 * 60 * 1000,
 }
 
-// ── Core fetch helper ─────────────────────────────────────────────────────────
-
-async function _callModel(prompt: string, tier: ModelTier, maxTokens = 512): Promise<string> {
-  // Honour shared rate-limit guard
-  const rlWait = _rateLimitedUntil - Date.now()
-  if (rlWait > 0) await new Promise(resolve => setTimeout(resolve, rlWait))
-
-  // Enforce minimum delay between requests to avoid rate limits
-  const now = Date.now()
-  const timeSinceLastRequest = now - _lastRequestTime
-  if (timeSinceLastRequest < _minDelayBetweenRequests) {
-    await new Promise(resolve => setTimeout(resolve, _minDelayBetweenRequests - timeSinceLastRequest))
+// ── Server-side caller: Groq → Ollama ────────────────────────────────────────
+async function _callModelServer(prompt: string, maxTokens: number): Promise<string> {
+  if (_GROQ_KEY) {
+    // ── Groq (Vercel / cloud) ────────────────────────────────────────────────
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${_GROQ_KEY}` },
+      body: JSON.stringify({
+        model: 'llama-3.1-8b-instant',
+        messages: [{ role: 'user', content: prompt }],
+        temperature: 0.2,
+        max_tokens: maxTokens,
+      }),
+    })
+    if (!res.ok) throw new Error(`Groq ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
+    const d = await res.json()
+    return d.choices?.[0]?.message?.content ?? ''
   }
-  _lastRequestTime = Date.now()
 
-  const url = ENDPOINT[tier]
-  const body = JSON.stringify({
-    contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+  // ── Ollama (local / self-hosted) ─────────────────────────────────────────
+  const res = await fetch(`${_OLLAMA_URL}/api/generate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      model: _OLLAMA_MDL,
+      prompt,
+      stream: false,
+      options: { temperature: 0.2, num_predict: maxTokens },
+    }),
   })
+  if (!res.ok) throw new Error(`Ollama ${res.status}: ${(await res.text().catch(() => '')).slice(0, 200)}`)
+  const d = await res.json()
+  return d.response ?? ''
+}
 
-  // Backoff between full key-sweeps
-  const SWEEP_BACKOFFS = [5_000, 15_000, 30_000]
-  let allRateLimited = true
-  let lastStatus = 0
-
-  for (let round = 0; round <= SWEEP_BACKOFFS.length; round++) {
-    const validKeys = GEMINI_KEYS.filter(k => !_invalidKeys.has(k))
-    if (validKeys.length === 0) {
-      allRateLimited = false
-      throw new Error('All Gemini API keys are invalid.')
-    }
-
-    let allGot429 = true  // becomes false if any non-429 failure occurs
-
-    for (const key of validKeys) {
-      try {
-        const res = await fetch(`${url}?key=${key}`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body,
-        })
-
-        if (res.ok) {
-          const data = await res.json()
-          return data.candidates?.[0]?.content?.parts?.[0]?.text ?? ''
-        }
-
-        lastStatus = res.status
-        if (res.status === 429) {
-          const retryAfterMs = _parseRetryAfter(res)
-          if (retryAfterMs > 0) _rateLimitedUntil = Date.now() + retryAfterMs
-          console.warn(`Gemini ${tier} 429 – key …${key.slice(-4)} rate-limited (round ${round + 1})`)
-          // allGot429 stays true — continue sweeping remaining keys
-        } else if (res.status === 400) {
-          let msg = 'unknown'
-          try { const d = await res.json(); msg = d.error?.message ?? msg } catch { /* */ }
-          const isKeyError = /api key|apikey|not valid|invalid key/i.test(msg)
-          if (isKeyError) {
-            if (!_invalidKeys.has(key)) {
-              _invalidKeys.add(key)
-              console.warn(`Gemini: key …${key.slice(-6)} is invalid – skipping permanently`)
-            }
-            allGot429 = false
-            continue  // skip to next key
-          }
-          allRateLimited = false
-          throw new Error(`Gemini ${tier} 400: ${msg}`)
-        } else {
-          allRateLimited = false
-          throw new Error(`Gemini ${tier} error: ${res.status}`)
-        }
-      } catch (err) {
-        if (err instanceof Error && !err.message.includes('rate-limited') && !err.message.includes('429') && !err.message.includes('rate limit')) {
-          throw err
-        }
-      }
-    }
-
-    if (!allGot429) break  // some non-429 failures — stop trying this tier
-
-    if (round >= SWEEP_BACKOFFS.length) break  // all backoff rounds exhausted
-
-    const backoffMs = SWEEP_BACKOFFS[round]
-    const validCount = GEMINI_KEYS.filter(k => !_invalidKeys.has(k)).length
-    console.warn(
-      `Gemini ${tier}: all ${validCount} key(s) rate-limited, ` +
-      `waiting ${Math.round(backoffMs / 1000)}s (round ${round + 1}/${SWEEP_BACKOFFS.length})`
-    )
-    _rateLimitedUntil = Date.now() + backoffMs
-    await new Promise(resolve => setTimeout(resolve, backoffMs))
-    _rateLimitedUntil = 0
+// ── Client-side caller: proxied through Next.js API route ─────────────────────
+async function _callModelClient(prompt: string, maxTokens: number): Promise<string> {
+  const res = await fetch('/api/ai/generate', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, maxTokens }),
+  })
+  if (!res.ok) {
+    const e = await res.json().catch(() => ({}))
+    throw new Error(`AI proxy ${res.status}: ${e.error ?? ''}`.slice(0, 200))
   }
+  const data = await res.json()
+  return data.text ?? ''
+}
 
-  if (allRateLimited) {
-    _rateLimitedUntil = Date.now() + 2 * 60 * 1000
-  }
-  throw new Error(`Gemini ${tier} error: ${lastStatus || 429}`)
+async function _callModel(prompt: string, _tier: ModelTier, maxTokens = 512): Promise<string> {
+  return _isServer
+    ? _callModelServer(prompt, maxTokens)
+    : _callModelClient(prompt, maxTokens)
 }
 
 /**

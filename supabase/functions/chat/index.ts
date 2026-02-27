@@ -216,7 +216,8 @@ function getBlockedMessageReason(message: string): string | null {
     /\+91\s*[6-9]\d{9}/,
     /\b0?[6-9]\d{9}\b/,
     /\b91[6-9]\d{9}\b/,
-    /(?:\d\D*){8,}/,
+    // Only block 10+ consecutive digits (with optional separators) to avoid false positives
+    /(?:\d[\s\-.]?){10,}/,
   ]
   for (const pattern of phonePatterns) {
     if (pattern.test(message)) {

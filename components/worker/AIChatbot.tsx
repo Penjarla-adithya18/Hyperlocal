@@ -10,6 +10,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { useI18n } from '@/contexts/I18nContext'
 import { mockJobOps, mockApplicationOps, mockWorkerProfileOps } from '@/lib/api'
 import { generateWithGemini, SupportedLocale } from '@/lib/gemini'
+import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching'
 import { Job, Application, WorkerProfile } from '@/lib/types'
 import {
   Bot,
@@ -50,10 +51,13 @@ interface ChatMessage {
 
 type AgentIntent =
   | { action: 'search_jobs'; query?: string; category?: string; location?: string }
+  | { action: 'show_all_jobs' }
+  | { action: 'recommended_jobs' }
   | { action: 'job_detail'; jobId?: string; jobTitle?: string }
   | { action: 'apply_job'; jobId: string }
   | { action: 'confirm_apply'; jobId: string }
   | { action: 'application_status' }
+  | { action: 'platform_info' }
   | { action: 'help' }
   | { action: 'greeting' }
   | { action: 'unknown'; message: string }
@@ -68,10 +72,13 @@ Possible intents:
 2. {"action":"job_detail","jobTitle":"title or keyword"}
 3. {"action":"apply_job","jobId":"id"} — when user says "apply to job #3" or "apply for <title>"
 4. {"action":"confirm_apply","jobId":"id"} — when user confirms "yes" to apply
-5. {"action":"application_status"} — check my applications, status, etc.
-6. {"action":"help"} — user asks what you can do
-7. {"action":"greeting"} — hello, hi, etc.
-8. {"action":"unknown","message":"brief reply"} — anything else
+5. {"action":"show_all_jobs"} — when user says "show all jobs", "list all jobs", "all jobs"
+6. {"action":"recommended_jobs"} — when user says "recommended jobs", "suggest jobs", "jobs for me"
+7. {"action":"application_status"} — check my applications, status, etc.
+8. {"action":"platform_info"} — user asks what this app/platform is, what HyperLocal does, explain the platform
+9. {"action":"help"} — user asks what you can do
+10. {"action":"greeting"} — hello, hi, etc.
+11. {"action":"unknown","message":"brief reply"} — anything else
 
 Context (if provided):
 - Last shown jobs with indices: {jobContext}
@@ -98,11 +105,30 @@ async function extractIntent(
   if (/^(help|what can you do|commands|menu)[\s?]*$/i.test(lower)) {
     return { action: 'help' }
   }
+
+  // Platform info — "what is this", "explain the platform", "about hyperlocal", etc.
+  if (
+    /what\s+is\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
+    /^(about|explain|describe|tell me about)\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
+    /^(about|explain|what is this)[\s?!.]*$/i.test(lower)
+  ) {
+    return { action: 'platform_info' }
+  }
   if (pendingConfirm && /^(yes|yeah|yep|confirm|sure|ok|haan|ha)[\s!.]*$/i.test(lower)) {
     return { action: 'confirm_apply', jobId: pendingConfirm }
   }
   if (/^(my applications|application status|status|track|check status)/i.test(lower)) {
     return { action: 'application_status' }
+  }
+
+  // "Show all jobs" / "all jobs" / "list all"
+  if (/^(show all|list all|all jobs|browse all|every job|display all)/i.test(lower)) {
+    return { action: 'show_all_jobs' }
+  }
+
+  // "Recommended jobs" / "suggest jobs" / "jobs for me" / "best jobs" (also catches misspelling "recommanded")
+  if (/recomm[ae]nd|suggest|for me|best (jobs|match)|suitable|my match|personali[sz]ed/i.test(lower)) {
+    return { action: 'recommended_jobs' }
   }
 
   // Quick regex for "apply #N" or "apply for N"
@@ -251,29 +277,42 @@ export default function AIChatbot() {
 
   const handleSearchJobs = async (query?: string, category?: string, location?: string) => {
     try {
-      const allJobs = await mockJobOps.getAll({ status: 'active', category, location })
+      // Let server handle status filtering (it already returns only active jobs for workers)
+      const filters: { status?: 'active'; category?: string; location?: string } = {}
+      if (category) filters.category = category
+      if (location) filters.location = location
+      const allJobs = await mockJobOps.getAll(filters)
       let filtered = allJobs
 
       if (query) {
-        const q = query.toLowerCase()
-        filtered = allJobs.filter(
-          (j) =>
-            j.title.toLowerCase().includes(q) ||
-            j.description.toLowerCase().includes(q) ||
-            j.requiredSkills.some((s) => s.toLowerCase().includes(q)) ||
-            j.category.toLowerCase().includes(q),
-        )
+        // Split query into individual words for fuzzy matching
+        const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+        const queryFull = query.toLowerCase()
+
+        filtered = allJobs.filter((j) => {
+          const title = j.title.toLowerCase()
+          const desc = j.description.toLowerCase()
+          const skills = j.requiredSkills.map(s => s.toLowerCase()).join(' ')
+          const cat = j.category.toLowerCase()
+          const searchable = `${title} ${desc} ${skills} ${cat}`
+
+          // Exact substring match on full query
+          if (searchable.includes(queryFull)) return true
+
+          // Word-level fuzzy: match if ANY query word appears anywhere in the job's text
+          return queryWords.some(word => searchable.includes(word))
+        })
       }
 
-      // Sort by most recent
+      // Sort by most recent — show up to 25 search results
       filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      const results = filtered.slice(0, 8)
+      const results = filtered.slice(0, 25)
       lastJobsRef.current = results
 
       if (results.length === 0) {
         addMessage('assistant', `No jobs found matching "${query || 'your criteria'}". Try different keywords or browse all jobs.`, {
           type: 'suggestions',
-          suggestions: ['Show all jobs', 'Find jobs in Hyderabad', 'Search delivery jobs'],
+          suggestions: ['Show all jobs', 'Recommended jobs', 'Search delivery jobs'],
         })
       } else {
         const searchDesc = [query, category, location].filter(Boolean).join(', ') || 'active listings'
@@ -285,6 +324,78 @@ export default function AIChatbot() {
       }
     } catch {
       addMessage('assistant', 'Sorry, I had trouble searching for jobs. Please try again.')
+    }
+  }
+
+  const handleShowAllJobs = async () => {
+    try {
+      const allJobs = await mockJobOps.getAll()
+      const sorted = allJobs
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+      lastJobsRef.current = sorted
+
+      if (sorted.length === 0) {
+        addMessage('assistant', 'No jobs are available right now. Check back later!', {
+          type: 'suggestions',
+          suggestions: ['Recommended jobs', 'My applications'],
+        })
+      } else {
+        addMessage(
+          'assistant',
+          `Here are all **${sorted.length}** available jobs. Say a number for details or **"apply #N"** to apply.`,
+          { type: 'jobs', jobs: sorted },
+        )
+      }
+    } catch {
+      addMessage('assistant', 'Sorry, I had trouble fetching jobs. Please try again.')
+    }
+  }
+
+  const handleRecommendedJobs = async () => {
+    try {
+      const allJobs = await mockJobOps.getAll()
+      let results: Array<{ job: Job; matchScore: number }> = []
+
+      if (profile && profile.skills?.length > 0 && profile.categories?.length > 0) {
+        // Full AI-scored recommendations
+        results = getRecommendedJobs(profile, allJobs, 8)
+      }
+
+      // Fallback: category-based or recency
+      if (results.length === 0 && profile) {
+        const basic = getBasicRecommendations(profile.categories || [], allJobs, 8)
+        results = basic.map(job => ({ job, matchScore: 0 }))
+      }
+
+      // Last resort: just show recent jobs
+      if (results.length === 0) {
+        const recent = allJobs
+          .filter(j => j.status === 'active')
+          .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+          .slice(0, 8)
+        results = recent.map(job => ({ job, matchScore: 0 }))
+      }
+
+      const jobs = results.map(r => r.job)
+      lastJobsRef.current = jobs
+
+      if (jobs.length === 0) {
+        addMessage('assistant', 'No recommendations available yet. Complete your profile for better matches!', {
+          type: 'suggestions',
+          suggestions: ['Show all jobs', 'My applications'],
+        })
+      } else {
+        const hasScores = results.some(r => r.matchScore > 0)
+        const msg = hasScores
+          ? `Here are **${jobs.length}** recommended jobs based on your profile. Top match: **${results[0].matchScore}%**`
+          : `Here are **${jobs.length}** jobs you might be interested in. Complete your profile for personalized scoring!`
+        addMessage('assistant', msg + '\nSay a number for details or **"apply #N"** to apply.', {
+          type: 'jobs',
+          jobs,
+        })
+      }
+    } catch {
+      addMessage('assistant', 'Sorry, I had trouble getting recommendations. Please try again.')
     }
   }
 
@@ -424,6 +535,47 @@ export default function AIChatbot() {
           })
           break
 
+        case 'platform_info':
+          addMessage(
+            'assistant',
+            `**HyperLocal** is a hyperlocal job platform built for India 🇮🇳
+
+` +
+            `It connects **local workers** (plumbers, electricians, drivers, domestic helpers, and more) with **employers** in their area — no long commutes, no middlemen.
+
+` +
+            `**For Workers (you):**
+` +
+            `• Browse & apply for jobs nearby
+` +
+            `• AI-powered job recommendations based on your skills
+` +
+            `• Real-time chat with employers
+` +
+            `• Track your applications & earnings
+` +
+            `• Skill gap analysis to grow your career
+
+` +
+            `**For Employers:**
+` +
+            `• Post jobs and find verified local workers fast
+` +
+            `• AI resume screening & candidate matching
+` +
+            `• Secure escrow payments — money released only when work is done
+` +
+            `• WhatsApp notifications via WATI
+
+` +
+            `Think of it as a **neighbourhood job board powered by AI** — local, fast, and fair. 🤝`,
+            {
+              type: 'suggestions',
+              suggestions: ['Show all jobs', 'Recommended jobs for me', 'What can you do?'],
+            },
+          )
+          break
+
         case 'help':
           addMessage('assistant',
             `Here's what I can do:\n\n🔍 **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2" or "Tell me about job 3"\n📝 **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications" or "Check status"\n\nJust type naturally — I understand!`,
@@ -436,6 +588,14 @@ export default function AIChatbot() {
 
         case 'search_jobs':
           await handleSearchJobs(intent.query, intent.category, intent.location)
+          break
+
+        case 'show_all_jobs':
+          await handleShowAllJobs()
+          break
+
+        case 'recommended_jobs':
+          await handleRecommendedJobs()
           break
 
         case 'job_detail': {
@@ -522,19 +682,67 @@ export default function AIChatbot() {
         : ''
 
       extractIntent(suggestion, jobCtx, pendingConfirmJobId).then(async (intent) => {
-        // Re-dispatch same logic as handleSend
+        // Re-dispatch same logic as handleSend — must mirror all cases
         switch (intent.action) {
+          case 'greeting':
+            addMessage('assistant', GREETING_MSG, {
+              type: 'suggestions',
+              suggestions: ['Search plumber jobs', 'Find jobs in Hyderabad', 'My applications'],
+            })
+            break
+          case 'help':
+            addMessage('assistant',
+              `Here's what I can do:\n\n🔍 **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2"\n📝 **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications"`,
+              {
+                type: 'suggestions',
+                suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
+              },
+            )
+            break
           case 'search_jobs':
             await handleSearchJobs(intent.query, intent.category, intent.location)
+            break
+          case 'show_all_jobs':
+            await handleShowAllJobs()
+            break
+          case 'recommended_jobs':
+            await handleRecommendedJobs()
             break
           case 'application_status':
             await handleApplicationStatus()
             break
-          case 'help':
-            addMessage('assistant', `Here's what I can do...`, {
-              type: 'suggestions',
-              suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
-            })
+          case 'job_detail': {
+            let job: Job | undefined
+            if (intent.jobTitle?.startsWith('__index_')) {
+              job = resolveJobByIndex(intent.jobTitle)
+            } else if (intent.jobId) {
+              job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+            }
+            if (job) {
+              await handleJobDetail(job)
+            } else {
+              addMessage('assistant', "I couldn't find that job. Try searching first.")
+            }
+            break
+          }
+          case 'apply_job': {
+            let job: Job | undefined
+            if (intent.jobId.startsWith('__index_')) {
+              job = resolveJobByIndex(intent.jobId)
+            } else {
+              job = (await mockJobOps.findById(intent.jobId)) ?? undefined
+            }
+            if (job) {
+              await handleApplyJob(job)
+            } else {
+              addMessage('assistant', "I couldn't find that job. Search first then say 'apply #N'.")
+            }
+            break
+          }
+          case 'confirm_apply':
+            if (intent.jobId) {
+              await handleConfirmApply(intent.jobId)
+            }
             break
           default:
             addMessage('assistant', "I didn't understand that. Try searching for jobs!")
