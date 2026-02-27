@@ -55,6 +55,10 @@ Deno.serve(async (req: Request) => {
               location: body.location || null,
               profile_picture_url: body.profilePictureUrl || null,
               bio: body.bio || null,
+              resume_url: body.resumeUrl || null,
+              resume_text: body.resumeText || null,
+              resume_parsed: body.resumeParsed || null,
+              profile_completed: body.profileCompleted || false,
             }
           : {
               user_id: targetUserId,
@@ -85,6 +89,10 @@ Deno.serve(async (req: Request) => {
         if (body.location !== undefined) payload.location = body.location
         if (body.profilePictureUrl !== undefined) payload.profile_picture_url = body.profilePictureUrl
         if (body.bio !== undefined) payload.bio = body.bio
+        if (body.resumeUrl !== undefined) payload.resume_url = body.resumeUrl
+        if (body.resumeText !== undefined) payload.resume_text = body.resumeText
+        if (body.resumeParsed !== undefined) payload.resume_parsed = body.resumeParsed
+        if (body.profileCompleted !== undefined) payload.profile_completed = body.profileCompleted
       } else {
         if (body.businessName !== undefined) payload.business_name = body.businessName
         if (body.organizationName !== undefined) payload.organization_name = body.organizationName
@@ -143,6 +151,10 @@ function mapProfile(row: Record<string, unknown>, role: 'worker' | 'employer') {
       location: row.location || undefined,
       profilePictureUrl: row.profile_picture_url || undefined,
       bio: row.bio || undefined,
+      resumeUrl: row.resume_url || undefined,
+      resumeText: row.resume_text || undefined,
+      resumeParsed: row.resume_parsed || undefined,
+      profileCompleted: row.profile_completed || false,
     }
   }
   return {

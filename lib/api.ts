@@ -38,6 +38,8 @@ function getEnv() {
 const SESSION_TOKEN_KEY = 'sessionToken'
 const SESSION_EXPIRES_AT_KEY = 'sessionExpiresAt'
 const SESSION_REFRESHED_AT_KEY = 'sessionRefreshedAt'
+/** Persists the real wall-clock time the session token was stored — survives page reloads */
+const SESSION_SET_AT_KEY = 'sessionSetAt'
 let sessionRefreshInFlight: Promise<void> | null = null
 
 /**
@@ -45,15 +47,19 @@ let sessionRefreshInFlight: Promise<void> | null = null
  * Used to prevent a 401 handler from clearing a token that was
  * JUST obtained by a concurrent login/register call.
  *
- * Initialized to Date.now() when a pre-existing token is found in localStorage
- * (e.g. after a hard refresh / Ctrl+Shift+R). Without this, _sessionSetAt stays
- * 0 on every page load, making tokenAge always huge — any 401 (even a transient
- * one during startup) would immediately clear the session and log the user out.
+ * On module init we restore the real set-time from localStorage so that stale
+ * tokens that survived a page reload are recognised as old (tokenAge > 5s) and
+ * properly cleared by the 401 handler instead of being treated as fresh.
+ * Previously this was always set to Date.now() on reload, which masked invalid
+ * sessions and left users stuck in a 401 loop.
  */
 let _sessionSetAt: number = (() => {
   try {
     if (typeof window !== 'undefined' && localStorage.getItem(SESSION_TOKEN_KEY)) {
-      return Date.now()
+      const stored = localStorage.getItem(SESSION_SET_AT_KEY)
+      // Use the real stored timestamp so stale tokens are detected correctly.
+      // Fall back to 60 s ago — old enough that a 401 will clear the session.
+      return stored ? Number(stored) : Date.now() - 60_000
     }
   } catch { /* storage may be blocked in private-browsing */ }
   return 0
@@ -77,6 +83,8 @@ function setSessionToken(token: string | null): void {
   if (token) {
     localStorage.setItem(SESSION_TOKEN_KEY, token)
     _sessionSetAt = Date.now()
+    // Persist the actual set-time so page reloads can restore the real tokenAge
+    localStorage.setItem(SESSION_SET_AT_KEY, String(_sessionSetAt))
     // Cancel any pending redirect since we just got a fresh session
     if (_pendingRedirectTimer) {
       clearTimeout(_pendingRedirectTimer)
@@ -86,6 +94,7 @@ function setSessionToken(token: string | null): void {
     localStorage.removeItem(SESSION_TOKEN_KEY)
     localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
     localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
+    localStorage.removeItem(SESSION_SET_AT_KEY)
   }
 }
 
@@ -255,6 +264,12 @@ async function call<T>(
 
           // If token rotated while this request was in-flight, retry once with new token
           if (currentToken && tokenUsed && currentToken !== tokenUsed && attempt < MAX_RETRIES) {
+            continue
+          }
+          // If we sent the anon key (no session token at call time) but there is NOW a
+          // real session token, a login may have just completed concurrently — retry once.
+          if (!tokenUsed && currentToken && attempt < MAX_RETRIES) {
+            await new Promise((r) => setTimeout(r, 200))
             continue
           }
 

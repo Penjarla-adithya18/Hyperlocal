@@ -59,6 +59,7 @@ export default function WorkerProfilePage() {
   });
   const [resumeUploading, setResumeUploading] = useState(false);
   const [extractedFromResume, setExtractedFromResume] = useState<ParsedResume | null>(null);
+  const [resumeRawText, setResumeRawText] = useState<string>('');
   const [selectedExtracted, setSelectedExtracted] = useState<Set<string>>(new Set());
   const [showAllCategories, setShowAllCategories] = useState<Record<string, boolean>>({});
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
@@ -102,6 +103,13 @@ export default function WorkerProfilePage() {
           resumeUrl: workerProfile.resumeUrl || '',
           resumeFileName: workerProfile.resumeUrl ? 'Resume uploaded' : '',
         });
+        // Restore resume data if available
+        if (workerProfile.resumeText) {
+          setResumeRawText(workerProfile.resumeText);
+        }
+        if (workerProfile.resumeParsed) {
+          setExtractedFromResume(workerProfile.resumeParsed);
+        }
       }
     } catch (error) {
       console.error('Failed to load profile:', error);
@@ -185,6 +193,7 @@ export default function WorkerProfilePage() {
 
     setResumeUploading(true);
     setExtractedFromResume(null);
+    setResumeRawText('');
     setSelectedExtracted(new Set());
 
     try {
@@ -197,6 +206,7 @@ export default function WorkerProfilePage() {
         setFormData(prev => ({ ...prev, resumeUrl: dataUrl, resumeFileName: file.name }));
 
         if (text && text.trim().length > 50) {
+          setResumeRawText(text);
           try {
             const parsed = await parseResume(text);
             if (parsed.skills && parsed.skills.length > 0) {
@@ -232,14 +242,13 @@ export default function WorkerProfilePage() {
     }
   };
 
-  /** Merge selected extracted skills into profile skills and dismiss the panel */
+  /** Merge selected extracted skills into profile skills (keep extracted data in state) */
   const handleAddExtractedSkills = (all = false) => {
     const toAdd = all
       ? (extractedFromResume?.skills ?? [])
       : Array.from(selectedExtracted);
     const merged = [...new Set([...formData.skills, ...toAdd])];
     setFormData(prev => ({ ...prev, skills: merged }));
-    setExtractedFromResume(null);
     setSelectedExtracted(new Set());
     toast({ title: 'Skills Added', description: `${toAdd.length} skill(s) added to your profile` });
   };
@@ -397,7 +406,7 @@ export default function WorkerProfilePage() {
         bio: formData.bio,
         profilePictureUrl: formData.profileImage || undefined,
         resumeUrl: formData.resumeUrl || undefined,
-        resumeText: extractedFromResume ? formData.experience : undefined,
+        resumeText: resumeRawText || undefined,
         resumeParsed: extractedFromResume ? {
           summary: extractedFromResume.summary || '',
           skills: extractedFromResume.skills || [],
@@ -417,6 +426,11 @@ export default function WorkerProfilePage() {
 
       await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
+
+      // After successful save, clear the extracted resume data
+      setExtractedFromResume(null);
+      setResumeRawText('');
+      setSelectedExtracted(new Set());
 
       toast({
         title: 'Profile Updated',
@@ -620,7 +634,7 @@ export default function WorkerProfilePage() {
                     </div>
                     <button
                       type="button"
-                      onClick={() => { setExtractedFromResume(null); setSelectedExtracted(new Set()); }}
+                      onClick={() => { setSelectedExtracted(new Set()); }}
                       className="text-muted-foreground hover:text-foreground transition-colors shrink-0"
                       aria-label="Dismiss"
                     >
