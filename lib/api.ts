@@ -930,8 +930,7 @@ export const db = {
   },
 
   async deleteAccount(userId: string): Promise<void> {
-    // Use POST with action to avoid 405 from edge functions that don't support DELETE
-    await call<{ success: boolean }>('users', 'POST', {}, { action: 'delete', id: userId })
+    await call<{ success: boolean }>('users', 'DELETE', { id: userId })
   },
 
   async getAllReports(): Promise<Report[]> {

@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, Settings, User } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
@@ -38,7 +38,6 @@ export function EmployerNav() {
   ];
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [
-    { href: '/employer/profile', label: 'Profile', icon: User },
   ];
 
   if (!mounted) {
@@ -114,14 +113,14 @@ export function EmployerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
-              <Link href="/employer/settings" prefetch={false}>
+              <Link href="/employer/profile" prefetch={false}>
                 <Button
-                  variant={pathname === '/employer/settings' ? 'default' : 'ghost'}
+                  variant={pathname === '/employer/profile' ? 'default' : 'ghost'}
                   size="icon"
-                  title="Settings"
-                  className={cn(pathname === '/employer/settings' && 'bg-accent text-accent-foreground shadow-sm')}
+                  title="Profile"
+                  className={cn(pathname === '/employer/profile' && 'bg-accent text-accent-foreground shadow-sm')}
                 >
-                  <Settings className="w-4 h-4" />
+                  <User className="w-4 h-4" />
                 </Button>
               </Link>
               <Button
@@ -165,10 +164,10 @@ export function EmployerNav() {
                   </Button>
                 </Link>
               ))}
-              <Link href="/employer/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+              <Link href="/employer/profile" prefetch={false} onClick={() => setShowMenu(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
-                  <Settings className="w-4 h-4" />
-                  Settings
+                  <User className="w-4 h-4" />
+                  Profile
                 </Button>
               </Link>
               <div className="border-t pt-2">
