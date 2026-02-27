@@ -9,7 +9,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface NavItem {
   href: string;
@@ -22,9 +22,14 @@ interface NavItem {
 
 export function EmployerNav() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const { t } = useI18n();
   const [showMenu, setShowMenu] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   const primaryNavItems: NavItem[] = [
     { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home, mobileLabel: 'Home', badge: undefined, highlight: false },
@@ -36,8 +41,17 @@ export function EmployerNav() {
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [
     { href: '/employer/profile', label: t('nav.profile'), icon: User },
-    { href: '/settings', label: t('nav.settings'), icon: Settings },
   ];
+
+  if (!mounted) {
+    return (
+      <nav className="border-b glass sticky top-0 z-50 shadow-soft">
+        <div className="container mx-auto px-4">
+          <div className="flex items-center justify-between h-14" />
+        </div>
+      </nav>
+    );
+  }
 
   return (
     <>
@@ -102,6 +116,16 @@ export function EmployerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
+              <Link href="/employer/settings" prefetch={false}>
+                <Button
+                  variant={pathname === '/employer/settings' ? 'default' : 'ghost'}
+                  size="icon"
+                  title="Settings"
+                  className={cn(pathname === '/employer/settings' && 'bg-accent text-accent-foreground shadow-sm')}
+                >
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"
@@ -143,6 +167,12 @@ export function EmployerNav() {
                   </Button>
                 </Link>
               ))}
+              <Link href="/employer/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+                <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
+                  <Settings className="w-4 h-4" />
+                  {t('nav.settings')}
+                </Button>
+              </Link>
               <div className="border-t pt-2">
                 <Button
                   variant="ghost"

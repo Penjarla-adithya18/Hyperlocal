@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
@@ -21,7 +21,7 @@ interface NavItem {
 
 export function WorkerNav() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const { t } = useI18n();
   const [showMenu, setShowMenu] = useState(false);
 
@@ -61,6 +61,7 @@ export function WorkerNav() {
                     <Button
                       variant={isActive ? 'default' : 'ghost'}
                       size="sm"
+                      title={item.label}
                       className={cn(
                         'gap-2 transition-smooth',
                         isActive && 'bg-primary shadow-sm'
@@ -84,6 +85,7 @@ export function WorkerNav() {
                     <Button
                       variant={isActive ? 'default' : 'ghost'}
                       size="sm"
+                      title={item.label}
                       className={cn(
                         'gap-2 transition-smooth',
                         isActive && 'bg-primary shadow-sm'
@@ -100,6 +102,11 @@ export function WorkerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
+              <Link href="/worker/settings" prefetch={false}>
+                <Button variant={pathname === '/worker/settings' ? 'default' : 'ghost'} size="icon" title="Settings" className={cn(pathname === '/worker/settings' && 'bg-primary shadow-sm')}>
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"
@@ -141,6 +148,12 @@ export function WorkerNav() {
                   </Button>
                 </Link>
               ))}
+              <Link href="/worker/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+                <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
+                  <Settings className="w-4 h-4" />
+                  {t('nav.settings')}
+                </Button>
+              </Link>
               <div className="border-t pt-2">
                 <Button
                   variant="ghost"

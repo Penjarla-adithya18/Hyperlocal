@@ -31,7 +31,7 @@ import {
   MessageSquare,
 } from 'lucide-react'
 
-// â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Types ────────────────────────────────────────────────────────────────
 
 interface ChatMessage {
   id: string
@@ -62,7 +62,7 @@ type AgentIntent =
   | { action: 'greeting' }
   | { action: 'unknown'; message: string }
 
-// â”€â”€ Intent Extraction (AI + Fallback) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Intent Extraction (AI + Fallback) ────────────────────────────────────
 
 const INTENT_PROMPT = `You are an AI assistant for HyperLocal, a hyperlocal job platform in India.
 Parse the user's message into a JSON intent. Respond ONLY with valid JSON (no markdown, no fences).
@@ -70,15 +70,15 @@ Parse the user's message into a JSON intent. Respond ONLY with valid JSON (no ma
 Possible intents:
 1. {"action":"search_jobs","query":"keyword","category":"category","location":"city"}
 2. {"action":"job_detail","jobTitle":"title or keyword"}
-3. {"action":"apply_job","jobId":"id"} â€” when user says "apply to job #3" or "apply for <title>"
-4. {"action":"confirm_apply","jobId":"id"} â€” when user confirms "yes" to apply
-5. {"action":"show_all_jobs"} â€” when user says "show all jobs", "list all jobs", "all jobs"
-6. {"action":"recommended_jobs"} â€” when user says "recommended jobs", "suggest jobs", "jobs for me"
-7. {"action":"application_status"} â€” check my applications, status, etc.
-8. {"action":"platform_info"} â€” user asks what this app/platform is, what HyperLocal does, explain the platform
-9. {"action":"help"} â€” user asks what you can do
-10. {"action":"greeting"} â€” hello, hi, etc.
-11. {"action":"unknown","message":"brief reply"} â€” anything else
+3. {"action":"apply_job","jobId":"id"} — when user says "apply to job #3" or "apply for <title>"
+4. {"action":"confirm_apply","jobId":"id"} — when user confirms "yes" to apply
+5. {"action":"show_all_jobs"} — when user says "show all jobs", "list all jobs", "all jobs"
+6. {"action":"recommended_jobs"} — when user says "recommended jobs", "suggest jobs", "jobs for me"
+7. {"action":"application_status"} — check my applications, status, etc.
+8. {"action":"platform_info"} — user asks what this app/platform is, what HyperLocal does, explain the platform
+9. {"action":"help"} — user asks what you can do
+10. {"action":"greeting"} — hello, hi, etc.
+11. {"action":"unknown","message":"brief reply"} — anything else
 
 Context (if provided):
 - Last shown jobs with indices: {jobContext}
@@ -106,7 +106,7 @@ async function extractIntent(
     return { action: 'help' }
   }
 
-  // Platform info â€” "what is this", "explain the platform", "about hyperlocal", etc.
+  // Platform info — "what is this", "explain the platform", "about hyperlocal", etc.
   if (
     /what\s+is\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
     /^(about|explain|describe|tell me about)\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
@@ -180,7 +180,7 @@ async function extractIntent(
   return { action: 'search_jobs', query: lower }
 }
 
-// â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ── Component ────────────────────────────────────────────────────────────
 
 const GREETING_MSG = `👋 Hi! I'm your **HyperLocal AI Assistant**. I can help you:
 
@@ -246,7 +246,7 @@ export default function AIChatbot() {
     }
   }, [open])
 
-  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Helpers ─────────────────────────────────────────────────────
 
   const addMessage = useCallback(
     (role: ChatMessage['role'], content: string, data?: ChatMessage['data']) => {
@@ -273,7 +273,7 @@ export default function AIChatbot() {
     return undefined
   }
 
-  // â”€â”€ Action Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Action Handlers ─────────────────────────────────────────────
 
   const handleSearchJobs = async (query?: string, category?: string, location?: string) => {
     try {
@@ -304,7 +304,7 @@ export default function AIChatbot() {
         })
       }
 
-      // Sort by most recent â€” show up to 25 search results
+      // Sort by most recent — show up to 25 search results
       filtered.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
       const results = filtered.slice(0, 25)
       lastJobsRef.current = results
@@ -424,7 +424,7 @@ export default function AIChatbot() {
     setPendingConfirmJobId(job.id)
     addMessage(
       'assistant',
-      `Apply to **${job.title}** (â‚¹${(job.pay ?? 0).toLocaleString()})?\n\nSay **"yes"** to confirm or **"no"** to cancel.`,
+      `Apply to **${job.title}** (₹${(job.pay ?? 0).toLocaleString()})?\n\nSay **"yes"** to confirm or **"no"** to cancel.`,
       { type: 'apply_confirm', job },
     )
   }
@@ -499,7 +499,7 @@ export default function AIChatbot() {
 
       addMessage(
         'assistant',
-        `ðŸ“‹ You have **${apps.length}** application${apps.length > 1 ? 's' : ''}:\nâ€¢ Pending: ${statusCounts.pending}\nâ€¢ Accepted: ${statusCounts.accepted}\nâ€¢ Completed: ${statusCounts.completed}\nâ€¢ Rejected: ${statusCounts.rejected}`,
+        `📋 You have **${apps.length}** application${apps.length > 1 ? 's' : ''}:\n• Pending: ${statusCounts.pending}\n• Accepted: ${statusCounts.accepted}\n• Completed: ${statusCounts.completed}\n• Rejected: ${statusCounts.rejected}`,
         { type: 'applications', applications: enriched },
       )
     } catch {
@@ -507,7 +507,7 @@ export default function AIChatbot() {
     }
   }
 
-  // â”€â”€ Main Send Handler â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Main Send Handler ────────────────────────────────────────────
 
   const handleSend = async () => {
     const text = input.trim()
@@ -538,37 +538,37 @@ export default function AIChatbot() {
         case 'platform_info':
           addMessage(
             'assistant',
-            `**HyperLocal** is a hyperlocal job platform built for India ðŸ‡®ðŸ‡³
+            `**HyperLocal** is a hyperlocal job platform built for India 🇮🇳
 
 ` +
-            `It connects **local workers** (plumbers, electricians, drivers, domestic helpers, and more) with **employers** in their area â€” no long commutes, no middlemen.
+            `It connects **local workers** (plumbers, electricians, drivers, domestic helpers, and more) with **employers** in their area — no long commutes, no middlemen.
 
 ` +
             `**For Workers (you):**
 ` +
-            `â€¢ Browse & apply for jobs nearby
+            `• Browse & apply for jobs nearby
 ` +
-            `â€¢ AI-powered job recommendations based on your skills
+            `• AI-powered job recommendations based on your skills
 ` +
-            `â€¢ Real-time chat with employers
+            `• Real-time chat with employers
 ` +
-            `â€¢ Track your applications & earnings
+            `• Track your applications & earnings
 ` +
-            `â€¢ Skill gap analysis to grow your career
+            `• Skill gap analysis to grow your career
 
 ` +
             `**For Employers:**
 ` +
-            `â€¢ Post jobs and find verified local workers fast
+            `• Post jobs and find verified local workers fast
 ` +
-            `â€¢ AI resume screening & candidate matching
+            `• AI resume screening & candidate matching
 ` +
-            `â€¢ Secure escrow payments â€” money released only when work is done
+            `• Secure escrow payments — money released only when work is done
 ` +
-            `â€¢ WhatsApp notifications via WATI
+            `• WhatsApp notifications via WATI
 
 ` +
-            `Think of it as a **neighbourhood job board powered by AI** â€” local, fast, and fair. ðŸ¤`,
+            `Think of it as a **neighbourhood job board powered by AI** — local, fast, and fair. �`,
             {
               type: 'suggestions',
               suggestions: ['Show all jobs', 'Recommended jobs for me', 'What can you do?'],
@@ -578,7 +578,7 @@ export default function AIChatbot() {
 
         case 'help':
           addMessage('assistant',
-            `Here's what I can do:\n\nðŸ” **Search Jobs** â€” "Find plumber jobs in Delhi"\nðŸ“‹ **Job Details** â€” "Show #2" or "Tell me about job 3"\nðŸ“ **Apply** â€” "Apply for #1"\nðŸ“Š **Track Applications** â€” "My applications" or "Check status"\n\nJust type naturally â€” I understand!`,
+            `Here's what I can do:\n\n� **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2" or "Tell me about job 3"\n� **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications" or "Check status"\n\nJust type naturally — I understand!`,
             {
               type: 'suggestions',
               suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
@@ -666,7 +666,7 @@ export default function AIChatbot() {
     }
   }
 
-  // â”€â”€ Suggestion click â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Suggestion click ─────────────────────────────────────────────
 
   const handleSuggestionClick = (suggestion: string) => {
     setInput(suggestion)
@@ -682,7 +682,7 @@ export default function AIChatbot() {
         : ''
 
       extractIntent(suggestion, jobCtx, pendingConfirmJobId).then(async (intent) => {
-        // Re-dispatch same logic as handleSend â€” must mirror all cases
+        // Re-dispatch same logic as handleSend — must mirror all cases
         switch (intent.action) {
           case 'greeting':
             addMessage('assistant', GREETING_MSG, {
@@ -692,7 +692,7 @@ export default function AIChatbot() {
             break
           case 'help':
             addMessage('assistant',
-              `Here's what I can do:\n\nðŸ” **Search Jobs** â€” "Find plumber jobs in Delhi"\nðŸ“‹ **Job Details** â€” "Show #2"\nðŸ“ **Apply** â€” "Apply for #1"\nðŸ“Š **Track Applications** â€” "My applications"`,
+              `Here's what I can do:\n\n� **Search Jobs** — "Find plumber jobs in Delhi"\n📋 **Job Details** — "Show #2"\n� **Apply** — "Apply for #1"\n📊 **Track Applications** — "My applications"`,
               {
                 type: 'suggestions',
                 suggestions: ['Search electrician jobs', 'My applications', 'Show all jobs'],
@@ -753,7 +753,7 @@ export default function AIChatbot() {
     }, 50)
   }
 
-  // â”€â”€ Render â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ── Render ──────────────────────────────────────────────────────
 
   if (!user || user.role !== 'worker') return null
 
@@ -834,7 +834,7 @@ export default function AIChatbot() {
                                   <MapPin className="h-3 w-3" /> {job.location}
                                 </span>
                                 <span className="text-[11px] text-muted-foreground flex items-center gap-0.5">
-                                  <IndianRupee className="h-3 w-3" /> â‚¹{(job.pay ?? 0).toLocaleString()}
+                                  <IndianRupee className="h-3 w-3" /> ₹{(job.pay ?? 0).toLocaleString()}
                                 </span>
                               </div>
                             </div>
@@ -854,7 +854,7 @@ export default function AIChatbot() {
                           <MapPin className="h-3 w-3" /> {msg.data.job.location}
                         </span>
                         <span className="text-[11px] flex items-center gap-1 text-muted-foreground">
-                          <IndianRupee className="h-3 w-3" /> â‚¹{(msg.data.job.pay ?? 0).toLocaleString()}/{msg.data.job.payType === 'hourly' ? 'hr' : 'fixed'}
+                          <IndianRupee className="h-3 w-3" /> ₹{(msg.data.job.pay ?? 0).toLocaleString()}/{msg.data.job.payType === 'hourly' ? 'hr' : 'fixed'}
                         </span>
                         <span className="text-[11px] flex items-center gap-1 text-muted-foreground">
                           <Clock className="h-3 w-3" /> {msg.data.job.timing}
