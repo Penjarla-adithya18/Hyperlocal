@@ -27,8 +27,6 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'POST') {
-      if (!isAdmin) return errorResponse('Forbidden', 403)
-
       const body = await req.json()
       const { userId, type, title, message, link } = body
       if (!userId || !type || !title || !message) {

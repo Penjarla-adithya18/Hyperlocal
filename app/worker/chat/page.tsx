@@ -439,17 +439,17 @@ export default function WorkerChatPage() {
                     {getOtherUser(selectedConversation)?.fullName.charAt(0)}
                   </AvatarFallback>
                 </Avatar>
-                <div
-                  className={`flex-1 min-w-0 ${selectedConversation.jobId ? 'cursor-pointer group' : ''}`}
-                  onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
-                >
-                  <p className="font-semibold text-base truncate group-hover:text-primary transition-colors">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-base truncate">
                     {getOtherUser(selectedConversation)?.fullName}
                   </p>
-                  <p className="text-xs text-muted-foreground truncate">
+                  <p
+                    className={`text-xs text-muted-foreground truncate ${selectedConversation.jobId ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
+                    onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
+                  >
                     {selectedConversation.jobId && jobsById[selectedConversation.jobId]
                       ? jobsById[selectedConversation.jobId].title
-                      : (getOtherUser(selectedConversation)?.companyName || 'Tap to view job')}
+                      : (getOtherUser(selectedConversation)?.companyName || '')}
                   </p>
                 </div>
                 <Button
@@ -662,13 +662,13 @@ export default function WorkerChatPage() {
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1">
-                        <CardTitle
-                          className={`text-lg ${selectedConversation.jobId ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
-                          onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
-                        >
+                        <CardTitle className="text-lg">
                           {getOtherUser(selectedConversation)?.fullName}
                         </CardTitle>
-                        <p className="text-sm text-muted-foreground">
+                        <p
+                          className={`text-sm text-muted-foreground ${selectedConversation.jobId ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
+                          onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
+                        >
                           {selectedConversation.jobId && jobsById[selectedConversation.jobId]
                             ? jobsById[selectedConversation.jobId].title
                             : (getOtherUser(selectedConversation)?.companyName || 'Employer')}
