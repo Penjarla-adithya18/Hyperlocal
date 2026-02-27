@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { useAuth } from '@/contexts/AuthContext'
 import { 
   LayoutDashboard, Users, AlertTriangle, 
-  LogOut, Menu, X, IndianRupee 
+  LogOut, Menu, X, IndianRupee, Settings 
 } from 'lucide-react'
 import { useState } from 'react'
 import { NotificationBell } from '@/components/ui/notification-bell'
@@ -59,6 +59,15 @@ export default function AdminNav() {
               {user?.fullName}
             </div>
             <NotificationBell />
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => router.push('/admin/settings')}
+              className="touch-target"
+              title="Settings"
+            >
+              <Settings className="h-4 w-4" />
+            </Button>
             <Button variant="outline" onClick={handleLogout} className="gap-2 touch-target transition-smooth">
               <LogOut className="h-4 w-4" />
               Logout
@@ -90,6 +99,17 @@ export default function AdminNav() {
                 {item.label}
               </Button>
             ))}
+            <Button
+              variant="ghost"
+              onClick={() => {
+                router.push('/admin/settings')
+                setMobileMenuOpen(false)
+              }}
+              className="w-full justify-start gap-2 touch-target"
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
             <div className="px-4 py-2 text-sm text-muted-foreground border-t">
               {user?.fullName}
             </div>

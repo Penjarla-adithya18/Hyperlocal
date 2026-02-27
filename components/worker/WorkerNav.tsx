@@ -4,9 +4,8 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu, Settings } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
 import { useState } from 'react';
@@ -21,21 +20,20 @@ interface NavItem {
 
 export function WorkerNav() {
   const pathname = usePathname();
-  const { user, logout } = useAuth();
-  const { t } = useI18n();
+  const { logout } = useAuth();
   const [showMenu, setShowMenu] = useState(false);
 
   const primaryNavItems: NavItem[] = [
-    { href: '/worker/dashboard', label: t('nav.dashboard'), icon: Home, mobileLabel: 'Home', badge: undefined },
-    { href: '/worker/jobs', label: t('nav.worker.findJobs'), icon: Search, mobileLabel: 'Jobs', badge: undefined },
-    { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase, mobileLabel: 'Apps', badge: undefined },
-    { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0, mobileLabel: 'Chat' },
-    { href: '/worker/profile', label: t('nav.profile'), icon: User, mobileLabel: 'Profile', badge: undefined },
+    { href: '/worker/dashboard', label: 'Dashboard', icon: Home, mobileLabel: 'Home', badge: undefined },
+    { href: '/worker/jobs', label: 'Find Jobs', icon: Search, mobileLabel: 'Jobs', badge: undefined },
+    { href: '/worker/applications', label: 'Applications', icon: Briefcase, mobileLabel: 'Apps', badge: undefined },
+    { href: '/worker/chat', label: 'Messages', icon: MessageSquare, badge: 0, mobileLabel: 'Chat' },
+    { href: '/worker/profile', label: 'Profile', icon: User, mobileLabel: 'Profile', badge: undefined },
   ];
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge'>[] = [
-    { href: '/worker/earnings', label: t('nav.worker.earnings'), icon: Wallet },
-    { href: '/worker/skill-gap', label: t('nav.worker.skillGap'), icon: Target },
+    { href: '/worker/earnings', label: 'Earnings', icon: Wallet },
+    { href: '/worker/skill-gap', label: 'Skill Gap', icon: Target },
   ];
 
   return (
@@ -61,6 +59,7 @@ export function WorkerNav() {
                     <Button
                       variant={isActive ? 'default' : 'ghost'}
                       size="sm"
+                      title={item.label}
                       className={cn(
                         'gap-2 transition-smooth',
                         isActive && 'bg-primary shadow-sm'
@@ -84,6 +83,7 @@ export function WorkerNav() {
                     <Button
                       variant={isActive ? 'default' : 'ghost'}
                       size="sm"
+                      title={item.label}
                       className={cn(
                         'gap-2 transition-smooth',
                         isActive && 'bg-primary shadow-sm'
@@ -100,15 +100,20 @@ export function WorkerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
+              <Link href="/worker/settings" prefetch={false}>
+                <Button variant={pathname === '/worker/settings' ? 'default' : 'ghost'} size="icon" title="Settings" className={cn(pathname === '/worker/settings' && 'bg-primary shadow-sm')}>
+                  <Settings className="w-4 h-4" />
+                </Button>
+              </Link>
               <Button
                 variant="ghost"
                 size="sm"
                 onClick={logout}
                 className="gap-2 touch-target"
-                title={t('nav.logout')}
+                title="Logout"
               >
                 <LogOut className="w-4 h-4" />
-                <span>{t('nav.logout')}</span>
+                <span>Logout</span>
               </Button>
             </div>
 
@@ -141,6 +146,12 @@ export function WorkerNav() {
                   </Button>
                 </Link>
               ))}
+              <Link href="/worker/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+                <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
+                  <Settings className="w-4 h-4" />
+                  Settings
+                </Button>
+              </Link>
               <div className="border-t pt-2">
                 <Button
                   variant="ghost"
@@ -148,7 +159,7 @@ export function WorkerNav() {
                   className="w-full justify-start gap-3 touch-target text-destructive"
                 >
                   <LogOut className="w-4 h-4" />
-                  {t('nav.logout')}
+                  Logout
                 </Button>
               </div>
             </div>
