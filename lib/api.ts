@@ -351,6 +351,7 @@ export async function registerUser(data: {
   phoneNumber: string
   password: string
   role: User['role']
+  email?: string
   businessName?: string
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
@@ -497,8 +498,12 @@ export async function verifyOtpRequest(
 }
 
 export async function getUserByPhone(phoneNumber: string): Promise<User | null> {
-  const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-phone', phoneNumber })
-  return res.data
+  try {
+    const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-phone-public', phoneNumber })
+    return res.data
+  } catch {
+    return null
+  }
 }
 
 export async function getUserByEmail(email: string): Promise<User | null> {
