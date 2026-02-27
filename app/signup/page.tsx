@@ -57,10 +57,6 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
-        // Set the OTP from the response (for demo/dev display)
-        if (result.otp) {
-          setGeneratedOtp(result.otp);
-        }
         toast({
           title: 'OTP Sent',
           description: result.message,
@@ -363,13 +359,6 @@ function SignupPageContent() {
                         />
                       </div>
 
-                      {generatedOtp && (
-                        <div className="rounded-xl border-2 border-emerald-500/30 bg-emerald-50/50 dark:bg-emerald-950/30 p-4 text-center">
-                          <p className="text-xs font-medium text-gray-600 dark:text-slate-400 mb-1">Development Mode - OTP Code:</p>
-                          <p className="text-3xl font-mono font-bold text-emerald-600 dark:text-emerald-400 tracking-widest">{generatedOtp}</p>
-                          <p className="text-xs text-gray-500 dark:text-slate-500 mt-1">Copy this code to the input above</p>
-                        </div>
-                      )}
                       <button
                         onClick={handleVerifyOTP}
                         disabled={loading}

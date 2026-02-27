@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Briefcase, ArrowLeft, KeyRound, Loader2 } from 'lucide-react'
+import { Briefcase, ArrowLeft, Loader2 } from 'lucide-react'
 import { sendOTP, verifyOTP, forgotPassword } from '@/lib/auth'
 import { useToast } from '@/hooks/use-toast'
 
@@ -19,7 +19,6 @@ export default function ForgotPasswordPage() {
   const [loading, setLoading] = useState(false)
   const [phone, setPhone] = useState('')
   const [otp, setOtp] = useState('')
-  const [displayOtp, setDisplayOtp] = useState<string | null>(null)
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
 
@@ -32,9 +31,8 @@ export default function ForgotPasswordPage() {
     try {
       const res = await sendOTP(phone)
       if (res.success) {
-        setDisplayOtp(res.otp ?? null)
         setStep(2)
-        toast({ title: 'OTP generated', description: 'Your OTP is shown below.' })
+        toast({ title: 'OTP sent', description: 'Check your phone for the verification code.' })
       } else {
         toast({ title: res.message, variant: 'destructive' })
       }
@@ -55,7 +53,6 @@ export default function ForgotPasswordPage() {
       const res = await verifyOTP(phone, otp)
       if (res.success) {
         setStep(3)
-        setDisplayOtp(null)
         toast({ title: 'Phone verified', description: 'Now set your new password.' })
       } else {
         toast({ title: res.message || 'Invalid OTP', variant: 'destructive' })
@@ -142,18 +139,8 @@ export default function ForgotPasswordPage() {
             <div className="space-y-6">
               <div className="text-center">
                 <h1 className="text-2xl font-bold mb-1">Verify OTP</h1>
-                <p className="text-sm text-muted-foreground">Enter the OTP shown below</p>
+                <p className="text-sm text-muted-foreground">Enter the OTP sent to your phone</p>
               </div>
-
-              {displayOtp && (
-                <div className="flex items-center gap-3 rounded-lg border-2 border-green-400 bg-green-50 dark:bg-green-950/30 px-4 py-3">
-                  <KeyRound className="h-5 w-5 text-green-600 shrink-0" />
-                  <div>
-                    <p className="text-xs text-green-700 dark:text-green-400 font-medium">Your OTP (demo mode)</p>
-                    <p className="text-2xl font-bold tracking-widest text-green-800 dark:text-green-300">{displayOtp}</p>
-                  </div>
-                </div>
-              )}
 
               <div className="space-y-2">
                 <Label htmlFor="fp-otp">Enter OTP</Label>
@@ -169,7 +156,7 @@ export default function ForgotPasswordPage() {
               <Button onClick={handleVerifyOtp} disabled={loading} className="w-full">
                 {loading ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />Verifying...</> : 'Verify OTP'}
               </Button>
-              <Button variant="ghost" size="sm" onClick={() => { setStep(1); setDisplayOtp(null); setOtp('') }} className="w-full">
+              <Button variant="ghost" size="sm" onClick={() => { setStep(1); setOtp('') }} className="w-full">
                 Change Phone Number
               </Button>
             </div>

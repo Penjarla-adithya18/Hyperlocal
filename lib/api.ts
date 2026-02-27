@@ -322,6 +322,93 @@ export async function forgotPasswordReset(
   return res
 }
 
+export async function sendOtpRequest(
+  phoneNumber: string
+): Promise<{ success: boolean; message: string }> {
+  const { url, key } = getEnv()
+  const endpoint = `${url}/functions/v1/auth`
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'send-otp', phoneNumber }),
+      },
+      10_000
+    )
+
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean
+      message?: string
+      error?: string
+    }
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || data.error || 'Failed to send OTP. Please try again.',
+      }
+    }
+
+    return {
+      success: !!data.success,
+      message: data.message || 'OTP sent successfully.',
+    }
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'Failed to send OTP. Please try again.',
+    }
+  }
+}
+
+export async function verifyOtpRequest(
+  phoneNumber: string,
+  otp: string
+): Promise<{ success: boolean; message: string }> {
+  const { url, key } = getEnv()
+  const endpoint = `${url}/functions/v1/auth`
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'verify-otp', phoneNumber, otp }),
+      },
+      10_000
+    )
+
+    const data = (await response.json().catch(() => ({}))) as {
+      success?: boolean
+      message?: string
+      error?: string
+    }
+    if (!response.ok) {
+      return {
+        success: false,
+        message: data.message || data.error || 'OTP verification failed. Please try again.',
+      }
+    }
+
+    return {
+      success: !!data.success,
+      message: data.message || 'OTP verified successfully.',
+    }
+  } catch (err) {
+    return {
+      success: false,
+      message: err instanceof Error ? err.message : 'OTP verification failed. Please try again.',
+    }
+  }
+}
+
 export async function getUserByPhone(phoneNumber: string): Promise<User | null> {
   const res = await call<R<User | null>>('auth', 'POST', {}, { action: 'get-user-by-phone', phoneNumber })
   return res.data

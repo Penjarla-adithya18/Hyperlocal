@@ -17,6 +17,7 @@ import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, Trendi
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
 import { Slider } from '@/components/ui/slider'
+import { LocationInput } from '@/components/ui/location-input'
 
 export default function WorkerJobsPage() {
   const router = useRouter()
@@ -372,10 +373,10 @@ export default function WorkerJobsPage() {
                       ))}
                   </SelectContent>
                 </Select>
-                <Input
-                  placeholder="Location"
+                <LocationInput
                   value={locationFilter}
-                  onChange={(e) => setLocationFilter(e.target.value)}
+                  onChange={(value) => setLocationFilter(value)}
+                  placeholder="Location"
                 />
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -109,6 +109,10 @@ export default function EmployerJobEditPage() {
     }
   }
 
+  const durationSelectValue = DURATION_PRESETS.includes(form.duration)
+    ? form.duration
+    : '__custom__'
+
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.title || !form.description || !form.location || !form.payAmount) {
@@ -318,17 +322,30 @@ export default function EmployerJobEditPage() {
 
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label>Duration * <span className="text-xs text-muted-foreground">(type or choose)</span></Label>
+                  <Label htmlFor="duration-select">Duration *</Label>
+                  <Select
+                    value={durationSelectValue}
+                    onValueChange={(value) => {
+                      if (value === '__custom__') return
+                      setForm({ ...form, duration: value })
+                    }}
+                  >
+                    <SelectTrigger id="duration-select"><SelectValue placeholder="Select duration" /></SelectTrigger>
+                    <SelectContent>
+                      {DURATION_PRESETS.map((duration) => (
+                        <SelectItem key={duration} value={duration}>{duration}</SelectItem>
+                      ))}
+                      <SelectItem value="__custom__">Custom (type below)</SelectItem>
+                    </SelectContent>
+                  </Select>
+
                   <Input
-                    list="duration-presets"
-                    placeholder="e.g., Half day, 1 week, Ongoing..."
+                    id="duration"
+                    placeholder="Or enter custom duration (e.g., 5 days)"
                     value={form.duration}
                     onChange={(e) => setForm({ ...form, duration: e.target.value })}
                     required
                   />
-                  <datalist id="duration-presets">
-                    {DURATION_PRESETS.map((d) => <option key={d} value={d} />)}
-                  </datalist>
                 </div>
                 <div className="space-y-2">
                   <Label>Number of Workers Needed *</Label>

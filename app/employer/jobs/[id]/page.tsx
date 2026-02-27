@@ -331,11 +331,11 @@ export default function EmployerJobDetailPage() {
             <Card className={`border-2 ${(escrow?.status === 'held' || job.paymentStatus === 'locked') ? 'border-green-300 bg-green-50/50' : 'border-border'}`}>
               <CardHeader><CardTitle className="flex items-center gap-2 text-base"><Shield className="w-5 h-5 text-primary" /> Escrow Status</CardTitle></CardHeader>
               <CardContent className="space-y-4">
-                <div className="text-center text-sm font-medium">
-                  {(escrow?.status === 'held' || job.paymentStatus === 'locked') && <span className="flex items-center justify-center gap-1 text-green-700"><Lock className="w-4 h-4" /> Secured in Escrow</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'released' && <span className="flex items-center justify-center gap-1 text-blue-700"><Unlock className="w-4 h-4" /> Released to Worker</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'refunded' && <span className="flex items-center justify-center gap-1 text-orange-700"><RefreshCcw className="w-4 h-4" /> Refunded</span>}
-                  {(escrow?.status ?? job.paymentStatus) === 'pending' && <span className="flex items-center justify-center gap-1 text-amber-600"><AlertCircle className="w-4 h-4" /> Pending Payment</span>}
+                <div className="rounded-md border bg-background p-3 text-sm font-medium">
+                  {(escrow?.status === 'held' || job.paymentStatus === 'locked') && <span className="flex items-center gap-2 text-green-700"><Lock className="w-4 h-4 shrink-0" /> Secured in Escrow</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'released' && <span className="flex items-center gap-2 text-blue-700"><Unlock className="w-4 h-4 shrink-0" /> Released to Worker</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'refunded' && <span className="flex items-center gap-2 text-orange-700"><RefreshCcw className="w-4 h-4 shrink-0" /> Refunded</span>}
+                  {(escrow?.status ?? job.paymentStatus) === 'pending' && <span className="flex items-center gap-2 text-amber-600"><AlertCircle className="w-4 h-4 shrink-0" /> Pending Payment</span>}
                 </div>
 
                 <div className="space-y-2 text-sm">

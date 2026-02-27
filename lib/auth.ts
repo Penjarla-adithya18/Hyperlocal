@@ -5,6 +5,8 @@ import {
   loginUser as apiLogin,
   resetPassword as apiResetPassword,
   forgotPasswordReset as apiForgotPasswordReset,
+  sendOtpRequest as apiSendOtp,
+  verifyOtpRequest as apiVerifyOtp,
   getCurrentUser,
   setCurrentUser,
   logout,
@@ -27,40 +29,14 @@ export {
 export async function sendOTP(
   phoneNumber: string
 ): Promise<{ success: boolean; message: string; otp?: string }> {
-  try {
-    const res = await fetch('/api/auth/send-otp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ phoneNumber }),
-    })
-
-    const data = await res.json()
-    return { success: data.success ?? false, message: data.message ?? 'OTP request sent' }
-  } catch {
-    return { success: false, message: 'Failed to send OTP. Please try again.' }
-  }
+  return apiSendOtp(phoneNumber)
 }
 
 export async function verifyOTP(
   phoneNumber: string,
   otp: string
 ): Promise<{ success: boolean; message: string }> {
-  try {
-    const res = await fetch('/api/auth/verify-otp', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ phoneNumber, otp }),
-    })
-
-    const data = await res.json()
-    return { success: data.success ?? false, message: data.message ?? '' }
-  } catch {
-    return { success: false, message: 'OTP verification failed. Please try again.' }
-  }
+  return apiVerifyOtp(phoneNumber, otp)
 }
 
 export async function registerUser(data: {

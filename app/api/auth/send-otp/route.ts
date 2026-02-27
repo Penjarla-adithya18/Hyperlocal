@@ -32,8 +32,8 @@ export async function POST(req: NextRequest) {
     const { accountSid, authToken, serviceSid, defaultCountryCode } = getTwilioConfig()
     if (!accountSid || !authToken || !serviceSid) {
       return NextResponse.json(
-        { success: false, message: 'OTP service is not configured. Please contact support.' },
-        { status: 500 }
+        { success: false, message: 'OTP service is not configured on server.' },
+        { status: 503 }
       )
     }
 
