@@ -14,6 +14,16 @@ import { User } from '@/lib/types'
 import { Search, Star, CheckCircle, ShieldOff, ShieldCheck } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 /** Helper: check if a user matches the search query */
 function matchesSearch(user: User, query: string): boolean {
@@ -32,6 +42,7 @@ export default function AdminUsersPage() {
   const { toast } = useToast()
   const [users, setUsers] = useState<User[]>([])
   const [searchQuery, setSearchQuery] = useState('')
+  const [pendingBanUserId, setPendingBanUserId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!currentUser || currentUser.role !== 'admin') {
@@ -53,7 +64,6 @@ export default function AdminUsersPage() {
   }, [currentUser, router])
 
   const handleBanUser = useCallback(async (userId: string) => {
-    if (!confirm('Are you sure you want to suspend this user? They will be unable to use the platform.')) return
     const updated = await userOps.update(userId, { isVerified: false, trustLevel: 'basic' as const, trustScore: 0 })
     if (updated) {
       setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, ...updated } : u)))
@@ -139,7 +149,7 @@ export default function AdminUsersPage() {
                 <Button
                   size="sm"
                   variant="destructive"
-                  onClick={() => handleBanUser(user.id)}
+                  onClick={() => setPendingBanUserId(user.id)}
                 >
                   <ShieldOff className="h-4 w-4 mr-2" />
                   Suspend
@@ -208,6 +218,30 @@ export default function AdminUsersPage() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <AlertDialog open={!!pendingBanUserId} onOpenChange={(open) => !open && setPendingBanUserId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Suspend this user?</AlertDialogTitle>
+            <AlertDialogDescription>
+              They will be unable to use the platform until their account is restored.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingBanUserId) {
+                  void handleBanUser(pendingBanUserId)
+                }
+                setPendingBanUserId(null)
+              }}
+            >
+              Suspend User
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

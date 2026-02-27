@@ -15,12 +15,13 @@ function SignupPageContent() {
   const searchParams = useSearchParams();
   const { login } = useAuth();
   const { toast } = useToast();
+  const [mounted, setMounted] = useState(false);
   const [role, setRole] = useState<'worker' | 'employer'>(
     (searchParams.get('role') as 'worker' | 'employer') || 'worker'
   );
 
   // Form state
-  const [step, setStep] = useState(1);
+  const [step, setStep] = useState<1 | 2 | 3>(1);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     fullName: '',
@@ -39,6 +40,7 @@ function SignupPageContent() {
   const [panNumber, setPanNumber] = useState('');
   const [panVerified, setPanVerified] = useState(false);
   const [panVerifying, setPanVerifying] = useState(false);
+  const [bypassPanVerification, setBypassPanVerification] = useState(false);
   const [panResult, setPanResult] = useState<{
     verified: boolean;
     panName?: string;
@@ -48,11 +50,16 @@ function SignupPageContent() {
   } | null>(null);
 
   useEffect(() => {
+    setMounted(true);
     const roleParam = searchParams.get('role');
     if (roleParam === 'worker' || roleParam === 'employer') {
       setRole(roleParam);
     }
   }, [searchParams]);
+
+  if (!mounted) {
+    return <div className="app-surface min-h-screen" />;
+  }
 
   const handleSendOTP = async () => {
     if (!formData.phoneNumber || formData.phoneNumber.length !== 10) {
@@ -215,7 +222,7 @@ function SignupPageContent() {
       return;
     }
 
-    if (!panVerified) {
+    if (!panVerified && !bypassPanVerification) {
       toast({
         title: 'PAN Verification Required',
         description: 'Please verify your PAN card to complete registration',
@@ -263,12 +270,14 @@ function SignupPageContent() {
       });
 
       if (result.success && result.user) {
-        // Attach PAN KYC data to user
-        result.user.panNumber = panNumber.toUpperCase().trim();
-        result.user.panVerified = true;
-        result.user.panName = panResult?.panName ?? formData.fullName;
-        result.user.panVerifiedAt = new Date().toISOString();
-        result.user.isVerified = true;
+        if (panVerified && !bypassPanVerification) {
+          // Attach PAN KYC data to user
+          result.user.panNumber = panNumber.toUpperCase().trim();
+          result.user.panVerified = true;
+          result.user.panName = panResult?.panName ?? formData.fullName;
+          result.user.panVerifiedAt = new Date().toISOString();
+          result.user.isVerified = true;
+        }
 
         // Store password for mock auth
         setUserPassword(formData.phoneNumber, formData.password);
@@ -303,10 +312,41 @@ function SignupPageContent() {
     }
   };
 
+  const handleContinueToSecurity = () => {
+    if (!formData.fullName || formData.fullName.length < 3) {
+      toast({
+        title: 'Invalid Name',
+        description: 'Please enter your full name (minimum 3 characters)',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (role === 'employer' && !formData.businessName) {
+      toast({
+        title: 'Business Name Required',
+        description: 'Please enter your business or shop name',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    if (!panVerified && !bypassPanVerification) {
+      toast({
+        title: 'PAN Verification Required',
+        description: 'Please verify your PAN card to continue',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setStep(3);
+  };
+
   return (
-    <div suppressHydrationWarning className="flex min-h-screen items-start justify-center overflow-y-auto bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-3 py-6 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 sm:items-center sm:p-4 md:p-6">
-      <div suppressHydrationWarning className="flex w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-blue-50/95 shadow-2xl sm:rounded-3xl md:h-[90vh] md:flex-row md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
-        <section suppressHydrationWarning className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:bg-slate-900 dark:text-slate-100">
+    <div className="flex min-h-screen items-center justify-center overflow-y-auto bg-gradient-to-br from-emerald-50 via-sky-50 to-blue-100 p-3 py-5 dark:from-slate-950 dark:via-slate-900 dark:to-slate-950 sm:p-4 md:p-6">
+      <div className="flex w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-slate-200/70 bg-blue-50/95 shadow-2xl sm:rounded-3xl md:h-[82vh] md:max-w-6xl md:flex-row md:items-stretch md:overflow-hidden dark:border-slate-700 dark:bg-slate-900/90">
+        <section className="relative hidden h-full w-full flex-col items-center justify-start bg-emerald-50 p-7 pt-16 text-slate-900 md:flex md:w-5/12 md:items-start md:p-10 md:pt-16 dark:bg-slate-900 dark:text-slate-100">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
               H
@@ -343,13 +383,37 @@ function SignupPageContent() {
           </div>
         </section>
 
-        <section suppressHydrationWarning className="relative z-20 flex w-full flex-col items-center justify-center bg-white p-5 pt-6 shadow-2xl sm:p-6 md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 dark:bg-slate-950">
+        <section className="relative z-20 flex w-full flex-col items-center justify-start overflow-y-auto bg-white p-5 pt-6 shadow-2xl sm:p-7 md:h-[82vh] md:w-7/12 md:justify-start md:rounded-l-[2.5rem] md:p-8 md:pt-16 md:shadow-none lg:p-10 dark:bg-slate-950">
           <Link href="/" className="mb-4 inline-flex items-center self-start text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:absolute md:left-8 md:top-8 md:mb-0">
             ← Back to Home
           </Link>
-          <div className="w-full max-w-sm space-y-6 sm:space-y-7">
-            <div>
+          <div className="w-full max-w-md space-y-5 py-1 sm:space-y-6 md:py-4">
+            <div className="space-y-2">
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign up</h2>
+              <p className="text-sm text-gray-500 dark:text-slate-400">Create your account in 2 quick steps.</p>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  step === 1
+                    ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300'
+                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                }`}>
+                  Step 1: Verify phone
+                </span>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  step === 2
+                    ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300'
+                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                }`}>
+                  Step 2: Profile & KYC
+                </span>
+                <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                  step === 3
+                    ? 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/40 dark:text-indigo-300'
+                    : 'bg-slate-100 text-slate-500 dark:bg-slate-800 dark:text-slate-400'
+                }`}>
+                  Step 3: Security
+                </span>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
@@ -380,15 +444,15 @@ function SignupPageContent() {
             </div>
 
             {step === 1 ? (
-              <div className="space-y-6">
+              <div className="space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
                 <p className="text-sm text-gray-500 dark:text-slate-400">
                   {role === 'worker'
                     ? 'Verify your phone number to continue as a worker.'
                     : 'Verify your phone number to continue as an employer.'}
                 </p>
 
-                <div className="space-y-6">
-                  <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                <div className="space-y-4">
+                  <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
@@ -402,7 +466,7 @@ function SignupPageContent() {
                       }
                       disabled={otpSent}
                       maxLength={10}
-                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                     />
                   </div>
 
@@ -435,7 +499,7 @@ function SignupPageContent() {
                     </>
                   ) : (
                     <>
-                      <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                      <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <ShieldCheck className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
@@ -448,7 +512,7 @@ function SignupPageContent() {
                             setFormData({ ...formData, otp: e.target.value.replace(/\D/g, '').slice(0, 6) })
                           }
                           maxLength={6}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                         />
                       </div>
 
@@ -481,12 +545,12 @@ function SignupPageContent() {
                   )}
                 </div>
               </div>
-            ) : (
-              <form onSubmit={handleRegister} className="space-y-6">
-                <p className="text-sm text-gray-500 dark:text-slate-400">Complete your profile to finish creating your account.</p>
+            ) : step === 2 ? (
+              <div className="space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
+                <p className="text-sm text-gray-500 dark:text-slate-400">Add profile and identity details.</p>
 
-                <div className="space-y-6">
-                  <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                <div className="space-y-4">
+                  <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <User className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
@@ -496,14 +560,14 @@ function SignupPageContent() {
                       placeholder="Full Name"
                       value={formData.fullName}
                       onChange={(e) => setFormData({ ...formData, fullName: e.target.value })}
-                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />
                   </div>
 
                   {role === 'employer' && (
                     <>
-                      <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                      <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <Store className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
@@ -513,12 +577,12 @@ function SignupPageContent() {
                           placeholder="Business / Shop Name"
                           value={formData.businessName}
                           onChange={(e) => setFormData({ ...formData, businessName: e.target.value })}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                           required
                         />
                       </div>
 
-                      <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                      <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                         <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                           <Building2 className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                         </div>
@@ -528,26 +592,37 @@ function SignupPageContent() {
                           placeholder="Organization Name (Optional)"
                           value={formData.organizationName}
                           onChange={(e) => setFormData({ ...formData, organizationName: e.target.value })}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                         />
                       </div>
                     </>
                   )}
 
                   {/* ── PAN Card KYC Verification ── */}
-                  <div className="space-y-3">
-                    <div className="flex items-center gap-2 text-xs font-semibold text-gray-500 dark:text-slate-400 uppercase tracking-wider">
-                      <CreditCard className="h-3.5 w-3.5" />
-                      PAN Card Verification (KYC)
+                  <div className="space-y-4 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-slate-400">
+                        <CreditCard className="h-3.5 w-3.5" />
+                        PAN Card Verification (KYC)
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-slate-400">
+                        Enter your PAN number and verify to continue account creation.
+                      </p>
                     </div>
 
-                    <div className={`group relative border-b pb-3 ${
-                      panVerified ? 'border-emerald-300 dark:border-emerald-700' : 'border-gray-200 dark:border-slate-700'
+                    <div className={`group relative rounded-xl border bg-white px-3 py-2 dark:bg-slate-950 ${
+                      panVerified
+                        ? 'border-emerald-300 dark:border-emerald-700'
+                        : 'border-slate-200 dark:border-slate-700'
                     }`}>
-                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center">
-                        <CreditCard className={`h-5 w-5 transition-colors ${
-                          panVerified ? 'text-emerald-500' : 'text-gray-400 group-focus-within:text-emerald-500'
-                        }`} />
+                      <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+                        <CreditCard
+                          className={`h-5 w-5 transition-colors ${
+                            panVerified
+                              ? 'text-emerald-500'
+                              : 'text-gray-400 group-focus-within:text-emerald-500'
+                          }`}
+                        />
                       </div>
                       <div className="flex items-center gap-2">
                         <input
@@ -558,15 +633,16 @@ function SignupPageContent() {
                           onChange={(e) => {
                             const v = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 10);
                             setPanNumber(v);
-                            if (panVerified) { setPanVerified(false); setPanResult(null); }
+                            if (panVerified) {
+                              setPanVerified(false);
+                              setPanResult(null);
+                            }
                           }}
                           disabled={panVerified}
                           maxLength={10}
-                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                          className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                         />
-                        {panVerified && (
-                          <CheckCircle2 className="h-5 w-5 text-emerald-500 shrink-0 mr-1" />
-                        )}
+                        {panVerified && <CheckCircle2 className="mr-1 h-5 w-5 shrink-0 text-emerald-500" />}
                       </div>
                     </div>
 
@@ -575,7 +651,7 @@ function SignupPageContent() {
                         type="button"
                         onClick={handleVerifyPAN}
                         disabled={panVerifying || panNumber.length !== 10 || !formData.fullName}
-                        className="flex w-full items-center justify-center gap-2 rounded-xl border-2 border-dashed border-emerald-300 bg-emerald-50/50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100/70 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
+                        className="flex w-full items-center justify-center gap-2 rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700 transition hover:bg-emerald-100 focus:outline-none focus:ring-2 focus:ring-emerald-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 dark:border-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
                       >
                         {panVerifying ? (
                           <>
@@ -591,27 +667,28 @@ function SignupPageContent() {
                       </button>
                     )}
 
-                    {/* PAN result feedback */}
                     {panResult && (
-                      <div className={`rounded-xl border p-3 text-sm ${
-                        panResult.verified && panResult.nameMatch
-                          ? 'border-emerald-200 bg-emerald-50/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
-                          : panResult.verified && !panResult.nameMatch
-                            ? 'border-amber-200 bg-amber-50/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                            : 'border-red-200 bg-red-50/80 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
-                      }`}>
-                        <div className="flex items-start gap-2">
+                      <div
+                        className={`rounded-xl border p-3 text-sm ${
+                          panResult.verified && panResult.nameMatch
+                            ? 'border-emerald-200 bg-emerald-50/80 text-emerald-800 dark:border-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300'
+                            : panResult.verified && !panResult.nameMatch
+                              ? 'border-amber-200 bg-amber-50/80 text-amber-800 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                              : 'border-red-200 bg-red-50/80 text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300'
+                        }`}
+                      >
+                        <div className="flex items-start gap-2.5">
                           {panResult.verified && panResult.nameMatch ? (
-                            <CheckCircle2 className="h-4 w-4 mt-0.5 shrink-0 text-emerald-600" />
+                            <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                           ) : panResult.verified && !panResult.nameMatch ? (
-                            <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />
+                            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" />
                           ) : (
-                            <XCircle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />
+                            <XCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
                           )}
-                          <div>
-                            <p className="font-medium">{panResult.message}</p>
+                          <div className="space-y-1">
+                            <p className="font-medium leading-relaxed">{panResult.message}</p>
                             {panResult.panName && (
-                              <p className="text-xs mt-1 opacity-80">
+                              <p className="text-xs opacity-80">
                                 PAN registered to: <strong>{panResult.panName}</strong>
                                 {panResult.similarity !== undefined && ` (${panResult.similarity}% match)`}
                               </p>
@@ -624,15 +701,54 @@ function SignupPageContent() {
                     {panVerified && (
                       <button
                         type="button"
-                        onClick={() => { setPanVerified(false); setPanResult(null); setPanNumber(''); }}
-                        className="text-xs text-gray-500 hover:text-emerald-500 transition-colors dark:text-slate-400"
+                        onClick={() => {
+                          setPanVerified(false);
+                          setPanResult(null);
+                          setPanNumber('');
+                        }}
+                        className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-900"
                       >
                         Change PAN Number
                       </button>
                     )}
-                  </div>
 
-                  <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                    <div className="flex items-start gap-3 rounded-lg border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
+                      <Checkbox
+                        id="bypassPan"
+                        checked={bypassPanVerification}
+                        onCheckedChange={(checked) => setBypassPanVerification(checked === true)}
+                        className="mt-0.5"
+                      />
+                      <label htmlFor="bypassPan" className="cursor-pointer text-sm leading-relaxed text-gray-600 dark:text-slate-400">
+                        Bypass PAN verification for now and continue signup.
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setStep(1)}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
+                  >
+                    Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleContinueToSecurity}
+                    className="w-full rounded-xl border border-transparent bg-gradient-to-r from-emerald-500 to-blue-500 px-4 py-3 text-sm font-bold text-white shadow-md transition hover:from-emerald-600 hover:to-blue-600"
+                  >
+                    Continue
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleRegister} className="space-y-6 rounded-2xl border border-slate-200/80 bg-slate-50/70 p-4 sm:p-5 dark:border-slate-700 dark:bg-slate-900/50">
+                <p className="text-sm text-gray-500 dark:text-slate-400">Set your password and complete registration.</p>
+
+                <div className="space-y-4">
+                  <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Lock className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
@@ -643,12 +759,12 @@ function SignupPageContent() {
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       minLength={8}
-                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />
                   </div>
 
-                  <div className="group relative border-b border-gray-200 pb-3 dark:border-slate-700">
+                  <div className="group relative rounded-xl border border-slate-200 bg-white px-3 py-2 dark:border-slate-700 dark:bg-slate-950">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
                       <Lock className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
                     </div>
@@ -658,13 +774,13 @@ function SignupPageContent() {
                       placeholder="Confirm Password"
                       value={formData.confirmPassword}
                       onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
-                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
+                      className="relative block w-full appearance-none border-0 bg-transparent px-3 py-2 pl-10 text-base text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />
                   </div>
                 </div>
 
-                <div className="flex items-start gap-3">
+                <div className="flex items-start gap-3 rounded-xl border border-slate-200 bg-white p-3 dark:border-slate-700 dark:bg-slate-950">
                   <Checkbox
                     id="terms"
                     checked={agreeToTerms}
@@ -700,7 +816,7 @@ function SignupPageContent() {
 
                 <button
                   type="button"
-                  onClick={() => setStep(1)}
+                  onClick={() => setStep(2)}
                   className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-300 dark:hover:bg-slate-800"
                 >
                   Back
@@ -708,7 +824,7 @@ function SignupPageContent() {
               </form>
             )}
 
-            <p className="text-center text-xs text-gray-500 dark:text-slate-400">
+            <p className="text-center text-xs leading-relaxed text-gray-500 dark:text-slate-400">
               By signing up, you agree to our Terms of Service and Privacy Policy
             </p>
           </div>

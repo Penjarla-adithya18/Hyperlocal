@@ -6,6 +6,7 @@ import Link from 'next/link';
 import { Loader2, Phone, Lock, Store, LogIn, Eye, EyeOff } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loginUser } from '@/lib/auth';
+import { getUserByPhone } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
@@ -58,6 +59,22 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
+      let existingUser: Awaited<ReturnType<typeof getUserByPhone>> | undefined;
+      try {
+        existingUser = await getUserByPhone(formData.phoneNumber);
+      } catch {
+        existingUser = undefined;
+      }
+
+      if (existingUser === null) {
+        toast({
+          title: 'Account Not Found',
+          description: 'No account exists for this number. You must sign up first.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
       const result = await loginUser(formData.phoneNumber, formData.password);
 
       if (result.success && result.user) {
@@ -81,6 +98,20 @@ export default function LoginPage() {
           router.push('/admin/dashboard');
         }
       } else {
+        const message = (result.message || '').toLowerCase();
+        if (
+          message.includes('not found') ||
+          message.includes('no user') ||
+          message.includes('does not exist')
+        ) {
+          toast({
+            title: 'Account Not Found',
+            description: 'No account exists for this number. You must sign up first.',
+            variant: 'destructive',
+          });
+          return;
+        }
+
         toast({
           title: 'Login Failed',
           description: result.message,

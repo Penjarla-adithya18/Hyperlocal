@@ -9,6 +9,16 @@ import { Button } from '@/components/ui/button'
 import { Separator } from '@/components/ui/separator'
 import { Textarea } from '@/components/ui/textarea'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 import { Label } from '@/components/ui/label'
 import { useToast } from '@/hooks/use-toast'
 import { db, escrowOps, applicationOps, ratingOps, userOps, workerProfileOps, notificationOps, sendWATIAlert } from '@/lib/api'
@@ -39,6 +49,7 @@ export default function EmployerJobDetailPage() {
   const [disputeOpen, setDisputeOpen] = useState(false)
   const [disputeReason, setDisputeReason] = useState('')
   const [ratingOpen, setRatingOpen] = useState(false)
+  const [releaseDialogOpen, setReleaseDialogOpen] = useState(false)
   const [ratingValue, setRatingValue] = useState(5)
   const [ratingFeedback, setRatingFeedback] = useState('')
   const [ratingDone, setRatingDone] = useState(false)
@@ -110,7 +121,6 @@ export default function EmployerJobDetailPage() {
 
   const handleReleasePayment = async () => {
     if (!escrow) return
-    if (!confirm('Release payment to worker? This deducts the 10% platform commission.')) return
     setActionLoading(true)
     try {
       const acceptedApp = applications.find(a => a.status === 'accepted' || a.status === 'completed')
@@ -140,6 +150,7 @@ export default function EmployerJobDetailPage() {
           })
         } catch (e) { console.error('Notification failed', e) }
       }
+      setReleaseDialogOpen(false)
       loadData()
     } catch { toast({ title: 'Error', description: 'Failed to release payment', variant: 'destructive' }) }
     finally { setActionLoading(false) }
@@ -507,7 +518,7 @@ export default function EmployerJobDetailPage() {
 
                 {(escrow?.status === 'held' || job.paymentStatus === 'locked') && job.status === 'active' && (
                   <div className="space-y-2">
-                    <Button className="w-full bg-green-600 hover:bg-green-700" onClick={handleReleasePayment} disabled={actionLoading}>
+                    <Button className="w-full bg-green-600 hover:bg-green-700" onClick={() => setReleaseDialogOpen(true)} disabled={actionLoading}>
                       <CheckCircle2 className="w-4 h-4 mr-2" /> Job Done — Release Payment
                     </Button>
                     <Button variant="ghost" className="w-full text-sm text-destructive hover:bg-destructive/10" onClick={() => setDisputeOpen(true)}>
@@ -564,6 +575,23 @@ export default function EmployerJobDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={releaseDialogOpen} onOpenChange={setReleaseDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Release payment to worker?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will release escrow funds and deduct the 10% platform commission.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void handleReleasePayment()} disabled={actionLoading}>
+              Release Payment
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <Dialog open={disputeOpen} onOpenChange={setDisputeOpen}>
         <DialogContent>

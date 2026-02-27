@@ -4,6 +4,16 @@ import { useState, useRef, useEffect } from 'react'
 import { Globe, Mic, MicOff, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -37,6 +47,7 @@ export function LanguageSwitcher({
   const { locale, setLocale } = useI18n()
   const [listening, setListening] = useState(false)
   const [detecting, setDetecting] = useState(false)
+  const [voiceNotSupportedOpen, setVoiceNotSupportedOpen] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
 
@@ -66,7 +77,7 @@ export function LanguageSwitcher({
     const SpeechRecognitionAPI = win.SpeechRecognition ?? win.webkitSpeechRecognition
 
     if (!SpeechRecognitionAPI) {
-      alert('Voice input is not supported in this browser.')
+      setVoiceNotSupportedOpen(true)
       return
     }
 
@@ -162,6 +173,21 @@ export function LanguageSwitcher({
           )}
         </Button>
       )}
+
+      <AlertDialog open={voiceNotSupportedOpen} onOpenChange={setVoiceNotSupportedOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Voice input unavailable</AlertDialogTitle>
+            <AlertDialogDescription>
+              Voice input is not supported in this browser. Please use language selection manually.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction>OK</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

@@ -24,6 +24,16 @@ import { useToast } from '@/hooks/use-toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useI18n } from '@/contexts/I18nContext';
 import { localeLabels, localeNames, locales, SupportedLocale } from '@/i18n';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog';
 
 export default function WorkerProfilePage() {
   const router = useRouter();
@@ -57,6 +67,7 @@ export default function WorkerProfilePage() {
   const [otpSent, setOtpSent] = useState(false);
   const [displayOtp, setDisplayOtp] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   useEffect(() => {
     if (!user || user.role !== 'worker') {
@@ -271,7 +282,6 @@ export default function WorkerProfilePage() {
 
   const handleDeleteAccount = async () => {
     if (!user) return;
-    if (!window.confirm('Are you sure you want to permanently delete your account? This cannot be undone.')) return;
     setDeletingAccount(true);
     try {
       await db.deleteAccount(user.id);
@@ -324,7 +334,7 @@ export default function WorkerProfilePage() {
       if (res.success) {
         setOtpSent(true);
         setDisplayOtp(res.otp ?? null);
-        toast({ title: 'OTP generated', description: 'Your OTP is shown on screen.' });
+        toast({ title: 'OTP sent', description: 'A verification code has been sent to your phone.' });
       } else {
         toast({ title: res.message ?? 'Failed to generate OTP', variant: 'destructive' });
       }
@@ -1102,13 +1112,35 @@ export default function WorkerProfilePage() {
             <Button
               type="button"
               variant="destructive"
-              onClick={handleDeleteAccount}
+              onClick={() => setDeleteDialogOpen(true)}
               disabled={deletingAccount}
             >
               {deletingAccount ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('common.loading')}</> : t('profile.deleteAccount')}
             </Button>
           </Card>
         </form>
+
+        <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete your account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This action is permanent and cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={deletingAccount}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => {
+                  void handleDeleteAccount();
+                }}
+                disabled={deletingAccount}
+              >
+                {deletingAccount ? 'Deleting...' : 'Delete Account'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </main>
     </div>
   );

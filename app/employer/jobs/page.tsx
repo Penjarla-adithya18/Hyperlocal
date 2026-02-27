@@ -13,6 +13,16 @@ import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, 
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
 import { Skeleton } from '@/components/ui/skeleton'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 export default function EmployerJobsPage() {
   const router = useRouter()
@@ -20,6 +30,7 @@ export default function EmployerJobsPage() {
   const { toast } = useToast()
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
+  const [pendingDeleteJobId, setPendingDeleteJobId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!user) return
@@ -41,7 +52,6 @@ export default function EmployerJobsPage() {
   }, [user])
 
   const handleDeleteJob = useCallback(async (jobId: string) => {
-    if (!confirm('Are you sure you want to delete this job?')) return
     try {
       await jobOps.delete(jobId)
       // Remove locally instead of full re-fetch
@@ -155,7 +165,7 @@ export default function EmployerJobsPage() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => handleDeleteJob(job.id)}
+                  onClick={() => setPendingDeleteJobId(job.id)}
                 >
                   <Trash2 className="h-4 w-4" />
                 </Button>
@@ -324,6 +334,30 @@ export default function EmployerJobsPage() {
           </TabsContent>
         </Tabs>
       </main>
+
+      <AlertDialog open={!!pendingDeleteJobId} onOpenChange={(open) => !open && setPendingDeleteJobId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete this job?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. The job and related listing visibility will be removed.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                if (pendingDeleteJobId) {
+                  void handleDeleteJob(pendingDeleteJobId)
+                }
+                setPendingDeleteJobId(null)
+              }}
+            >
+              Delete Job
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
