@@ -10,7 +10,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Label } from '@/components/ui/label'
 import { useAuth } from '@/contexts/AuthContext'
 import { useToast } from '@/hooks/use-toast'
-import {db, userOps, workerProfileOps, reportOps } from '@/lib/api'
+import { applicationOps, db, jobOps, reportOps, userOps, workerProfileOps } from '@/lib/api'
 import { Job, User, Application, WorkerProfile } from '@/lib/types'
 import { calculateMatchScore, explainJobMatch, generateMatchExplanationWithAI } from '@/lib/aiMatching'
 import { translateDynamic, SupportedLocale } from '@/lib/gemini'
@@ -107,7 +107,7 @@ export default function JobDetailsPage() {
 
   const loadJobDetails = async () => {
     try {
-      const jobData = await db.getJobById(params.id as string)
+      const jobData = await jobOps.findById(params.id as string)
       if (jobData) {
         setJob(jobData)
         const employerData = await userOps.findById(jobData.employerId)
@@ -115,7 +115,7 @@ export default function JobDetailsPage() {
 
         if (user) {
           const [workerApplications, profile] = await Promise.all([
-            db.getApplicationsByWorker(user.id),
+            applicationOps.findByWorkerId(user.id),
             workerProfileOps.findByUserId(user.id).catch(() => null),
           ])
           const existingApplication = workerApplications
@@ -146,7 +146,7 @@ export default function JobDetailsPage() {
         }
       }
     } catch (error) {
-      if (error instanceof Error && error.message.includes('error 401')) {
+      if (error instanceof Error && error.message.toLowerCase().includes('unauthorized')) {
         toast({
           title: 'Session expired',
           description: 'Please log in again to continue.',

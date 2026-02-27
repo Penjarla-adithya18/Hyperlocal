@@ -11,7 +11,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { useToast } from '@/hooks/use-toast'
-import { db } from '@/lib/api'
+import { db, jobOps } from '@/lib/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { IndianRupee, X, Plus, Calendar } from 'lucide-react'
 import { JOB_CATEGORIES } from '@/lib/aiMatching'
@@ -99,8 +99,8 @@ export default function PostJobPage() {
     try {
       // Posting limits: basic trust level employers can only post up to 3 jobs
       if (user.trustLevel === 'basic') {
-        const allJobs = await db.getAllJobs()
-        const myActiveJobs = allJobs.filter(j => j.employerId === user.id && (j.status === 'active' || j.status === 'draft'))
+        const myJobs = await jobOps.findByEmployerId(user.id)
+        const myActiveJobs = myJobs.filter(j => j.status === 'active' || j.status === 'draft')
         if (myActiveJobs.length >= 3) {
           toast({
             title: 'Posting Limit Reached',

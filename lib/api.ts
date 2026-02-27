@@ -204,7 +204,8 @@ async function call<T>(
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Clear session on unauthorized and let page-level guards handle navigation
+          // Handle unauthorized without immediately clearing persisted auth state.
+          // A single 401 can happen during token rotation or transient edge auth issues.
           const currentToken = getSessionToken()
           const tokenUsed = latestToken || null
 
@@ -213,8 +214,8 @@ async function call<T>(
             continue
           }
 
-          setSessionToken(null)
-          if (typeof window !== 'undefined') {
+          // If there is no session token at all, clear stale local user cache.
+          if (!currentToken && typeof window !== 'undefined') {
             localStorage.removeItem('currentUser')
           }
           throw new Error('Unauthorized. Please login again.')
@@ -323,7 +324,6 @@ export async function getUserByPhone(phoneNumber: string): Promise<User | null> 
 
 export function getCurrentUser(): User | null {
   if (typeof window === 'undefined') return null
-  if (!getSessionToken()) return null
   try { return JSON.parse(localStorage.getItem('currentUser') ?? 'null') } catch { return null }
 }
 export function setCurrentUser(user: User | null): void {

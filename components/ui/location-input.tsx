@@ -37,7 +37,7 @@ function loadGoogleMaps(key: string): Promise<void> {
     if (existing) { existing.addEventListener('load', () => resolve()); return }
     const script = document.createElement('script')
     script.id = 'google-maps-script'
-    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places`
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${key}&libraries=places&loading=async`
     script.async = true
     script.defer = true
     script.onload = () => resolve()

@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { Badge } from '@/components/ui/badge'
 import { useAuth } from '@/contexts/AuthContext'
-import { db, userOps, reportOps } from '@/lib/api'
+import { db, jobOps, reportOps, userOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
 import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff, ChevronLeft } from 'lucide-react'
 import { ScrollArea } from '@/components/ui/scroll-area'
@@ -99,7 +99,7 @@ export default function WorkerChatPage() {
     // Load jobs for all conversations (to check completion status)
     const jobIds = [...new Set(userConvs.map(c => c.jobId).filter(Boolean) as string[])]
     if (jobIds.length > 0) {
-      const allJobs = await db.getAllJobs()
+      const allJobs = await jobOps.getAll()
       const jMap: Record<string, Job> = {}
       for (const j of allJobs) {
         if (jobIds.includes(j.id)) jMap[j.id] = j

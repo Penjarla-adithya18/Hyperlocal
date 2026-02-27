@@ -10,7 +10,7 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { useAuth } from '@/contexts/AuthContext'
-import { db, workerProfileOps } from '@/lib/api'
+import { applicationOps, jobOps, workerProfileOps } from '@/lib/api'
 import { matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User, WorkerProfile } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
@@ -48,9 +48,9 @@ export default function WorkerJobsPage() {
   const loadJobs = async () => {
     try {
       const [allJobs, profile, myApplications] = await Promise.all([
-        db.getAllJobs(),
+        jobOps.getAll(),
         user ? workerProfileOps.findByUserId(user.id) : Promise.resolve(null),
-        user ? db.getApplicationsByWorker(user.id) : Promise.resolve([]),
+        user ? applicationOps.findByWorkerId(user.id) : Promise.resolve([]),
       ])
 
       const activeJobs = allJobs.filter((j) => j.status === 'active')
@@ -191,7 +191,6 @@ export default function WorkerJobsPage() {
   }
 
   const JobCard = ({ job, matchScore }: { job: Job; matchScore?: number }) => {
-    const employer = db.getUserById(job.employerId)
     const hasApplied = applications.some(app => app.jobId === job.id)
 
     return (
@@ -201,7 +200,7 @@ export default function WorkerJobsPage() {
             <div className="flex-1">
               <CardTitle className="text-xl mb-2">{job.title}</CardTitle>
               <p className="text-sm text-muted-foreground">
-                {employer?.companyName || 'Company'}
+                Company
               </p>
             </div>
             {typeof matchScore === 'number' && (
