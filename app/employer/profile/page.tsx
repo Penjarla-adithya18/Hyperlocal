@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
@@ -13,13 +13,15 @@ import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
 import { Building2, Loader2, Save, Shield, TrendingUp, Trash2, Mail, Phone, MapPin, Globe, CheckCircle2, XCircle, AlertTriangle, User } from 'lucide-react';
-import { employerProfileOps, userOps, db } from '@/lib/api';
+import { employerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { verifyGSTIN, validateGSTINFormat } from '@/lib/gstinService';
 import type { EmployerProfile, GSTINDetails } from '@/lib/types';
 import { getEmployerProfileCompletion, isEmployerProfileComplete } from '@/lib/profileCompletion';
 import { LocationInput } from '@/components/ui/location-input';
 import { useToast } from '@/hooks/use-toast';
 import { useI18n } from '@/contexts/I18nContext';
+import { resetPassword, sendOTP, verifyOTP } from '@/lib/auth';
+import { localeLabels, localeNames, locales, SupportedLocale } from '@/i18n';
 import {
   AlertDialog,
   AlertDialogAction,
@@ -52,7 +54,7 @@ export default function EmployerProfilePage() {
   const { user, updateUser, logout } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
   const { toast } = useToast();
-  const { t } = useI18n();
+  const { t, locale, setLocale } = useI18n();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [profile, setProfile] = useState<EmployerProfile | null>(null);
@@ -70,6 +72,12 @@ export default function EmployerProfilePage() {
   const [gstinDetails, setGstinDetails] = useState<GSTINDetails | null>(user?.gstinDetails ?? null);
   const [gstinVerified, setGstinVerified] = useState(user?.gstinVerified ?? false);
   const [gstinError, setGstinError] = useState<string | null>(null);
+  const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
+  const [pwLoading, setPwLoading] = useState(false);
+  const [phoneForm, setPhoneForm] = useState({ phone: user?.phoneNumber ?? '', otp: '' });
+  const [otpSent, setOtpSent] = useState(false);
+  const [displayOtp, setDisplayOtp] = useState<string | null>(null);
+  const [phoneLoading, setPhoneLoading] = useState(false);
 
   // Trust level colors
   const trustColors: Record<string, string> = {
@@ -137,7 +145,7 @@ export default function EmployerProfilePage() {
         gstin: trimmed,
         businessName: details.legalName || prev.businessName,
       }));
-      toast({ title: 'GSTIN Verified!', description: `${details.legalName} — ${details.status}` });
+      toast({ title: 'GSTIN Verified!', description: `${details.legalName} ΓÇö ${details.status}` });
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Verification failed';
       setGstinError(msg);
@@ -239,6 +247,82 @@ export default function EmployerProfilePage() {
     } finally {
       setDeletingAccount(false);
     }
+  };
+
+  const handleChangePassword = async () => {
+    if (pwForm.newPw !== pwForm.confirm) {
+      toast({ title: 'Passwords do not match', variant: 'destructive' });
+      return;
+    }
+    if (pwForm.newPw.length < 8) {
+      toast({ title: 'Password must be at least 8 characters', variant: 'destructive' });
+      return;
+    }
+    setPwLoading(true);
+    try {
+      const result = await resetPassword(pwForm.current, pwForm.newPw);
+      if (result.success) {
+        try {
+          const loginResult = await loginUser(user!.phoneNumber, pwForm.newPw);
+          if (loginResult.success && loginResult.user) {
+            updateUser(loginResult.user);
+          }
+        } catch {}
+        toast({ title: 'Password updated successfully' });
+        setPwForm({ current: '', newPw: '', confirm: '' });
+      } else {
+        toast({ title: result.message, variant: 'destructive' });
+      }
+    } finally {
+      setPwLoading(false);
+    }
+  };
+
+  const handleSendOtp = async () => {
+    if (!phoneForm.phone.match(/^[6-9]\d{9}$/)) {
+      toast({ title: 'Enter a valid 10-digit Indian mobile number', variant: 'destructive' });
+      return;
+    }
+    setPhoneLoading(true);
+    try {
+      const res = await sendOTP(phoneForm.phone);
+      if (res.success) {
+        setOtpSent(true);
+        setDisplayOtp(res.otp ?? null);
+        toast({ title: 'OTP generated', description: 'Your OTP is shown on screen.' });
+      } else {
+        toast({ title: res.message ?? 'Failed to generate OTP', variant: 'destructive' });
+      }
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleVerifyAndUpdatePhone = async () => {
+    setPhoneLoading(true);
+    try {
+      const verifyData = await verifyOTP(phoneForm.phone, phoneForm.otp);
+      if (!verifyData.success) {
+        toast({ title: verifyData.message ?? 'Invalid OTP', variant: 'destructive' });
+        return;
+      }
+
+      const result = await userOps.update(user!.id, { phoneNumber: phoneForm.phone });
+      if (result) {
+        updateUser({ phoneNumber: phoneForm.phone });
+        toast({ title: 'Phone number updated' });
+        setOtpSent(false);
+        setDisplayOtp(null);
+        setPhoneForm((prev) => ({ ...prev, otp: '' }));
+      }
+    } finally {
+      setPhoneLoading(false);
+    }
+  };
+
+  const handleLogout = () => {
+    logout();
+    router.push('/login');
   };
 
   // Live profile completeness
@@ -524,6 +608,98 @@ export default function EmployerProfilePage() {
 
           {/* Danger Zone */}
           <Card className="p-6 border-destructive/50">
+            <div className="mb-6 space-y-6 border-b border-destructive/20 pb-6">
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Language & Region</h2>
+                <div className="grid grid-cols-3 gap-2">
+                  {(locales as readonly SupportedLocale[]).map((code) => {
+                    const [flag, ...rest] = localeLabels[code].split(' ');
+                    return (
+                      <button
+                        key={code}
+                        type="button"
+                        onClick={() => setLocale(code)}
+                        className={[
+                          'flex flex-col items-center gap-1 rounded-lg border-2 p-2 text-xs transition-all hover:border-primary',
+                          locale === code ? 'border-primary bg-primary/5' : 'border-border',
+                        ].join(' ')}
+                      >
+                        <span className="text-lg">{flag}</span>
+                        <span className={`font-medium ${locale === code ? 'text-primary' : ''}`}>{localeNames[code]}</span>
+                        <span className="text-[10px] text-muted-foreground">{rest.join(' ')}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold mb-2">{t('settings.changePw')}</h2>
+                <div className="space-y-3">
+                  <Input
+                    type="password"
+                    placeholder={t('settings.currentPw')}
+                    value={pwForm.current}
+                    onChange={(e) => setPwForm((p) => ({ ...p, current: e.target.value }))}
+                    required
+                  />
+                  <Input
+                    type="password"
+                    placeholder={t('settings.newPw')}
+                    value={pwForm.newPw}
+                    onChange={(e) => setPwForm((p) => ({ ...p, newPw: e.target.value }))}
+                    required
+                    minLength={8}
+                  />
+                  <Input
+                    type="password"
+                    placeholder={t('settings.confirmPw')}
+                    value={pwForm.confirm}
+                    onChange={(e) => setPwForm((p) => ({ ...p, confirm: e.target.value }))}
+                    required
+                  />
+                  <Button type="button" onClick={handleChangePassword} disabled={pwLoading}>
+                    {pwLoading ? 'Updating...' : t('settings.updatePw')}
+                  </Button>
+                </div>
+              </div>
+
+              <div>
+                <h2 className="text-xl font-semibold mb-2">Update Phone Number</h2>
+                <div className="space-y-3">
+                  <div className="flex gap-2">
+                    <Input
+                      type="tel"
+                      maxLength={10}
+                      value={phoneForm.phone}
+                      onChange={(e) => setPhoneForm((p) => ({ ...p, phone: e.target.value }))}
+                      placeholder="9876543210"
+                      required
+                    />
+                    <Button type="button" variant="outline" onClick={handleSendOtp} disabled={phoneLoading}>
+                      {otpSent ? 'Resend OTP' : 'Send OTP'}
+                    </Button>
+                  </div>
+                  {displayOtp && <p className="text-sm text-muted-foreground">OTP: {displayOtp}</p>}
+                  {otpSent && (
+                    <>
+                      <Input
+                        type="text"
+                        maxLength={6}
+                        value={phoneForm.otp}
+                        onChange={(e) => setPhoneForm((p) => ({ ...p, otp: e.target.value }))}
+                        placeholder="123456"
+                        required
+                      />
+                      <Button type="button" onClick={handleVerifyAndUpdatePhone} disabled={phoneLoading}>
+                        {phoneLoading ? 'Verifying...' : 'Verify & Update'}
+                      </Button>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
             <div className="flex items-center gap-3 mb-4">
               <div className="w-10 h-10 rounded-lg bg-destructive/10 flex items-center justify-center">
                 <Trash2 className="w-5 h-5 text-destructive" />
@@ -566,9 +742,13 @@ export default function EmployerProfilePage() {
                 </AlertDialogFooter>
               </AlertDialogContent>
             </AlertDialog>
+            <Button type="button" variant="outline" onClick={handleLogout} className="mt-3 w-full sm:w-auto">
+              Sign out
+            </Button>
           </Card>
         </form>
       </main>
     </div>
   );
 }
+

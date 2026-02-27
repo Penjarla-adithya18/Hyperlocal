@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu, Settings } from 'lucide-react';
+import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
@@ -30,7 +30,6 @@ export function WorkerNav() {
     { href: '/worker/jobs', label: t('nav.worker.findJobs'), icon: Search, mobileLabel: 'Jobs', badge: undefined },
     { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase, mobileLabel: 'Apps', badge: undefined },
     { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0, mobileLabel: 'Chat' },
-    { href: '/worker/profile', label: t('nav.profile'), icon: User, mobileLabel: 'Profile', badge: undefined },
   ];
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge'>[] = [
@@ -102,9 +101,14 @@ export function WorkerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
-              <Link href="/worker/settings" prefetch={false}>
-                <Button variant={pathname === '/worker/settings' ? 'default' : 'ghost'} size="icon" title="Settings" className={cn(pathname === '/worker/settings' && 'bg-primary shadow-sm')}>
-                  <Settings className="w-4 h-4" />
+              <Link href="/worker/profile" prefetch={false}>
+                <Button
+                  variant={pathname === '/worker/profile' ? 'default' : 'ghost'}
+                  size="icon"
+                  title="Profile"
+                  className={cn(pathname === '/worker/profile' && 'bg-primary shadow-sm')}
+                >
+                  <User className="w-4 h-4" />
                 </Button>
               </Link>
               <Button
@@ -148,10 +152,10 @@ export function WorkerNav() {
                   </Button>
                 </Link>
               ))}
-              <Link href="/worker/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+              <Link href="/worker/profile" prefetch={false} onClick={() => setShowMenu(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
-                  <Settings className="w-4 h-4" />
-                  {t('nav.settings')}
+                  <User className="w-4 h-4" />
+                  {t('nav.profile')}
                 </Button>
               </Link>
               <div className="border-t pt-2">
@@ -171,7 +175,7 @@ export function WorkerNav() {
 
       {/* Mobile Bottom Navigation */}
       <nav className="md:hidden fixed bottom-0 left-0 right-0 z-50 glass border-t shadow-soft-lg pb-safe">
-        <div className="grid grid-cols-5 gap-1 px-2 py-2">
+        <div className="grid grid-cols-4 gap-1 px-2 py-2">
           {primaryNavItems.map((item) => {
             const isActive = pathname === item.href;
             return (

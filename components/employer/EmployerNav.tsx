@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
-import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, Settings, User } from 'lucide-react';
+import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
@@ -101,14 +101,14 @@ export function EmployerNav() {
             {/* Desktop User Menu */}
             <div className="hidden md:flex items-center gap-2">
               <NotificationBell />
-              <Link href="/employer/settings" prefetch={false}>
+              <Link href="/employer/profile" prefetch={false}>
                 <Button
-                  variant={pathname === '/employer/settings' ? 'default' : 'ghost'}
+                  variant={pathname === '/employer/profile' ? 'default' : 'ghost'}
                   size="icon"
-                  title="Settings"
-                  className={cn(pathname === '/employer/settings' && 'bg-accent text-accent-foreground shadow-sm')}
+                  title="Profile"
+                  className={cn(pathname === '/employer/profile' && 'bg-accent text-accent-foreground shadow-sm')}
                 >
-                  <Settings className="w-4 h-4" />
+                  <User className="w-4 h-4" />
                 </Button>
               </Link>
               <Button
@@ -152,10 +152,10 @@ export function EmployerNav() {
                   </Button>
                 </Link>
               ))}
-              <Link href="/employer/settings" prefetch={false} onClick={() => setShowMenu(false)}>
+              <Link href="/employer/profile" prefetch={false} onClick={() => setShowMenu(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
-                  <Settings className="w-4 h-4" />
-                  {t('nav.settings')}
+                  <User className="w-4 h-4" />
+                  {t('nav.profile')}
                 </Button>
               </Link>
               <div className="border-t pt-2">
