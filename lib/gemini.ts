@@ -409,16 +409,19 @@ Analyze the gap. Respond in ${langName} with ONLY valid JSON (no markdown, no co
     // Strip possible code fences
     const cleaned = raw.replace(/^```json?\n?/i, '').replace(/\n?```$/i, '').trim()
     const result: SkillGapResult = JSON.parse(cleaned)
+    // Deduplicate AI-returned arrays to prevent React key conflicts
+    result.strongSkills = [...new Set(result.strongSkills ?? [])]
+    result.gapSkills = [...new Set(result.gapSkills ?? [])]
     setCached(cacheKey, JSON.stringify(result), TTL.SUMMARY)
     return result
   } catch {
     // Deterministic fallback
-    const matched = workerSkills.filter((s) =>
+    const matched = [...new Set(workerSkills.filter((s) =>
       demandedSkills.map((d) => d.toLowerCase()).includes(s.toLowerCase())
-    )
-    const missing = demandedSkills
+    ))]
+    const missing = [...new Set(demandedSkills
       .filter((d) => !workerSkills.map((s) => s.toLowerCase()).includes(d.toLowerCase()))
-      .slice(0, 5)
+    )].slice(0, 5)
     const fallback: SkillGapResult = {
       strongSkills: matched,
       gapSkills: missing,

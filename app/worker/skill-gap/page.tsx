@@ -593,7 +593,7 @@ export default function SkillGapPage() {
                 </CardHeader>
                 <CardContent>
                   <div className="flex flex-wrap gap-2">
-                    {analysis.strongSkills.map((skill) => (
+                    {[...new Set(analysis.strongSkills)].map((skill) => (
                       <Badge key={skill} variant="outline" className="bg-green-50 text-green-700 border-green-200 py-1.5 px-3">
                         <CheckCircle2 className="h-3 w-3 mr-1.5" />
                         {skill}
