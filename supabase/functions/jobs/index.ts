@@ -138,7 +138,9 @@ Deno.serve(async (req: Request) => {
         pay,
         pay_amount: pay,
         pay_type: body.payType || 'hourly',
-        payment_status: body.escrowRequired ? 'locked' : 'pending',
+        payment_status: body.escrowRequired
+          ? 'locked'
+          : (body.paymentStatus || 'not_required'),
         escrow_amount: body.escrowRequired ? pay : null,
         escrow_required: !!body.escrowRequired,
         timing: body.timing || body.duration || 'Flexible',

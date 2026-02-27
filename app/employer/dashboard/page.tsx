@@ -55,12 +55,20 @@ export default function EmployerDashboardPage() {
           throw new Error('Employer profile API is unavailable. Please refresh and try again.');
         }
 
-        const [profile, trust, employerJobs] = await Promise.all([
+        const [profileResult, trustResult, jobsResult] = await Promise.allSettled([
           findEmployerProfileByUserId(user!.id),
           trustScoreOps.findByUserId(user!.id),
           jobOps.findByEmployerId(user!.id),
         ]);
         if (cancelled) return;
+
+        const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+        const trust = trustResult.status === 'fulfilled' ? trustResult.value : null;
+        const employerJobs = jobsResult.status === 'fulfilled' ? (jobsResult.value ?? []) : [];
+
+        if (jobsResult.status === 'rejected') {
+          console.error('Failed to load jobs:', jobsResult.reason);
+        }
 
         setEmployerProfile(profile);
         setTrustScore(trust);

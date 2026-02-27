@@ -182,12 +182,12 @@ async function extractIntent(
 
 // â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-const GREETING_MSG = `ðŸ‘‹ Hi! I'm your **HyperLocal AI Assistant**. I can help you:
+const GREETING_MSG = `👋 Hi! I'm your **HyperLocal AI Assistant**. I can help you:
 
-â€¢ **Search jobs** â€” "Find plumber jobs in Hyderabad"
-â€¢ **View details** â€” "Tell me about #2"
-â€¢ **Apply to jobs** â€” "Apply for #3"
-â€¢ **Check status** â€” "My applications"
+• **Search jobs** — "Find plumber jobs in Hyderabad"
+• **View details** — "Tell me about #2"
+• **Apply to jobs** — "Apply for #3"
+• **Check status** — "My applications"
 
 What would you like to do?`
 
@@ -459,7 +459,7 @@ export default function AIChatbot() {
         createdAt: new Date().toISOString(),
       } as Omit<Application, 'id' | 'createdAt' | 'updatedAt'> & { createdAt: string })
 
-      addMessage('assistant', `âœ… Successfully applied to **${job.title}**!\n\nMatch score: **${matchScore}%**\nSay "my applications" to track your status.`, {
+      addMessage('assistant', `✅ Successfully applied to **${job.title}**!\n\nMatch score: **${matchScore}%**\nSay "my applications" to track your status.`, {
         type: 'apply_result',
         applied: true,
       })
