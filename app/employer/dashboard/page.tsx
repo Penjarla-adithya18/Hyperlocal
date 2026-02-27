@@ -100,17 +100,33 @@ export default function EmployerDashboardPage() {
     return getEmployerProfileCompletion(employerProfile);
   }, [employerProfile]);
 
-  // Analytics data
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
-  });
+  // Analytics data (deterministic from actual applications)
+  const applicationTrendData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-  const applicationTrendData = last7Days.map((day, i) => ({
-    label: day,
-    value: Math.floor(Math.random() * 5) + (i < 3 ? 1 : 2)
-  }));
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (6 - i));
+      return day;
+    });
+
+    const countsByDay = new Map<string, number>();
+    for (const application of applications) {
+      const created = new Date(application.createdAt);
+      created.setHours(0, 0, 0, 0);
+      const key = created.toISOString().slice(0, 10);
+      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+    }
+
+    return days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        value: countsByDay.get(key) ?? 0,
+      };
+    });
+  }, [applications]);
 
   const jobPerformanceData = jobs.slice(0, 5).map((job) => ({
     label: job.title.slice(0, 15) + (job.title.length > 15 ? '...' : ''),

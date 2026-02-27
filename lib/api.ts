@@ -31,6 +31,7 @@ function getEnv() {
 const SESSION_TOKEN_KEY = 'sessionToken'
 const SESSION_EXPIRES_AT_KEY = 'sessionExpiresAt'
 const SESSION_REFRESHED_AT_KEY = 'sessionRefreshedAt'
+let sessionRefreshInFlight: Promise<void> | null = null
 
 function getSessionToken(): string | null {
   if (typeof window === 'undefined') return null
@@ -59,6 +60,11 @@ function setSessionExpiry(expiresAt: string | null): void {
 }
 
 async function refreshSessionIfNeeded(): Promise<void> {
+  if (sessionRefreshInFlight) {
+    await sessionRefreshInFlight
+    return
+  }
+
   if (typeof window === 'undefined') return
   const token = getSessionToken()
   const expiresAt = getSessionExpiresAt()
@@ -79,34 +85,44 @@ async function refreshSessionIfNeeded(): Promise<void> {
   const { url, key } = getEnv()
   const endpoint = `${url}/functions/v1/auth`
 
-  const res = await fetchWithTimeout(
-    endpoint,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-        apikey: key,
-      },
-      body: JSON.stringify({ action: 'refresh-session' }),
-    },
-    REQUEST_TIMEOUT_MS
-  )
-
-  if (!res.ok) {
-    if (res.status === 401) {
-      console.warn('Session refresh failed - token may be invalid')
-      // Don't auto-redirect on refresh failure - let user stay logged in
-      // The periodic validation in AuthContext will handle actual logout if needed
-    }
-    return
-  }
-
-  const data = (await res.json()) as { success?: boolean; token?: string; expiresAt?: string }
-  if (data?.success && data.token && data.expiresAt) {
-    setSessionToken(data.token)
-    setSessionExpiry(data.expiresAt)
+  sessionRefreshInFlight = (async () => {
+    // Mark early to throttle concurrent callers in the same tick
     localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
+
+    const res = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+          apikey: key,
+        },
+        body: JSON.stringify({ action: 'refresh-session' }),
+      },
+      REQUEST_TIMEOUT_MS
+    )
+
+    if (!res.ok) {
+      if (res.status === 401) {
+        console.warn('Session refresh failed - token may be invalid')
+        // Keep current state; guarded pages will handle auth failures gracefully.
+      }
+      return
+    }
+
+    const data = (await res.json()) as { success?: boolean; token?: string; expiresAt?: string }
+    if (data?.success && data.token && data.expiresAt) {
+      setSessionToken(data.token)
+      setSessionExpiry(data.expiresAt)
+      localStorage.setItem(SESSION_REFRESHED_AT_KEY, String(now))
+    }
+  })()
+
+  try {
+    await sessionRefreshInFlight
+  } finally {
+    sessionRefreshInFlight = null
   }
 }
 
@@ -174,17 +190,34 @@ async function call<T>(
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const res = await fetchWithTimeout(endpoint, init)
+      const latestToken = getSessionToken()
+      const attemptInit: RequestInit = {
+        ...init,
+        headers: {
+          ...(init.headers as Record<string, string>),
+          Authorization: `Bearer ${latestToken || key}`,
+          apikey: key,
+        },
+      }
+
+      const res = await fetchWithTimeout(endpoint, attemptInit)
 
       if (!res.ok) {
         if (res.status === 401) {
-          // Clear session and redirect to login
+          // Clear session on unauthorized and let page-level guards handle navigation
+          const currentToken = getSessionToken()
+          const tokenUsed = latestToken || null
+
+          // If token rotated while this request was in-flight, retry once with new token
+          if (currentToken && tokenUsed && currentToken !== tokenUsed && attempt < MAX_RETRIES) {
+            continue
+          }
+
           setSessionToken(null)
           if (typeof window !== 'undefined') {
             localStorage.removeItem('currentUser')
-            // Redirect to login on 401 (session expired or invalid)
-            window.location.href = '/login'
           }
+          throw new Error('Unauthorized. Please login again.')
         }
         // Retry on 5xx server errors
         if (res.status >= 500 && attempt < MAX_RETRIES) {
@@ -227,6 +260,11 @@ export async function registerUser(data: {
   organizationName?: string
 }): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'register', ...data })
+  if (res.success && (!res.token || !res.user)) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+    return { success: false, message: 'Registration completed but no session was created. Please try again.' }
+  }
   if (res.success && res.token) {
     setSessionToken(res.token)
     setSessionExpiry(res.expiresAt ?? null)
@@ -243,6 +281,11 @@ export async function loginUser(
   password: string
 ): Promise<{ success: boolean; user?: User; message: string }> {
   const res = await call<SRU>('auth', 'POST', {}, { action: 'login', phoneNumber, password })
+  if (res.success && (!res.token || !res.user)) {
+    setSessionToken(null)
+    setSessionExpiry(null)
+    return { success: false, message: 'Login failed to establish a valid session. Please try again.' }
+  }
   if (res.success && res.token) {
     setSessionToken(res.token)
     setSessionExpiry(res.expiresAt ?? null)

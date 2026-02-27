@@ -44,7 +44,7 @@ export default function AdminDashboardPage() {
 
   const jobPostingsData = last7Days.map((day, i) => ({
     label: day,
-    value: Math.floor(Math.random() * 15) + 5
+    value: Math.max(0, Math.floor((stats.activeJobs || 0) * (0.4 + i * 0.1)))
   }))
 
   const applicationStatusData = [

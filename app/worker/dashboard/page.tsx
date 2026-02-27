@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { WorkerNav } from '@/components/worker/WorkerNav';
@@ -85,17 +85,33 @@ export default function WorkerDashboardPage() {
 
   const profileCompleteness = workerProfile ? getWorkerProfileCompletion(workerProfile) : 0;
 
-  // Analytics data for charts
-  const last7Days = Array.from({ length: 7 }, (_, i) => {
-    const date = new Date();
-    date.setDate(date.getDate() - (6 - i));
-    return date.toLocaleDateString('en-US', { weekday: 'short' });
-  });
+  // Analytics data for charts (deterministic from actual applications)
+  const applicationTrendData = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
 
-  const applicationTrendData = last7Days.map((day, i) => ({
-    label: day,
-    value: Math.floor(Math.random() * 3) + (i < 3 ? 0 : 1)
-  }));
+    const days = Array.from({ length: 7 }, (_, i) => {
+      const day = new Date(now);
+      day.setDate(now.getDate() - (6 - i));
+      return day;
+    });
+
+    const countsByDay = new Map<string, number>();
+    for (const application of applications) {
+      const created = new Date(application.createdAt);
+      created.setHours(0, 0, 0, 0);
+      const key = created.toISOString().slice(0, 10);
+      countsByDay.set(key, (countsByDay.get(key) ?? 0) + 1);
+    }
+
+    return days.map((day) => {
+      const key = day.toISOString().slice(0, 10);
+      return {
+        label: day.toLocaleDateString('en-US', { weekday: 'short' }),
+        value: countsByDay.get(key) ?? 0,
+      };
+    });
+  }, [applications]);
 
   if (authLoading || loading) {
     return (

@@ -84,8 +84,8 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-emerald-50 via-sky-50 to-indigo-100 p-4 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 md:p-6">
-      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-3xl shadow-2xl shadow-emerald-500/10 md:h-[90vh] md:flex-row">
+    <div className="flex min-h-screen items-start justify-center overflow-y-auto bg-gradient-to-br from-emerald-50 via-sky-50 to-indigo-100 p-3 py-6 dark:from-slate-950 dark:via-slate-900 dark:to-indigo-950 sm:items-center sm:p-4 md:p-6">
+      <div className="flex w-full max-w-6xl flex-col overflow-hidden rounded-2xl shadow-2xl shadow-emerald-500/10 sm:rounded-3xl md:h-[90vh] md:flex-row">
         <section className="relative hidden h-full w-full flex-col items-center justify-start p-7 pt-16 text-slate-900 md:flex md:w-1/2 md:items-start md:p-10 md:pt-16 lg:w-5/12 lg:p-12 lg:pt-16 dark:text-slate-100 bg-gradient-to-br from-emerald-50/80 via-sky-50/80 to-blue-50/80 dark:from-emerald-950/30 dark:via-slate-900/90 dark:to-blue-950/30 backdrop-blur-2xl border-r border-white/30 dark:border-slate-700/50">
           <div className="absolute left-8 top-8 flex items-center gap-2">
             <div className="flex h-8 w-8 items-center justify-center rounded-bl-none rounded-lg rounded-tr-none bg-gradient-to-r from-emerald-500 to-blue-500 text-xl font-bold text-white shadow-sm">
@@ -124,11 +124,11 @@ export default function LoginPage() {
           </div>
         </section>
 
-        <section className="relative z-20 flex w-full flex-col items-center justify-center p-6 md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 bg-white/90 dark:bg-slate-950/90 backdrop-blur-2xl backdrop-saturate-150">
-          <Link href="/" className="absolute left-6 top-6 inline-flex items-center text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:left-8 md:top-8">
+        <section className="relative z-20 flex w-full flex-col items-center justify-center bg-white/90 p-5 pt-6 dark:bg-slate-950/90 sm:p-6 md:w-1/2 md:rounded-l-[2.5rem] md:p-10 md:shadow-none lg:w-7/12 lg:p-14 backdrop-blur-2xl backdrop-saturate-150">
+          <Link href="/" className="mb-4 inline-flex items-center self-start text-sm font-medium text-slate-500 transition-colors hover:text-emerald-500 dark:text-slate-400 dark:hover:text-emerald-400 md:absolute md:left-8 md:top-8 md:mb-0">
             ← Back to Home
           </Link>
-          <div className="w-full max-w-sm space-y-7">
+          <div className="w-full max-w-sm space-y-6 sm:space-y-7">
             <div>
               <h2 className="text-3xl font-bold text-gray-900 dark:text-white">Sign in</h2>
             </div>
