@@ -96,6 +96,7 @@ create table if not exists applications (
   match_score numeric not null default 0,
   cover_message text,
   cover_letter text,
+  resume_url text,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );

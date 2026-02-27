@@ -179,11 +179,34 @@ export default function JobDetailsPage() {
     }
 
     setApplying(true)
+
+    // ── Attach resume as data URL (no AI parsing) ─────────────────────────────
+    let attachedResumeUrl: string | undefined = workerProfile?.resumeUrl
+    if (resumeFile) {
+      setResumeUploading(true)
+      try {
+        attachedResumeUrl = await new Promise<string>((resolve, reject) => {
+          const reader = new FileReader()
+          reader.onload = (ev) => resolve(ev.target?.result as string)
+          reader.onerror = reject
+          reader.readAsDataURL(resumeFile)
+        })
+      } catch {
+        toast({
+          title: 'Resume note',
+          description: 'Could not attach resume, but your application will still be submitted.',
+        })
+      } finally {
+        setResumeUploading(false)
+      }
+    }
+
     try {
       const newApplication = await db.createApplication({
         jobId: job.id,
         workerId: user.id,
         coverLetter: coverLetter.trim() || undefined,
+        resumeUrl: attachedResumeUrl,
         status: 'pending',
         matchScore: matchScore ?? 0,
       })
@@ -633,10 +656,11 @@ export default function JobDetailsPage() {
                     <Button
                       className="w-full sm:flex-1"
                       onClick={handleApply}
-                      disabled={applying}
+                      disabled={applying || resumeUploading}
                     >
-                      <Send className="h-4 w-4 mr-2" />
-                      {applying ? 'Submitting...' : 'Submit Application'}
+                      {(applying || resumeUploading) && <Loader2 className="h-4 w-4 mr-2 animate-spin" />}
+                      {!applying && !resumeUploading && <Send className="h-4 w-4 mr-2" />}
+                      {resumeUploading ? 'Parsing Resume…' : applying ? 'Submitting…' : 'Submit Application'}
                     </Button>
                     <Button
                       variant="outline"

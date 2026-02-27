@@ -435,7 +435,7 @@ export default function PostJobPage() {
                   id="title"
                   placeholder="e.g., Need Experienced Plumber for Bathroom Repair"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, title: e.target.value }))}
                   required
                 />
               </div>
@@ -447,7 +447,7 @@ export default function PostJobPage() {
                   placeholder="Describe the work that needs to be done in detail..."
                   rows={5}
                   value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, description: e.target.value }))}
                   required
                 />
               </div>
@@ -457,7 +457,7 @@ export default function PostJobPage() {
                   <Label htmlFor="category">Category *</Label>
                   <Select
                     value={formData.category}
-                    onValueChange={(value) => setFormData({ ...formData, category: value })}
+                    onValueChange={(value) => setFormData(prev => ({ ...prev, category: value }))}
                     required
                   >
                     <SelectTrigger>
@@ -476,7 +476,7 @@ export default function PostJobPage() {
                   <LocationInput
                     id="location"
                     value={formData.location}
-                    onChange={(val, latLng) => setFormData({ ...formData, location: val, latitude: latLng?.lat, longitude: latLng?.lng })}
+                    onChange={(val, latLng) => setFormData(prev => ({ ...prev, location: val, latitude: latLng?.lat, longitude: latLng?.lng }))}
                     placeholder="City, Area"
                     required
                   />
@@ -489,7 +489,7 @@ export default function PostJobPage() {
                 <div className="flex gap-3">
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, jobMode: 'local' })}
+                    onClick={() => setFormData(prev => ({ ...prev, jobMode: 'local' }))}
                     className={`flex items-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
                       formData.jobMode === 'local'
                         ? 'border-primary bg-primary/5 text-primary'
@@ -501,7 +501,7 @@ export default function PostJobPage() {
                   </button>
                   <button
                     type="button"
-                    onClick={() => setFormData({ ...formData, jobMode: 'remote' })}
+                    onClick={() => setFormData(prev => ({ ...prev, jobMode: 'remote' }))}
                     className={`flex items-center gap-2 rounded-lg border-2 px-4 py-2.5 text-sm font-medium transition-all ${
                       formData.jobMode === 'remote'
                         ? 'border-primary bg-primary/5 text-primary'
@@ -616,7 +616,7 @@ export default function PostJobPage() {
                   <Label htmlFor="payType">Payment Type *</Label>
                   <Select
                     value={formData.payType}
-                    onValueChange={(value: 'hourly' | 'fixed') => setFormData({ ...formData, payType: value })}
+                    onValueChange={(value: 'hourly' | 'fixed') => setFormData(prev => ({ ...prev, payType: value }))}
                   >
                     <SelectTrigger>
                       <SelectValue />
@@ -656,7 +656,7 @@ export default function PostJobPage() {
                       className="pl-10"
                       placeholder="0"
                       value={toSafeNumberInputValue(formData.payAmount)}
-                      onChange={(e) => setFormData({ ...formData, payAmount: e.target.value })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, payAmount: e.target.value }))}
                       required
                       min="0"
                     />
@@ -696,7 +696,7 @@ export default function PostJobPage() {
                     value={durationSelectValue}
                     onValueChange={(value) => {
                       if (value === '__custom__') return
-                      setFormData({ ...formData, duration: value })
+                      setFormData(prev => ({ ...prev, duration: value }))
                     }}
                   >
                     <SelectTrigger id="duration-select">
@@ -714,7 +714,7 @@ export default function PostJobPage() {
                     id="duration"
                     placeholder="Or enter custom duration (e.g., 5 days)"
                     value={formData.duration}
-                    onChange={(e) => setFormData({ ...formData, duration: e.target.value })}
+                    onChange={(e) => setFormData(prev => ({ ...prev, duration: e.target.value }))}
                     required
                   />
                 </div>
@@ -726,7 +726,7 @@ export default function PostJobPage() {
                     type="number"
                     min="1"
                     value={toSafeNumberInputValue(formData.slots)}
-                    onChange={(e) => setFormData({ ...formData, slots: e.target.value.replace(/\D/g, '') })}
+                    onChange={(e) => setFormData(prev => ({ ...prev, slots: e.target.value.replace(/\D/g, '') }))}
                     required
                   />
                 </div>
@@ -742,7 +742,7 @@ export default function PostJobPage() {
                       type="date"
                       className="pl-10"
                       value={formData.startDate}
-                      onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
+                      onChange={(e) => setFormData(prev => ({ ...prev, startDate: e.target.value }))}
                       required
                     />
                   </div>
@@ -753,7 +753,7 @@ export default function PostJobPage() {
                   <Select
                     value={formData.experienceRequired}
                     onValueChange={(value: 'entry' | 'intermediate' | 'expert') => 
-                      setFormData({ ...formData, experienceRequired: value })
+                      setFormData(prev => ({ ...prev, experienceRequired: value }))
                     }
                   >
                     <SelectTrigger>
@@ -783,7 +783,7 @@ export default function PostJobPage() {
                   placeholder="e.g., Must have own tools, Should arrive by 9 AM..."
                   rows={3}
                   value={formData.requirements}
-                  onChange={(e) => setFormData({ ...formData, requirements: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, requirements: e.target.value }))}
                 />
               </div>
 
@@ -794,7 +794,7 @@ export default function PostJobPage() {
                   placeholder="e.g., Lunch provided, Bonus on completion..."
                   rows={3}
                   value={formData.benefits}
-                  onChange={(e) => setFormData({ ...formData, benefits: e.target.value })}
+                  onChange={(e) => setFormData(prev => ({ ...prev, benefits: e.target.value }))}
                 />
               </div>
 
@@ -804,7 +804,7 @@ export default function PostJobPage() {
                     id="escrow"
                     checked={formData.escrowRequired}
                     onCheckedChange={(checked) => 
-                      setFormData({ ...formData, escrowRequired: checked as boolean })
+                      setFormData(prev => ({ ...prev, escrowRequired: checked as boolean }))
                     }
                   />
                   <Label htmlFor="escrow" className="text-sm font-normal cursor-pointer">
@@ -838,3 +838,4 @@ export default function PostJobPage() {
     </div>
   )
 }
+

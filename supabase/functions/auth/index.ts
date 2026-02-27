@@ -41,7 +41,7 @@ Deno.serve(async (req: Request) => {
     const action = body?.action
 
     if (action === 'register') {
-      const { fullName, phoneNumber, password, role, businessName, organizationName } = body
+      const { fullName, phoneNumber, password, role, email, businessName, organizationName } = body
       if (!fullName || !phoneNumber || !password || !role) {
         return errorResponse('Missing required fields', 400)
       }
@@ -64,6 +64,18 @@ Deno.serve(async (req: Request) => {
         return jsonResponse({ success: false, message: 'Phone number already registered' })
       }
 
+      // Check email uniqueness if provided
+      if (email) {
+        const { data: emailExists } = await supabase
+          .from('users')
+          .select('id')
+          .eq('email', email)
+          .maybeSingle()
+        if (emailExists) {
+          return jsonResponse({ success: false, message: 'Email address already registered' })
+        }
+      }
+
       const passwordHash = await hashPassword(password)
 
       const { data: created, error } = await supabase
@@ -72,8 +84,7 @@ Deno.serve(async (req: Request) => {
           full_name: fullName,
           phone_number: phoneNumber,
           password_hash: passwordHash,
-          role: normalizedRole,
-          profile_completed: false,
+          role: normalizedRole,          email: email || null,          profile_completed: false,
           trust_score: 50,
           trust_level: 'basic',
           is_verified: true,
@@ -347,6 +358,36 @@ Deno.serve(async (req: Request) => {
         .eq('phone_number', phoneNumber)
         .maybeSingle()
 
+      if (error) throw error
+      return jsonResponse({ data: data ? mapUser(data) : null })
+    }
+
+    // Public lookup by email — used for email-based login and forgot-password
+    if (action === 'get-user-by-email') {
+      const { email } = body
+      if (!email || typeof email !== 'string') {
+        return errorResponse('email is required', 400)
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('email', email.toLowerCase().trim())
+        .maybeSingle()
+      if (error) throw error
+      return jsonResponse({ data: data ? mapUser(data) : null })
+    }
+
+    // Public lookup by phone — used for pre-login existence check
+    if (action === 'get-user-by-phone-public') {
+      const { phoneNumber } = body
+      if (!phoneNumber || typeof phoneNumber !== 'string') {
+        return errorResponse('phoneNumber is required', 400)
+      }
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, full_name, phone_number, email, role')
+        .eq('phone_number', phoneNumber)
+        .maybeSingle()
       if (error) throw error
       return jsonResponse({ data: data ? mapUser(data) : null })
     }

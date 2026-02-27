@@ -3,10 +3,10 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Loader2, Phone, Lock, Store, LogIn, Eye, EyeOff } from 'lucide-react';
+import { Loader2, Phone, Lock, Store, LogIn, Eye, EyeOff, Mail } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { loginUser } from '@/lib/auth';
-import { getUserByPhone } from '@/lib/api';
+import { getUserByPhone, getUserByEmail } from '@/lib/api';
 import { useToast } from '@/hooks/use-toast';
 
 export default function LoginPage() {
@@ -32,17 +32,21 @@ export default function LoginPage() {
   }, []);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    phoneNumber: '',
+    identifier: '', // phone number OR email address
     password: '',
   });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.phoneNumber || formData.phoneNumber.length !== 10) {
+    const identifier = formData.identifier.trim();
+    const isEmail = identifier.includes('@');
+    const isPhone = /^\d{10}$/.test(identifier);
+
+    if (!isEmail && !isPhone) {
       toast({
-        title: 'Invalid Phone Number',
-        description: 'Please enter a valid 10-digit phone number',
+        title: 'Invalid Credentials',
+        description: 'Enter a 10-digit phone number or a valid email address',
         variant: 'destructive',
       });
       return;
@@ -59,23 +63,46 @@ export default function LoginPage() {
 
     setLoading(true);
     try {
-      let existingUser: Awaited<ReturnType<typeof getUserByPhone>> | undefined;
-      try {
-        existingUser = await getUserByPhone(formData.phoneNumber);
-      } catch {
-        existingUser = undefined;
+      let phoneNumber: string;
+      let userEmail: string | undefined;
+      let userFullName: string | undefined;
+
+      if (isEmail) {
+        // Email-based login: look up the user to get their phone number
+        const emailUser = await getUserByEmail(identifier);
+        if (!emailUser) {
+          toast({
+            title: 'Account Not Found',
+            description: 'No account is linked to this email address.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        phoneNumber = emailUser.phoneNumber;
+        userEmail = identifier;
+        userFullName = emailUser.fullName;
+      } else {
+        // Phone-based login: validate account exists
+        let existingUser: Awaited<ReturnType<typeof getUserByPhone>> | undefined;
+        try {
+          existingUser = await getUserByPhone(identifier);
+        } catch {
+          existingUser = undefined;
+        }
+        if (existingUser === null) {
+          toast({
+            title: 'Account Not Found',
+            description: 'No account exists for this number. You must sign up first.',
+            variant: 'destructive',
+          });
+          return;
+        }
+        phoneNumber = identifier;
+        userEmail = existingUser?.email || undefined;
+        userFullName = existingUser?.fullName || undefined;
       }
 
-      if (existingUser === null) {
-        toast({
-          title: 'Account Not Found',
-          description: 'No account exists for this number. You must sign up first.',
-          variant: 'destructive',
-        });
-        return;
-      }
-
-      const result = await loginUser(formData.phoneNumber, formData.password);
+      const result = await loginUser(phoneNumber, formData.password, userEmail, userFullName);
 
       if (result.success && result.user) {
         // Save user to context and localStorage
@@ -196,24 +223,20 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="mt-8 space-y-6">
               <div className="space-y-6">
                 <div>
-                  <label className="sr-only" htmlFor="phone-number">Phone Number</label>
+                  <label className="sr-only" htmlFor="identifier">Phone or Email</label>
                   <div className="group relative">
                     <div className="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
-                      <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
+                      {formData.identifier.includes('@')
+                        ? <Mail className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />
+                        : <Phone className="h-5 w-5 text-gray-400 transition-colors group-focus-within:text-emerald-500" />}
                     </div>
                     <input
-                      id="phone-number"
-                      type="tel"
-                      name="phone"
-                      placeholder="Phone Number"
-                      value={formData.phoneNumber}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          phoneNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
-                        })
-                      }
-                      maxLength={10}
+                      id="identifier"
+                      type="text"
+                      name="identifier"
+                      placeholder="Phone number or email address"
+                      value={formData.identifier}
+                      onChange={(e) => setFormData({ ...formData, identifier: e.target.value })}
                       className="relative block w-full appearance-none border-0 border-b-2 border-gray-200 bg-transparent px-3 py-4 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:z-10 focus:border-emerald-500 focus:outline-none focus:ring-0 sm:text-lg dark:border-slate-700 dark:text-slate-100 dark:placeholder:text-slate-500"
                       required
                     />
@@ -294,7 +317,7 @@ export default function LoginPage() {
                   type="button"
                   className="cursor-pointer transition-colors hover:text-emerald-500"
                   title="Use 9876543210 / Password@123"
-                  onClick={() => setFormData({ phoneNumber: '9876543210', password: 'Password@123' })}
+                  onClick={() => setFormData({ identifier: '9876543210', password: 'Password@123' })}
                 >
                   Worker: 9876543210
                 </button>
@@ -302,7 +325,7 @@ export default function LoginPage() {
                   type="button"
                   className="cursor-pointer transition-colors hover:text-emerald-500"
                   title="Use 9876543212 / Password@123"
-                  onClick={() => setFormData({ phoneNumber: '9876543212', password: 'Password@123' })}
+                  onClick={() => setFormData({ identifier: '9876543212', password: 'Password@123' })}
                 >
                   Employer: 9876543212
                 </button>

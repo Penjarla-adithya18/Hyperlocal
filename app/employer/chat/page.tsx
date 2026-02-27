@@ -25,9 +25,6 @@ import { Label } from '@/components/ui/label'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
 import { Textarea } from '@/components/ui/textarea'
 import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
-import { FileUpload } from '@/components/ui/file-upload'
-import { uploadChatAttachment, getSignedUrl, isImageFile, isPdfFile, formatFileSize } from '@/lib/supabase/storage'
-import { Download, FileText, Image as ImageIcon, File } from 'lucide-react'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useI18n } from '@/contexts/I18nContext'
 
@@ -56,8 +53,6 @@ function EmployerChatPage() {
   const [reportDescription, setReportDescription] = useState('')
   const [submittingReport, setSubmittingReport] = useState(false)
   const [voiceListening, setVoiceListening] = useState(false)
-  const [selectedFile, setSelectedFile] = useState<File | null>(null)
-  const [uploading, setUploading] = useState(false)
   const [loadingConvs, setLoadingConvs] = useState(true)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -223,86 +218,48 @@ function EmployerChatPage() {
   }
 
   const handleSendMessage = async () => {
-    if ((!newMessage.trim() && !selectedFile) || !selectedConversation || !user) return
+    if (!newMessage.trim() || !selectedConversation || !user) return
 
     // Safety filter
-    if (newMessage.trim()) {
-      const filterResult = filterChatMessage(newMessage.trim())
-      if (filterResult.blocked) {
-        toast({
-          title: 'Message blocked',
-          description: filterResult.reason,
-          variant: 'destructive',
-        })
-        return
-      }
+    const filterResult = filterChatMessage(newMessage.trim())
+    if (filterResult.blocked) {
+      toast({
+        title: 'Message blocked',
+        description: filterResult.reason,
+        variant: 'destructive',
+      })
+      return
     }
 
-    setUploading(true)
-    let attachmentData: { url: string; name: string; type: string; size: number } | undefined
     let tempMessage: ChatMessage | undefined
-
     try {
-      // Upload file if attached
-      if (selectedFile) {
-        const uploadResult = await uploadChatAttachment(
-          selectedFile,
-          user.id,
-          selectedConversation.id
-        )
-        attachmentData = {
-          url: uploadResult.url,
-          name: uploadResult.name,
-          type: uploadResult.type,
-          size: uploadResult.size,
-        }
-      }
-
-      // Optimistic UI: show message immediately
       tempMessage = {
         id: `temp-${Date.now()}`,
         conversationId: selectedConversation.id,
         senderId: user.id,
-        message: newMessage.trim() || (attachmentData ? `Sent ${attachmentData.name}` : ''),
+        message: newMessage.trim(),
         createdAt: new Date().toISOString(),
         read: false,
-        ...(attachmentData && {
-          attachmentUrl: attachmentData.url,
-          attachmentName: attachmentData.name,
-          attachmentType: attachmentData.type,
-          attachmentSize: attachmentData.size,
-        }),
       }
       setMessages((prev) => [...prev, tempMessage!])
       const messageToSend = tempMessage!.message
       setNewMessage('')
-      setSelectedFile(null)
       scrollToBottom(true)
 
       const message = await db.sendMessage({
         conversationId: selectedConversation.id,
         senderId: user.id,
         message: messageToSend,
-        ...(attachmentData && {
-          attachmentUrl: attachmentData.url,
-          attachmentName: attachmentData.name,
-          attachmentType: attachmentData.type,
-          attachmentSize: attachmentData.size,
-        }),
       })
-      // Replace temp message with real one
       setMessages((prev) => prev.map(m => m.id === tempMessage!.id ? message : m))
       loadConversations()
     } catch (error) {
-      // Remove only the failed temp message
       if (tempMessage) setMessages((prev) => prev.filter(m => m.id !== tempMessage!.id))
       toast({
         title: 'Failed to send message',
         description: error instanceof Error ? error.message : 'Please try again',
         variant: 'destructive'
       })
-    } finally {
-      setUploading(false)
     }
   }
 
@@ -564,39 +521,6 @@ function EmployerChatPage() {
                               : 'bg-muted/80 text-foreground rounded-[20px] rounded-bl-md'
                           }`}
                         >
-                          {message.attachmentUrl && (
-                            <div className="mb-2 rounded-lg overflow-hidden">
-                              {isImageFile(message.attachmentName || '') ? (
-                                <img
-                                  src={message.attachmentUrl}
-                                  alt={message.attachmentName}
-                                  className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
-                                />
-                              ) : (
-                                <a
-                                  href={message.attachmentUrl}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className={`flex items-center gap-2 p-2 rounded-lg ${
-                                    isSent ? 'bg-accent-foreground/10' : 'bg-background/50'
-                                  } hover:opacity-80 transition-opacity`}
-                                >
-                                  {isPdfFile(message.attachmentName || '') ? (
-                                    <FileText className="h-5 w-5" />
-                                  ) : (
-                                    <File className="h-5 w-5" />
-                                  )}
-                                  <div className="flex-1 min-w-0">
-                                    <p className="text-xs font-medium truncate">{message.attachmentName}</p>
-                                    {message.attachmentSize && (
-                                      <p className="text-[10px] opacity-70">{formatFileSize(message.attachmentSize)}</p>
-                                    )}
-                                  </div>
-                                  <Download className="h-4 w-4" />
-                                </a>
-                              )}
-                            </div>
-                          )}
                           {message.message && (
                             <p className="text-[15px] leading-relaxed break-words">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
                           )}
@@ -626,14 +550,6 @@ function EmployerChatPage() {
                   </div>
                 ) : (
                   <div className="flex gap-2 items-end">
-                    <FileUpload
-                      onFileSelect={setSelectedFile}
-                      onFileRemove={() => setSelectedFile(null)}
-                      selectedFile={selectedFile}
-                      accept="image/*,.pdf,.doc,.docx"
-                      maxSizeMB={5}
-                      disabled={uploading}
-                    />
                     <div className="flex-1 relative">
                       <Input
                         placeholder="Message..."
@@ -656,7 +572,7 @@ function EmployerChatPage() {
                       onClick={handleSendMessage} 
                       size="icon" 
                       className="h-11 w-11 rounded-full bg-accent hover:bg-accent/90 shadow-md hover:shadow-lg transition-all"
-                      disabled={!newMessage.trim() && !selectedFile}
+                      disabled={!newMessage.trim()}
                     >
                       <Send className="h-5 w-5" />
                     </Button>
@@ -823,39 +739,6 @@ function EmployerChatPage() {
                                   : 'bg-muted/80 text-foreground rounded-[20px] rounded-bl-md'
                               }`}
                             >
-                              {message.attachmentUrl && (
-                                <div className="mb-2 rounded-lg overflow-hidden">
-                                  {isImageFile(message.attachmentName || '') ? (
-                                    <img
-                                      src={message.attachmentUrl}
-                                      alt={message.attachmentName}
-                                      className="max-w-[200px] max-h-[200px] object-cover rounded-lg"
-                                    />
-                                  ) : (
-                                    <a
-                                      href={message.attachmentUrl}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className={`flex items-center gap-2 p-2 rounded-lg ${
-                                        isSent ? 'bg-accent-foreground/10' : 'bg-background/50'
-                                      } hover:opacity-80 transition-opacity`}
-                                    >
-                                      {isPdfFile(message.attachmentName || '') ? (
-                                        <FileText className="h-5 w-5" />
-                                      ) : (
-                                        <File className="h-5 w-5" />
-                                      )}
-                                      <div className="flex-1 min-w-0">
-                                        <p className="text-xs font-medium truncate">{message.attachmentName}</p>
-                                        {message.attachmentSize && (
-                                          <p className="text-[10px] opacity-70">{formatFileSize(message.attachmentSize)}</p>
-                                        )}
-                                      </div>
-                                      <Download className="h-4 w-4" />
-                                    </a>
-                                  )}
-                                </div>
-                              )}
                               <p className="text-[15px] leading-relaxed break-words">{isSent ? message.message : maskSensitiveContent(message.message)}</p>
                               <p className={`text-[11px] mt-1.5 ${
                                 isSent ? 'text-accent-foreground/60' : 'text-muted-foreground/60'
@@ -874,7 +757,7 @@ function EmployerChatPage() {
                     <div ref={messagesEndRef} />
                   </div>
                 </div>
-                <CardContent className="border-t pt-4 pb-4 bg-background/50">
+                <CardContent className="border-t pt-4 pb-4 bg-background">
                   {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-2xl text-sm text-muted-foreground">
                       <AlertCircle className="h-4 w-4 shrink-0" />
@@ -882,14 +765,6 @@ function EmployerChatPage() {
                     </div>
                   ) : (
                     <div className="flex gap-2 items-end">
-                      <FileUpload
-                        onFileSelect={setSelectedFile}
-                        onFileRemove={() => setSelectedFile(null)}
-                        selectedFile={selectedFile}
-                        accept="image/*,.pdf,.doc,.docx"
-                        maxSizeMB={5}
-                        disabled={uploading}
-                      />
                       <div className="flex-1 relative">
                         <Input
                           placeholder="Message..."
@@ -912,7 +787,7 @@ function EmployerChatPage() {
                         onClick={handleSendMessage} 
                         size="icon" 
                         className="h-11 w-11 rounded-full bg-accent hover:bg-accent/90 shadow-md hover:shadow-lg transition-all"
-                        disabled={!newMessage.trim() && !selectedFile}
+                        disabled={!newMessage.trim()}
                       >
                         <Send className="h-5 w-5" />
                       </Button>

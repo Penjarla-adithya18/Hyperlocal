@@ -16,6 +16,25 @@ Deno.serve(async (req: Request) => {
     if ('error' in auth) return auth.error
     const isAdmin = auth.user.role === 'admin'
 
+    // GET all profiles of a role (no userId) — employers can read public worker profiles
+    if (method === 'GET' && !userId && role) {
+      const table = role === 'worker' ? 'worker_profiles' : 'employer_profiles'
+      // Only employers and admins may list all worker profiles
+      if (role === 'worker' && auth.user.role !== 'employer' && !isAdmin) {
+        return errorResponse('Forbidden', 403)
+      }
+      const { data, error } = await supabase
+        .from(table)
+        .select('*')
+        .order('updated_at', { ascending: false })
+        .limit(500)
+      if (error) throw error
+      const profiles = (data || []).map((row: Record<string, unknown>) =>
+        isAdmin ? mapProfile(row, role) : mapPublicProfile(row, role)
+      )
+      return jsonResponse({ data: profiles })
+    }
+
     if (method === 'GET' && userId && role) {
       const table = role === 'worker' ? 'worker_profiles' : 'employer_profiles'
       const { data, error } = await supabase
@@ -126,9 +145,13 @@ function mapPublicProfile(row: Record<string, unknown>, role: 'worker' | 'employ
       userId: row.user_id,
       skills: row.skills || [],
       categories: row.categories || [],
+      availability: row.availability || undefined,
       experience: row.experience || undefined,
       location: row.location || undefined,
       bio: row.bio || undefined,
+      resumeUrl: row.resume_url || undefined,
+      resumeText: row.resume_text || undefined,
+      resumeParsed: row.resume_parsed || undefined,
     }
   }
   return {

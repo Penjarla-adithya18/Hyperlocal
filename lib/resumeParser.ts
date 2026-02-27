@@ -200,6 +200,36 @@ export async function extractTextFromFile(file: File): Promise<string> {
   try { return await file.text() } catch { return '' }
 }
 
+/**
+ * Extract raw text from a data URL (base64-encoded file) without any AI.
+ * Works for PDF, DOCX, and plain-text data URLs.
+ * Returns empty string on failure — safe to call speculatively.
+ */
+export async function extractTextFromDataUrl(dataUrl: string): Promise<string> {
+  try {
+    if (!dataUrl || !dataUrl.startsWith('data:')) return ''
+    const [header, base64] = dataUrl.split(',')
+    if (!base64) return ''
+    const mimeType = header.replace('data:', '').replace(/;base64$/, '') || 'application/octet-stream'
+
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+
+    // Determine file extension from MIME type
+    let ext = 'bin'
+    if (mimeType.includes('pdf')) ext = 'pdf'
+    else if (mimeType.includes('vnd.openxmlformats') || mimeType.includes('docx')) ext = 'docx'
+    else if (mimeType.includes('msword')) ext = 'doc'
+    else if (mimeType.includes('text')) ext = 'txt'
+
+    const file = new File([bytes], `resume.${ext}`, { type: mimeType })
+    return await extractTextFromFile(file)
+  } catch {
+    return ''
+  }
+}
+
 // ── Gemini prompt ────────────────────────────────────────────────────────────
 
 function buildResumePrompt(text: string): string {
@@ -331,10 +361,21 @@ Previous output:\n${raw.slice(0, 4000)}`
       p = JSON.parse(cleanedRetry)
     }
 
-    const techSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).technical) ? ((p.skills as Record<string, unknown>).technical as string[]).filter(Boolean) : []
-    const softSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).soft) ? ((p.skills as Record<string, unknown>).soft as string[]).filter(Boolean) : []
-    const domainSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).domain) ? ((p.skills as Record<string, unknown>).domain as string[]).filter(Boolean) : []
-    const toolSkills: string[] = Array.isArray(p.skills && (p.skills as Record<string, unknown>).tools) ? ((p.skills as Record<string, unknown>).tools as string[]).filter(Boolean) : []
+    const techSkills: string[] = []
+    const softSkills: string[] = []
+    const domainSkills: string[] = []
+    const toolSkills: string[] = []
+
+    if (Array.isArray(p.skills)) {
+      // LLM returned a flat array — treat everything as technical/generic skills
+      techSkills.push(...(p.skills as string[]).filter((s) => s && typeof s === 'string'))
+    } else if (p.skills && typeof p.skills === 'object') {
+      const s = p.skills as Record<string, unknown>
+      techSkills.push(...(Array.isArray(s.technical) ? (s.technical as string[]).filter(Boolean) : []))
+      softSkills.push(...(Array.isArray(s.soft) ? (s.soft as string[]).filter(Boolean) : []))
+      domainSkills.push(...(Array.isArray(s.domain) ? (s.domain as string[]).filter(Boolean) : []))
+      toolSkills.push(...(Array.isArray(s.tools) ? (s.tools as string[]).filter(Boolean) : []))
+    }
     const projectTech = ((p.projects as Array<{ technologies?: string[] }>) ?? []).flatMap((pr) => pr.technologies ?? [])
     const allSkills = [...new Set([...techSkills, ...softSkills, ...domainSkills, ...toolSkills, ...projectTech])].filter(Boolean)
 
