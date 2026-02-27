@@ -33,7 +33,6 @@ function SignupPageContent() {
   });
 
   const [otpSent, setOtpSent] = useState(false);
-  const [generatedOtp, setGeneratedOtp] = useState('');
   const [agreeToTerms, setAgreeToTerms] = useState(false);
 
   useEffect(() => {
@@ -58,14 +57,15 @@ function SignupPageContent() {
       const result = await sendOTP(formData.phoneNumber);
       if (result.success) {
         setOtpSent(true);
-        // Extract OTP from message (for demo purposes)
-        const otpMatch = result.message.match(/OTP is: (\d{6})/);
-        if (otpMatch) {
-          setGeneratedOtp(otpMatch[1]);
-        }
         toast({
           title: 'OTP Sent',
           description: result.message,
+        });
+      } else {
+        toast({
+          title: 'Failed to Send OTP',
+          description: result.message || 'Unable to send OTP right now. Please try again.',
+          variant: 'destructive',
         });
       }
     } catch (error) {
@@ -358,12 +358,6 @@ function SignupPageContent() {
                           className="relative block w-full appearance-none border-0 bg-transparent px-3 py-1 pl-10 text-gray-900 placeholder-gray-400 transition-colors focus:outline-none focus:ring-0 sm:text-lg dark:text-slate-100 dark:placeholder:text-slate-500"
                         />
                       </div>
-
-                      {generatedOtp && (
-                        <p className="text-xs text-gray-500 dark:text-slate-400">
-                          Demo OTP: <span className="font-mono font-bold text-emerald-500">{generatedOtp}</span>
-                        </p>
-                      )}
 
                       <button
                         onClick={handleVerifyOTP}

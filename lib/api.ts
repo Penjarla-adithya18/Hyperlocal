@@ -186,8 +186,15 @@ async function call<T>(
           await new Promise((r) => setTimeout(r, RETRY_BASE_MS * (attempt + 1)))
           continue
         }
-        const text = await res.text()
-        throw new Error(`Edge function ${fn} error ${res.status}: ${text}`)
+        const contentType = res.headers.get('content-type') || ''
+        let detail = ''
+        if (contentType.includes('application/json')) {
+          const body = (await res.json().catch(() => ({}))) as { message?: string; error?: string }
+          detail = body?.message || body?.error || ''
+        } else {
+          detail = await res.text()
+        }
+        throw new Error(`Edge function ${fn} error ${res.status}: ${detail || 'Request failed'}`)
       }
 
       return res.json() as Promise<T>

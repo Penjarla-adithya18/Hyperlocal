@@ -1,6 +1,6 @@
 ﻿'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import EmployerNav from '@/components/employer/EmployerNav'
 import { Button } from '@/components/ui/button'
@@ -30,10 +30,12 @@ const DURATION_PRESETS = [
   '2-3 days', '1 week', '2 weeks', '1 month', 'Ongoing',
 ]
 
+const POST_JOB_DRAFT_KEY = 'employer_post_job_draft_v1'
+
 export default function PostJobPage() {
   const router = useRouter()
   const { toast } = useToast()
-  const { user } = useAuth()
+  const { user, loading: authLoading } = useAuth()
   const [loading, setLoading] = useState(false)
   const [selectedSkills, setSelectedSkills] = useState<string[]>([])
   const [customSkill, setCustomSkill] = useState('')
@@ -48,13 +50,60 @@ export default function PostJobPage() {
     payAmount: '',
     payType: 'hourly' as 'hourly' | 'fixed',
     duration: '',
-    slots: 1,
+    slots: '1',
     experienceRequired: 'entry' as 'entry' | 'intermediate' | 'expert',
     startDate: '',
     requirements: '',
     benefits: '',
     escrowRequired: true
   })
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(POST_JOB_DRAFT_KEY)
+      if (!raw) return
+      const draft = JSON.parse(raw) as {
+        formData?: typeof formData
+        selectedSkills?: string[]
+        customSkill?: string
+      }
+      if (draft.formData) {
+        setFormData((prev) => ({ ...prev, ...draft.formData }))
+      }
+      if (Array.isArray(draft.selectedSkills)) {
+        setSelectedSkills(draft.selectedSkills)
+      }
+      if (typeof draft.customSkill === 'string') {
+        setCustomSkill(draft.customSkill)
+      }
+    } catch {
+      localStorage.removeItem(POST_JOB_DRAFT_KEY)
+    }
+  }, [])
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(
+        POST_JOB_DRAFT_KEY,
+        JSON.stringify({ formData, selectedSkills, customSkill })
+      )
+    } catch {
+      // Ignore quota/storage errors silently
+    }
+  }, [formData, selectedSkills, customSkill])
+
+  useEffect(() => {
+    if (authLoading) return
+    if (!user || user.role !== 'employer') {
+      router.replace('/login')
+    }
+  }, [authLoading, user, router])
+
+  const toSafeNumberInputValue = (value: unknown): string => {
+    if (typeof value === 'number') return Number.isFinite(value) ? String(value) : ''
+    if (typeof value === 'string') return value
+    return ''
+  }
 
   const handleAddSkill = (skill: string) => {
     if (!selectedSkills.includes(skill)) {
@@ -75,11 +124,39 @@ export default function PostJobPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    if (authLoading) {
+      toast({
+        title: 'Please wait',
+        description: 'Checking your session, please try again in a moment.',
+      })
+      return
+    }
+
+    const parsedPayAmount = Number.parseFloat(formData.payAmount)
+    if (!Number.isFinite(parsedPayAmount) || parsedPayAmount < 0) {
+      toast({
+        title: 'Invalid Pay Amount',
+        description: 'Please enter a valid amount.',
+        variant: 'destructive'
+      })
+      return
+    }
+
+    const parsedSlots = Number.parseInt(formData.slots, 10)
+    if (!Number.isFinite(parsedSlots) || parsedSlots < 1) {
+      toast({
+        title: 'Invalid Worker Count',
+        description: 'Please enter at least 1 worker needed.',
+        variant: 'destructive'
+      })
+      return
+    }
     
     if (!user || user.role !== 'employer') {
       toast({
         title: 'Error',
-        description: 'You must be logged in as an employer to post jobs',
+        description: 'Please login with your employer account to post jobs.',
         variant: 'destructive'
       })
       return
@@ -116,7 +193,8 @@ export default function PostJobPage() {
         ...formData,
         employerId: user.id,
         requiredSkills: selectedSkills,
-        payAmount: parseFloat(formData.payAmount),
+        slots: parsedSlots,
+        payAmount: parsedPayAmount,
         status: 'draft',
         paymentStatus: 'pending',
       })
@@ -126,11 +204,14 @@ export default function PostJobPage() {
         description: 'Complete escrow payment to make your job live.',
       })
 
+      localStorage.removeItem(POST_JOB_DRAFT_KEY)
+
       router.push(`/employer/payment/${newJob.id}`)
     } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to post job. Please try again.'
       toast({
         title: 'Error',
-        description: 'Failed to post job. Please try again.',
+        description: message,
         variant: 'destructive'
       })
     } finally {
@@ -141,6 +222,12 @@ export default function PostJobPage() {
   return (
     <div className="app-surface">
       <EmployerNav />
+
+      {authLoading ? (
+        <main className="container mx-auto px-4 py-8 pb-28 md:pb-8 max-w-4xl">
+          <p className="text-sm text-muted-foreground">Checking your account...</p>
+        </main>
+      ) : (
       
       <main className="container mx-auto px-4 py-6 md:py-8 pb-28 md:pb-8 max-w-4xl">
         <div className="mb-6 md:mb-8">
@@ -296,7 +383,7 @@ export default function PostJobPage() {
                       type="number"
                       className="pl-10"
                       placeholder="0"
-                      value={formData.payAmount}
+                      value={toSafeNumberInputValue(formData.payAmount)}
                       onChange={(e) => setFormData({ ...formData, payAmount: e.target.value })}
                       required
                       min="0"
@@ -327,8 +414,8 @@ export default function PostJobPage() {
                     id="slots"
                     type="number"
                     min="1"
-                    value={formData.slots}
-                    onChange={(e) => setFormData({ ...formData, slots: parseInt(e.target.value) })}
+                    value={toSafeNumberInputValue(formData.slots)}
+                    onChange={(e) => setFormData({ ...formData, slots: e.target.value.replace(/\D/g, '') })}
                     required
                   />
                 </div>
@@ -429,6 +516,7 @@ export default function PostJobPage() {
           </div>
         </form>
       </main>
+      )}
     </div>
   )
 }

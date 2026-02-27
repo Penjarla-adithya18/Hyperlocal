@@ -3,6 +3,18 @@ import * as React from 'react'
 import { cn } from '@/lib/utils'
 
 function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
+  const normalizedProps: React.ComponentProps<'input'> = {
+    ...props,
+    value:
+      typeof props.value === 'number' && Number.isNaN(props.value)
+        ? ''
+        : props.value,
+    defaultValue:
+      typeof props.defaultValue === 'number' && Number.isNaN(props.defaultValue)
+        ? ''
+        : props.defaultValue,
+  }
+
   return (
     <input
       type={type}
@@ -13,7 +25,7 @@ function Input({ className, type, ...props }: React.ComponentProps<'input'>) {
         'aria-invalid:ring-destructive/20 dark:aria-invalid:ring-destructive/40 aria-invalid:border-destructive',
         className,
       )}
-      {...props}
+      {...normalizedProps}
     />
   )
 }
