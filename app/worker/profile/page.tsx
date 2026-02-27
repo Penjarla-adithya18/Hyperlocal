@@ -11,7 +11,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
-import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp } from 'lucide-react';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { SkillAssessment, SkillResult } from '@/components/ui/skill-assessment';
 import { workerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { resetPassword, sendOTP, verifyOTP } from '@/lib/auth';
 import { WorkerProfile } from '@/lib/types';
@@ -69,6 +70,9 @@ export default function WorkerProfilePage() {
   const [displayOtp, setDisplayOtp] = useState<string | null>(null);
   const [phoneLoading, setPhoneLoading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [assessmentOpen, setAssessmentOpen] = useState(false);
+  const [verifiedSkills, setVerifiedSkills] = useState<string[]>([]);
+  const [pendingSkills, setPendingSkills] = useState<string[]>([]);
 
   useEffect(() => {
     if (!user || user.role !== 'worker') {
@@ -103,6 +107,10 @@ export default function WorkerProfilePage() {
           resumeUrl: workerProfile.resumeUrl || '',
           resumeFileName: workerProfile.resumeUrl ? 'Resume uploaded' : '',
         });
+        // Existing profile skills are already verified
+        const existingSkills = workerProfile.skills || [];
+        const storedVerified = JSON.parse(localStorage.getItem(`verifiedSkills_${user.id}`) || '[]') as string[];
+        setVerifiedSkills([...new Set([...existingSkills, ...storedVerified])]);
         // Restore resume data if available
         if (workerProfile.resumeText) {
           setResumeRawText(workerProfile.resumeText);
@@ -278,6 +286,12 @@ export default function WorkerProfilePage() {
 
   const removeSkill = (skill: string) => {
     setFormData(prev => ({ ...prev, skills: prev.skills.filter((s) => s !== skill) }));
+    // Also remove from verified list so re-adding requires re-assessment
+    setVerifiedSkills(prev => prev.filter(s => s !== skill));
+    if (user) {
+      const updated = verifiedSkills.filter(s => s !== skill);
+      localStorage.setItem(`verifiedSkills_${user.id}`, JSON.stringify(updated));
+    }
   };
 
   const toggleCategory = (category: string) => {
@@ -379,26 +393,53 @@ export default function WorkerProfilePage() {
     router.push('/login');
   };
 
-  const handleSave = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleAssessmentComplete = (results: SkillResult[]) => {
+    const passed = results.filter(r => r.passed).map(r => r.skill);
+    const failed = results.filter(r => !r.passed).map(r => r.skill);
 
-    if (formData.categories.length === 0) {
-      toast({
-        title: 'Categories Required',
-        description: 'Please select at least one job category',
-        variant: 'destructive',
-      });
-      return;
+    // Update verified skills list
+    const newVerified = [...new Set([...verifiedSkills, ...passed])];
+    setVerifiedSkills(newVerified);
+    if (user) {
+      localStorage.setItem(`verifiedSkills_${user.id}`, JSON.stringify(newVerified));
     }
 
+    // Remove failed skills from formData
+    if (failed.length > 0) {
+      setFormData(prev => ({
+        ...prev,
+        skills: prev.skills.filter(s => !failed.includes(s)),
+      }));
+      toast({
+        title: 'Some skills removed',
+        description: `${failed.join(', ')} removed because the assessment was not passed.`,
+        variant: 'destructive',
+      });
+    }
+
+    if (passed.length > 0) {
+      toast({
+        title: 'Skills Verified!',
+        description: `${passed.join(', ')} verified successfully.`,
+      });
+    }
+
+    setAssessmentOpen(false);
+    setPendingSkills([]);
+
+    // Now proceed with actual save using only verified skills
+    doSaveProfile(formData.skills.filter(s => !failed.includes(s)));
+  };
+
+  const doSaveProfile = async (skillsToSave?: string[]) => {
+    const finalSkills = skillsToSave ?? formData.skills;
     setSaving(true);
     try {
-      // Compute profile completeness using shared utility
-      const isComplete = isWorkerProfileComplete(formData);
+      const isComplete = isWorkerProfileComplete({ ...formData, skills: finalSkills });
 
       const profileData: WorkerProfile = {
         userId: user!.id,
-        skills: formData.skills,
+        skills: finalSkills,
         availability: formData.availability,
         experience: formData.experience,
         categories: formData.categories,
@@ -427,7 +468,6 @@ export default function WorkerProfilePage() {
       await userOps.update(user!.id, { profileCompleted: !!isComplete });
       updateUser({ profileCompleted: !!isComplete });
 
-      // After successful save, clear the extracted resume data
       setExtractedFromResume(null);
       setResumeRawText('');
       setSelectedExtracted(new Set());
@@ -448,6 +488,32 @@ export default function WorkerProfilePage() {
       setSaving(false);
     }
   };
+
+  const handleSave = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    if (formData.categories.length === 0) {
+      toast({
+        title: 'Categories Required',
+        description: 'Please select at least one job category',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    // Check for unverified skills
+    const unverified = formData.skills.filter(s => !verifiedSkills.includes(s));
+    if (unverified.length > 0) {
+      setPendingSkills(unverified);
+      setAssessmentOpen(true);
+      return;
+    }
+
+    // All skills verified — save directly
+    doSaveProfile();
+  };
+
+
 
   // -- Live profile completeness: must be above early-return to satisfy Rules of Hooks --
   const profileCompleteness = useMemo(
@@ -952,11 +1018,23 @@ export default function WorkerProfilePage() {
                     <Plus className="w-4 h-4" />
                   </Button>
                 </div>
+                <p className="text-xs text-muted-foreground flex items-center gap-1">
+                  <Shield className="w-3 h-3" />
+                  New skills require passing an AI assessment (60%) before saving.
+                </p>
                 {formData.skills.length > 0 && (
                   <div className="flex flex-wrap gap-2 mt-2">
                     {formData.skills.map((skill) => (
-                      <Badge key={skill} variant="secondary" className="gap-1 pr-1">
+                      <Badge key={skill} variant={verifiedSkills.includes(skill) ? 'default' : 'secondary'} className={`gap-1 pr-1 ${verifiedSkills.includes(skill) ? 'bg-green-600 hover:bg-green-700 text-white' : 'border-dashed border-amber-400'}`}>
+                        {verifiedSkills.includes(skill) ? (
+                          <CheckCircle2 className="w-3 h-3 mr-0.5" />
+                        ) : (
+                          <AlertTriangle className="w-3 h-3 mr-0.5 text-amber-500" />
+                        )}
                         {skill}
+                        {verifiedSkills.includes(skill) && (
+                          <span className="text-[10px] ml-1 opacity-80">Verified</span>
+                        )}
                         <button
                           type="button"
                           className="ml-1 rounded-full p-0.5 hover:bg-destructive/20 focus:outline-none cursor-pointer"
@@ -1019,9 +1097,10 @@ export default function WorkerProfilePage() {
               {t('common.cancel')}
             </Button>
           </div>
+        </form>
 
-          {/* Account & Security */}
-          <Card className="border-destructive/40 p-6 transition-all duration-200 hover:shadow-md">
+          {/* Account & Security — outside the profile form to prevent interference */}
+          <Card className="border-destructive/40 p-6 transition-all duration-200 hover:shadow-md mt-6">
             <div className="mb-6 space-y-6 border-b border-destructive/20 pb-6">
               <div>
                 <h2 className="text-xl font-semibold mb-2">Language & Region</h2>
@@ -1055,22 +1134,21 @@ export default function WorkerProfilePage() {
                     placeholder={t('settings.currentPw')}
                     value={pwForm.current}
                     onChange={(e) => setPwForm((p) => ({ ...p, current: e.target.value }))}
-                    required
+                    autoComplete="off"
                   />
                   <Input
                     type="password"
                     placeholder={t('settings.newPw')}
                     value={pwForm.newPw}
                     onChange={(e) => setPwForm((p) => ({ ...p, newPw: e.target.value }))}
-                    required
-                    minLength={8}
+                    autoComplete="new-password"
                   />
                   <Input
                     type="password"
                     placeholder={t('settings.confirmPw')}
                     value={pwForm.confirm}
                     onChange={(e) => setPwForm((p) => ({ ...p, confirm: e.target.value }))}
-                    required
+                    autoComplete="new-password"
                   />
                   <Button type="button" onClick={handleChangePassword} disabled={pwLoading}>
                     {pwLoading ? 'Updating...' : t('settings.updatePw')}
@@ -1088,7 +1166,6 @@ export default function WorkerProfilePage() {
                       value={phoneForm.phone}
                       onChange={(e) => setPhoneForm((p) => ({ ...p, phone: e.target.value }))}
                       placeholder="9876543210"
-                      required
                     />
                     <Button type="button" variant="outline" onClick={handleSendOtp} disabled={phoneLoading}>
                       {otpSent ? 'Resend OTP' : 'Send OTP'}
@@ -1103,7 +1180,6 @@ export default function WorkerProfilePage() {
                         value={phoneForm.otp}
                         onChange={(e) => setPhoneForm((p) => ({ ...p, otp: e.target.value }))}
                         placeholder="123456"
-                        required
                       />
                       <Button type="button" onClick={handleVerifyAndUpdatePhone} disabled={phoneLoading}>
                         {phoneLoading ? 'Verifying...' : 'Verify & Update'}
@@ -1132,7 +1208,6 @@ export default function WorkerProfilePage() {
               {deletingAccount ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" />{t('common.loading')}</> : t('profile.deleteAccount')}
             </Button>
           </Card>
-        </form>
 
         <AlertDialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
           <AlertDialogContent>
@@ -1155,6 +1230,16 @@ export default function WorkerProfilePage() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+
+        {/* Skill Assessment Dialog */}
+        <SkillAssessment
+          open={assessmentOpen}
+          skills={pendingSkills}
+          verifiedSkills={verifiedSkills}
+          passThreshold={60}
+          onComplete={handleAssessmentComplete}
+          onCancel={() => { setAssessmentOpen(false); setPendingSkills([]); }}
+        />
       </main>
     </div>
   );
