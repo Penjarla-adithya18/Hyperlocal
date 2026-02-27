@@ -21,9 +21,16 @@ import {
 
 // ─── Edge-function caller ──────────────────────────────────────────────────
 
+const SUPABASE_FALLBACK_URL = 'https://yecelpnlaruavifzxunw.supabase.co'
+
 function getEnv() {
+  // Use env var when available; fall back to hardcoded URL so that a
+  // relative-path fetch (/functions/v1/…) is avoided — the relative path
+  // would resolve against localhost:3000 and hit the Next.js server instead
+  // of Supabase. The next.config.mjs rewrite also proxies /functions/v1/*
+  // as a secondary safety net.
   return {
-    url: process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+    url: process.env.NEXT_PUBLIC_SUPABASE_URL || SUPABASE_FALLBACK_URL,
     key: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? '',
   }
 }
@@ -37,8 +44,20 @@ let sessionRefreshInFlight: Promise<void> | null = null
  * Timestamp (Date.now()) of when the session token was last set.
  * Used to prevent a 401 handler from clearing a token that was
  * JUST obtained by a concurrent login/register call.
+ *
+ * Initialized to Date.now() when a pre-existing token is found in localStorage
+ * (e.g. after a hard refresh / Ctrl+Shift+R). Without this, _sessionSetAt stays
+ * 0 on every page load, making tokenAge always huge — any 401 (even a transient
+ * one during startup) would immediately clear the session and log the user out.
  */
-let _sessionSetAt = 0
+let _sessionSetAt: number = (() => {
+  try {
+    if (typeof window !== 'undefined' && localStorage.getItem(SESSION_TOKEN_KEY)) {
+      return Date.now()
+    }
+  } catch { /* storage may be blocked in private-browsing */ }
+  return 0
+})()
 
 /** Pending redirect timer — stored so it can be cancelled if a new login succeeds */
 let _pendingRedirectTimer: ReturnType<typeof setTimeout> | null = null
@@ -152,7 +171,7 @@ async function refreshSessionIfNeeded(): Promise<void> {
 }
 
 /** Default request timeout in milliseconds */
-const REQUEST_TIMEOUT_MS = 8_000 // 8s — fast enough to detect outages without blocking long-polls
+const REQUEST_TIMEOUT_MS = 20_000 // 20s — Supabase edge functions can cold-start in 10-15s
 /** Max retries on network / 5xx errors */
 const MAX_RETRIES = 1
 /** Base delay between retries (doubles each attempt) */

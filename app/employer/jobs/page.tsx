@@ -87,7 +87,9 @@ export default function EmployerJobsPage() {
               </Badge>
               {job.status !== 'draft' && (
                 <span className="text-xs flex items-center gap-1">
-                  {job.paymentStatus === 'locked' ? (
+                  {job.escrowRequired === false ? (
+                    <><AlertCircle className="w-3 h-3 text-slate-400" /><span className="text-slate-500">No Escrow</span></>
+                  ) : job.paymentStatus === 'locked' ? (
                     <><Lock className="w-3 h-3 text-green-500" /><span className="text-green-600">Escrow Secured</span></>
                   ) : (
                     <><AlertCircle className="w-3 h-3 text-amber-500" /><span className="text-amber-600">Escrow Pending</span></>
@@ -169,20 +171,20 @@ export default function EmployerJobsPage() {
     return (
       <div className="app-surface">
         <EmployerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-6">
-          <div className="flex justify-between items-center">
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
+          <div className="flex justify-between items-center mb-8">
             <div className="space-y-2">
               <Skeleton className="h-8 w-48" />
               <Skeleton className="h-4 w-72" />
             </div>
-            <Skeleton className="h-10 w-36 rounded-md" />
+            <Skeleton className="h-10 w-36" />
           </div>
-          <div className="flex gap-2 mb-4">
+          <div className="flex gap-2 mb-6">
             <Skeleton className="h-9 w-24 rounded-md" />
             <Skeleton className="h-9 w-24 rounded-md" />
             <Skeleton className="h-9 w-24 rounded-md" />
           </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid md:grid-cols-2 gap-6">
             {Array.from({ length: 4 }).map((_, i) => (
               <Card key={i}>
                 <CardHeader>

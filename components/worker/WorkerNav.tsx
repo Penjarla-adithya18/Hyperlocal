@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Briefcase, Home, Search, MessageSquare, User, LogOut, Wallet, Target, Menu } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
 import { useState } from 'react';
@@ -21,18 +22,19 @@ interface NavItem {
 export function WorkerNav() {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const { t } = useI18n();
   const [showMenu, setShowMenu] = useState(false);
 
   const primaryNavItems: NavItem[] = [
-    { href: '/worker/dashboard', label: 'Dashboard', icon: Home, mobileLabel: 'Home', badge: undefined },
-    { href: '/worker/jobs', label: 'Find Jobs', icon: Search, mobileLabel: 'Jobs', badge: undefined },
-    { href: '/worker/applications', label: 'Applications', icon: Briefcase, mobileLabel: 'Apps', badge: undefined },
-    { href: '/worker/chat', label: 'Messages', icon: MessageSquare, badge: 0, mobileLabel: 'Chat' },
+    { href: '/worker/dashboard', label: t('nav.dashboard'), icon: Home, mobileLabel: 'Home', badge: undefined },
+    { href: '/worker/jobs', label: t('nav.worker.findJobs'), icon: Search, mobileLabel: 'Jobs', badge: undefined },
+    { href: '/worker/applications', label: t('nav.worker.myApps'), icon: Briefcase, mobileLabel: 'Apps', badge: undefined },
+    { href: '/worker/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0, mobileLabel: 'Chat' },
   ];
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge'>[] = [
-    { href: '/worker/earnings', label: 'Earnings', icon: Wallet },
-    { href: '/worker/skill-gap', label: 'Skill Gap', icon: Target },
+    { href: '/worker/earnings', label: t('nav.worker.earnings'), icon: Wallet },
+    { href: '/worker/skill-gap', label: t('nav.worker.skillGap'), icon: Target },
   ];
 
   return (
@@ -153,7 +155,7 @@ export function WorkerNav() {
               <Link href="/worker/profile" prefetch={false} onClick={() => setShowMenu(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
                   <User className="w-4 h-4" />
-                  Profile
+                  {t('nav.profile')}
                 </Button>
               </Link>
               <div className="border-t pt-2">

@@ -6,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Briefcase, Home, PlusCircle, MessageSquare, LogOut, Sparkles, Menu, User } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { useI18n } from '@/contexts/I18nContext';
 import { Badge } from '@/components/ui/badge';
 import { NotificationBell } from '@/components/ui/notification-bell';
 import { useEffect, useState } from 'react';
@@ -22,6 +23,7 @@ interface NavItem {
 export function EmployerNav() {
   const pathname = usePathname();
   const { logout } = useAuth();
+  const { t } = useI18n();
   const [showMenu, setShowMenu] = useState(false);
   const [mounted, setMounted] = useState(false);
 
@@ -30,14 +32,15 @@ export function EmployerNav() {
   }, []);
 
   const primaryNavItems: NavItem[] = [
-    { href: '/employer/dashboard', label: 'Dashboard', icon: Home, mobileLabel: 'Home', badge: undefined, highlight: false },
-    { href: '/employer/jobs', label: 'My Jobs', icon: Briefcase, mobileLabel: 'Jobs', badge: undefined, highlight: false },
-    { href: '/employer/jobs/post', label: 'Post Job', icon: PlusCircle, mobileLabel: 'Post', highlight: true, badge: undefined },
-    { href: '/employer/chat', label: 'Messages', icon: MessageSquare, badge: 0, mobileLabel: 'Chat', highlight: false },
-    { href: '/employer/resume-search', label: 'AI Search', icon: Sparkles, mobileLabel: 'AI', badge: undefined, highlight: false },
+    { href: '/employer/dashboard', label: t('nav.dashboard'), icon: Home, mobileLabel: 'Home', badge: undefined, highlight: false },
+    { href: '/employer/jobs', label: t('nav.employer.myJobs'), icon: Briefcase, mobileLabel: 'Jobs', badge: undefined, highlight: false },
+    { href: '/employer/jobs/post', label: t('nav.employer.postJob'), icon: PlusCircle, mobileLabel: 'Post', highlight: true, badge: undefined },
+    { href: '/employer/chat', label: t('nav.messages'), icon: MessageSquare, badge: 0, mobileLabel: 'Chat', highlight: false },
+    { href: '/employer/resume-search', label: t('nav.employer.aiSearch'), icon: Sparkles, mobileLabel: 'AI', badge: undefined, highlight: false },
   ];
 
   const secondaryNavItems: Omit<NavItem, 'mobileLabel' | 'badge' | 'highlight'>[] = [
+    { href: '/employer/profile', label: t('nav.profile'), icon: User },
   ];
 
   if (!mounted) {
@@ -167,7 +170,7 @@ export function EmployerNav() {
               <Link href="/employer/profile" prefetch={false} onClick={() => setShowMenu(false)}>
                 <Button variant="ghost" className="w-full justify-start gap-3 touch-target">
                   <User className="w-4 h-4" />
-                  Profile
+                  {t('nav.profile')}
                 </Button>
               </Link>
               <div className="border-t pt-2">

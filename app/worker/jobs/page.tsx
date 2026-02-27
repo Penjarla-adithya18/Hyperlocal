@@ -13,7 +13,7 @@ import { useAuth } from '@/contexts/AuthContext'
 import { applicationOps, jobOps, workerProfileOps } from '@/lib/api'
 import { getRecommendedJobs, getBasicRecommendations, matchJobs } from '@/lib/aiMatching'
 import { Application, Job, User, WorkerProfile } from '@/lib/types'
-import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb } from 'lucide-react'
+import { Briefcase, MapPin, Clock, IndianRupee, Sparkles, Search, Filter, TrendingUp, Brain, Target, Route, Lightbulb, Shield } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
 import { Slider } from '@/components/ui/slider'
@@ -51,11 +51,17 @@ export default function WorkerJobsPage() {
 
   const loadJobs = async () => {
     try {
-      const [allJobs, profile, myApplications] = await Promise.all([
+      const [jobsResult, profileResult, appsResult] = await Promise.allSettled([
         jobOps.getAll(),
         user ? workerProfileOps.findByUserId(user.id) : Promise.resolve(null),
         user ? applicationOps.findByWorkerId(user.id) : Promise.resolve([]),
       ])
+
+      const allJobs = jobsResult.status === 'fulfilled' ? jobsResult.value : []
+      const profile = profileResult.status === 'fulfilled' ? profileResult.value : null
+      const myApplications = appsResult.status === 'fulfilled' ? (appsResult.value ?? []) : []
+
+      if (jobsResult.status === 'rejected') console.error('Failed to load jobs:', jobsResult.reason)
 
       const activeJobs = allJobs.filter((j) => j.status === 'active')
       setJobs(activeJobs)
@@ -126,14 +132,29 @@ export default function WorkerJobsPage() {
     return matchesSearch && matchesCategory && matchesLocation && matchesPay && matchesExperience && matchesJobMode
   }), [jobs, searchQuery, categoryFilter, locationFilter, payRange, experienceFilter, jobModeFilter])
 
+  // Escrow-backed jobs get a small boost (+5) in effective score so they rank higher.
+  const ESCROW_BOOST = 5
+  const effectiveScore = (m: { job: Job; score: number }) =>
+    m.score + (m.job.escrowRequired !== false ? ESCROW_BOOST : 0)
+
   const filteredMatchedJobs = useMemo(() => {
     const allowedJobIds = new Set(filteredJobs.map((job) => job.id))
     return matchedJobs
       .filter((match) => allowedJobIds.has(match.job.id))
-      .sort((a, b) => b.score - a.score)
+      .sort((a, b) => effectiveScore(b) - effectiveScore(a))
   }, [matchedJobs, filteredJobs])
 
   const topFiveMatches = useMemo(() => filteredMatchedJobs.slice(0, 5), [filteredMatchedJobs])
+
+  // For "All Jobs" tab, sort escrow-backed jobs before non-escrow, then by recency
+  const sortedFilteredJobs = useMemo(() => {
+    return [...filteredJobs].sort((a, b) => {
+      const aEscrow = a.escrowRequired !== false ? 1 : 0
+      const bEscrow = b.escrowRequired !== false ? 1 : 0
+      if (aEscrow !== bEscrow) return bEscrow - aEscrow
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+    })
+  }, [filteredJobs])
 
   const uniqueCategories = useMemo(() => {
     const categories = Array.from(new Set(jobs.map((job) => job.category).filter(Boolean)))
@@ -263,9 +284,15 @@ export default function WorkerJobsPage() {
               <Clock className="h-4 w-4 text-muted-foreground" />
               <span>{job.duration}</span>
             </div>
-            <div className="flex items-center gap-2 text-sm col-span-1 sm:col-span-2">
+            <div className="flex items-center gap-2 text-sm">
               <Briefcase className="h-4 w-4 text-muted-foreground" />
               <span className="capitalize">{job.experienceRequired}</span>
+            </div>
+            <div className="flex items-center gap-2 text-sm">
+              <Shield className={`h-4 w-4 ${job.escrowRequired !== false ? 'text-green-500' : 'text-slate-400'}`} />
+              <span className={job.escrowRequired !== false ? 'text-green-600 dark:text-green-400' : 'text-slate-500'}>
+                {job.escrowRequired !== false ? 'Payment Secured' : 'No Escrow'}
+              </span>
             </div>
           </div>
 
@@ -543,7 +570,7 @@ export default function WorkerJobsPage() {
           </TabsContent>
 
           <TabsContent value="all">
-            {filteredJobs.length === 0 ? (
+            {sortedFilteredJobs.length === 0 ? (
               <Card>
                 <CardContent className="py-12 text-center">
                   <Briefcase className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
@@ -555,7 +582,7 @@ export default function WorkerJobsPage() {
               </Card>
             ) : (
               <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {filteredJobs.map((job) => {
+                {sortedFilteredJobs.map((job) => {
                   const match = matchedJobs.find(m => m.job.id === job.id)
                   return <JobCard key={job.id} job={job} matchScore={match?.score} />
                 })}

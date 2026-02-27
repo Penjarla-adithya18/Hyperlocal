@@ -358,18 +358,26 @@ export default function PostJobPage() {
         requiredSkills: selectedSkills,
         slots: parsedSlots,
         payAmount: parsedPayAmount,
-        status: 'draft',
-        paymentStatus: 'pending',
-      })
-
-      toast({
-        title: 'Job Created!',
-        description: 'Complete escrow payment to make your job live.',
+        // Escrow jobs start as draft (need payment) — non-escrow go active immediately
+        status: formData.escrowRequired ? 'draft' : 'active',
+        paymentStatus: formData.escrowRequired ? 'pending' : 'not_required',
       })
 
       localStorage.removeItem(POST_JOB_DRAFT_KEY)
 
-      router.push(`/employer/payment/${newJob.id}`)
+      if (formData.escrowRequired) {
+        toast({
+          title: 'Job Created!',
+          description: 'Complete escrow payment to make your job live.',
+        })
+        router.push(`/employer/payment/${newJob.id}`)
+      } else {
+        toast({
+          title: 'Job Posted!',
+          description: 'Your job is now live. Note: jobs without escrow receive lower visibility to workers.',
+        })
+        router.push('/employer/jobs')
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Failed to post job. Please try again.'
       toast({
@@ -790,17 +798,24 @@ export default function PostJobPage() {
                 />
               </div>
 
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="escrow"
-                  checked={formData.escrowRequired}
-                  onCheckedChange={(checked) => 
-                    setFormData({ ...formData, escrowRequired: checked as boolean })
-                  }
-                />
-                <Label htmlFor="escrow" className="text-sm font-normal cursor-pointer">
-                  Use escrow payment system (Recommended for secure payments)
-                </Label>
+              <div className="space-y-2">
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="escrow"
+                    checked={formData.escrowRequired}
+                    onCheckedChange={(checked) => 
+                      setFormData({ ...formData, escrowRequired: checked as boolean })
+                    }
+                  />
+                  <Label htmlFor="escrow" className="text-sm font-normal cursor-pointer">
+                    Use escrow payment system (Recommended for secure payments)
+                  </Label>
+                </div>
+                {!formData.escrowRequired && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 ml-6">
+                    ⚠ Jobs without escrow protection are shown with lower priority to workers. Escrow builds trust and attracts more applicants.
+                  </p>
+                )}
               </div>
             </CardContent>
           </Card>
