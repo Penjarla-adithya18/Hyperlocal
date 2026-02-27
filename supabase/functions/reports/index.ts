@@ -44,6 +44,75 @@ Deno.serve(async (req: Request) => {
       return jsonResponse({ data: mapReport(data) })
     }
 
+    // ── Penalize: deduct trust score + resolve the report ────────────────────
+    if (method === 'PATCH' && id && url.searchParams.get('action') === 'penalize') {
+      if (!isAdmin) return errorResponse('Forbidden', 403)
+
+      const body = await req.json()
+      const penalty = Number(body.penalty ?? 0)
+      const resolutionNote = body.resolution as string || `Trust score penalized by ${penalty} points by admin.`
+
+      // Get the report to find the reported user
+      const { data: report, error: reportErr } = await supabase
+        .from('reports')
+        .select('reported_id, reported_user_id')
+        .eq('id', id)
+        .maybeSingle()
+      if (reportErr) throw reportErr
+      if (!report) return errorResponse('Report not found', 404)
+
+      const reportedUserId: string | null = (report.reported_id || report.reported_user_id) as string | null
+      if (!reportedUserId) return errorResponse('No reported user on this report', 400)
+
+      // Get current trust score (default to 50 if missing)
+      const { data: ts } = await supabase
+        .from('trust_scores')
+        .select('score, complaint_count')
+        .eq('user_id', reportedUserId)
+        .maybeSingle()
+
+      const currentScore = ts ? Number(ts.score) : 50
+      const currentComplaints = ts ? Number(ts.complaint_count) : 0
+      const newScore = penalty >= 9999 ? 0 : Math.max(0, currentScore - penalty)
+      const newLevel = newScore >= 80 ? 'trusted' : newScore >= 60 ? 'active' : 'basic'
+      const newComplaintCount = currentComplaints + 1
+
+      // Upsert trust_scores
+      await supabase.from('trust_scores').upsert({
+        user_id: reportedUserId,
+        score: newScore,
+        level: newLevel,
+        complaint_count: newComplaintCount,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'user_id' })
+
+      // Update users table trust columns
+      await supabase
+        .from('users')
+        .update({ trust_score: newScore, trust_level: newLevel })
+        .eq('id', reportedUserId)
+
+      // Resolve the report
+      await supabase.from('reports').update({
+        status: 'resolved',
+        resolution: resolutionNote,
+        resolved_at: new Date().toISOString(),
+      }).eq('id', id)
+
+      // Notify the penalized user
+      const penaltyLabel = penalty >= 9999 ? 'Your account has been suspended due to a serious violation.' : `Your trust score has been reduced by ${penalty} points due to a reported violation.`
+      await supabase.from('notifications').insert({
+        user_id: reportedUserId,
+        type: 'system',
+        title: penalty >= 9999 ? 'Account Suspended' : 'Trust Score Penalty',
+        message: `${penaltyLabel} New score: ${newScore}/100. If you believe this is an error, contact support.`,
+        is_read: false,
+        link: '/settings',
+      })
+
+      return jsonResponse({ data: { newScore, newLevel, newComplaintCount } })
+    }
+
     if (method === 'PATCH' && id) {
       if (!isAdmin) return errorResponse('Forbidden', 403)
 

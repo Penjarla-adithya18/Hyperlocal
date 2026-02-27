@@ -261,8 +261,6 @@ async function call<T>(
           // or transient edge auth issues.
           const currentToken = getSessionToken()
           const tokenUsed = latestToken || null
-
-          // If token rotated while this request was in-flight, retry once with new token
           if (currentToken && tokenUsed && currentToken !== tokenUsed && attempt < MAX_RETRIES) {
             continue
           }
@@ -285,6 +283,9 @@ async function call<T>(
             if (storedToken && tokenAge > 5000) {
               setSessionToken(null)
               localStorage.removeItem('currentUser')
+              localStorage.removeItem(SESSION_TOKEN_KEY)
+              localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
+              localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
               // Schedule a redirect but make it cancellable — if a login
               // succeeds before the timer fires, setSessionToken cancels it.
               if (!_pendingRedirectTimer) {
@@ -300,6 +301,9 @@ async function call<T>(
           } else if (!currentToken && typeof window !== 'undefined') {
             // If there is no session token at all, clear stale local user cache.
             localStorage.removeItem('currentUser')
+            localStorage.removeItem(SESSION_TOKEN_KEY)
+            localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
+            localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
           }
           throw new Error(`Edge function ${fn} error 401: ${text}`)
         }
@@ -546,6 +550,10 @@ export const userOps = {
     if (res.data) upsertUserCache(res.data)
     return res.data
   },
+  delete: async (id: string): Promise<void> => {
+    await call<{ success: boolean }>('users', 'DELETE', { id })
+    _usersCache = _usersCache.filter((u) => u.id !== id)
+  },
 }
 
 // ───Worker Profiles ───────────────────────────────────────────────────────
@@ -676,6 +684,32 @@ export const reportOps = {
     const res = await call<R<Report | null>>('reports', 'PATCH', { id }, updates)
     return res.data
   },
+  /** Admin: deduct trust score, increment complaint count, resolve report, notify user. */
+  penalize: async (
+    reportId: string,
+    penalty: number,
+    resolution: string
+  ): Promise<{ newScore: number; newLevel: string; newComplaintCount: number } | null> => {
+    // Call through the Next.js proxy route which forwards to the edge function.
+    // The edge function uses service-role key (bypasses RLS) and validates
+    // the session token via our custom user_sessions table.
+    const token = getSessionToken()
+    const { key } = getEnv()
+    const res = await fetch('/api/admin/penalize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token ?? key}`,
+      },
+      body: JSON.stringify({ reportId, penalty, resolution }),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(body.error ?? `Penalize failed: ${res.status}`)
+    }
+    const json = (await res.json()) as { data?: { newScore: number; newLevel: string; newComplaintCount: number } }
+    return json.data ?? null
+  },
 }
 
 // ─── Notifications ───────────────────────────────────────────────────────────
@@ -696,6 +730,21 @@ export const notificationOps = {
   },
   markAllRead: async (): Promise<void> => {
     await call<R<{ ok: boolean }>>('notifications', 'DELETE')
+  },
+}
+
+// ─── Push Notifications ──────────────────────────────────────────────────────
+
+export const pushOps = {
+  /** Save a Web Push subscription for the current user. */
+  subscribe: async (endpoint: string, p256dh: string, auth: string): Promise<boolean> => {
+    await call<R<{ ok: boolean }>>('push', 'POST', { action: 'subscribe' }, { endpoint, p256dh, auth })
+    return true
+  },
+  /** Remove all push subscriptions for the current user. */
+  unsubscribe: async (): Promise<boolean> => {
+    await call<R<{ ok: boolean }>>('push', 'DELETE', { action: 'unsubscribe' })
+    return true
   },
 }
 
@@ -752,6 +801,11 @@ export const chatOps = {
     })
     return res.data
   },
+  /** Start a direct conversation between two users (e.g. admin ↔ user). */
+  startDirectConversation: async (participants: string[]): Promise<ChatConversation> => {
+    const res = await call<R<ChatConversation>>('chat', 'POST', {}, { type: 'conversation', participants })
+    return res.data
+  },
   /** Find conversation by applicationId — sends param to server for direct lookup
    *  instead of fetching all conversations and filtering client-side. */
   findSessionByApplicationId: async (applicationId: string) => {
@@ -801,20 +855,52 @@ export interface Rating {
   createdAt: string
 }
 
+export interface RatingResult {
+  rating: Rating
+  trustScore: { newScore: number; newLevel: string; averageRating: number; totalRatings: number }
+}
+
 export const ratingOps = {
+  /** Submit a rating. Recalculates trust score server-side. */
   create: async (payload: {
     jobId: string
     applicationId?: string
     toUserId: string
     rating: number
     feedback?: string
-  }): Promise<Rating> => {
-    const res = await call<R<Rating>>('ratings', 'POST', {}, payload)
-    return res.data
+  }): Promise<RatingResult> => {
+    const token = getSessionToken()
+    const { key } = getEnv()
+    const res = await fetch('/api/ratings', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token ?? key}`,
+      },
+      body: JSON.stringify(payload),
+    })
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string }
+      throw new Error(body.error ?? `Rating submission failed: ${res.status}`)
+    }
+    const json = (await res.json()) as { data: RatingResult }
+    return json.data
   },
+
+  /** Get all ratings received by a user (for profile display). Public — no auth required. */
   getByUser: async (userId: string): Promise<Rating[]> => {
-    const res = await call<R<Rating[]>>('ratings', 'GET', { userId })
-    return res.data || []
+    const res = await fetch(`/api/ratings?userId=${encodeURIComponent(userId)}`)
+    if (!res.ok) return []
+    const json = (await res.json()) as { data?: Rating[] }
+    return json.data ?? []
+  },
+
+  /** Get all ratings sent by a user (to check what they've already rated). Public — no auth required. */
+  getSentByUser: async (fromUserId: string): Promise<Rating[]> => {
+    const res = await fetch(`/api/ratings?fromUserId=${encodeURIComponent(fromUserId)}`)
+    if (!res.ok) return []
+    const json = (await res.json()) as { data?: Rating[] }
+    return json.data ?? []
   },
 }
 

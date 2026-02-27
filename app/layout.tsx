@@ -5,6 +5,7 @@ import { AuthProvider } from '@/contexts/AuthContext'
 import { I18nProvider } from '@/contexts/I18nContext'
 import { Toaster } from '@/components/ui/toaster'
 import { ErrorBoundary } from '@/components/ui/error-boundary'
+import ServiceWorkerRegistrar from '@/components/ui/service-worker-registrar'
 import './globals.css'
 
 const _geist = Geist({ subsets: ["latin"] });
@@ -46,6 +47,7 @@ export default function RootLayout({
             <I18nProvider>
               {children}
               <Toaster />
+              <ServiceWorkerRegistrar />
             </I18nProvider>
           </AuthProvider>
         </ErrorBoundary>

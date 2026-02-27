@@ -84,6 +84,10 @@ export default function AdminDashboardPage() {
           heldEscrow: data.heldEscrow ?? 0,
         })
       } catch (err) {
+        if (!cancelled && err instanceof Error && err.message.includes('Unauthorized')) {
+          router.push('/login')
+          return
+        }
         console.error('Failed to load admin stats:', err)
       } finally {
         if (!cancelled) setLoading(false)
