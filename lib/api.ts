@@ -127,7 +127,7 @@ async function refreshSessionIfNeeded(): Promise<void> {
 }
 
 /** Default request timeout in milliseconds */
-const REQUEST_TIMEOUT_MS = 15_000
+const REQUEST_TIMEOUT_MS = 8_000 // 8s — fast enough to detect outages without blocking long-polls
 /** Max retries on network / 5xx errors */
 const MAX_RETRIES = 1
 /** Base delay between retries (doubles each attempt) */

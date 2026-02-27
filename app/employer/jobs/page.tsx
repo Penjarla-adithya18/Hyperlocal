@@ -12,6 +12,7 @@ import { Job } from '@/lib/types'
 import { Briefcase, MapPin, Clock, IndianRupee, Users, Plus, Eye, Edit, Trash2, Lock, AlertCircle } from 'lucide-react'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useToast } from '@/hooks/use-toast'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function EmployerJobsPage() {
   const router = useRouter()
@@ -168,8 +169,39 @@ export default function EmployerJobsPage() {
     return (
       <div className="app-surface">
         <EmployerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <p className="text-center text-muted-foreground">Loading jobs...</p>
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-6">
+          <div className="flex justify-between items-center">
+            <div className="space-y-2">
+              <Skeleton className="h-8 w-32" />
+              <Skeleton className="h-4 w-56" />
+            </div>
+            <Skeleton className="h-10 w-36 rounded-md" />
+          </div>
+          <div className="flex gap-2 mb-4">
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+            <Skeleton className="h-9 w-24 rounded-md" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-5 space-y-3">
+                <div className="flex justify-between">
+                  <Skeleton className="h-5 w-48" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-32" />
+                <div className="flex gap-4">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-16" />
+                </div>
+                <div className="flex gap-2 pt-1">
+                  <Skeleton className="h-8 w-24 rounded-md" />
+                  <Skeleton className="h-8 w-20 rounded-md" />
+                </div>
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     )

@@ -25,6 +25,7 @@ import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
 import { getRecommendedJobs, getBasicRecommendations } from '@/lib/aiMatching';
 import { getWorkerProfileCompletion } from '@/lib/profileCompletion';
 import { SimpleLineChart, StatsCard } from '@/components/ui/charts';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export default function WorkerDashboardPage() {
   const router = useRouter();
@@ -117,12 +118,29 @@ export default function WorkerDashboardPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <div className="flex items-center justify-center h-64">
-            <div className="text-center">
-              <div className="w-16 h-16 border-4 border-primary border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-              <p className="text-muted-foreground">Loading your dashboard...</p>
-            </div>
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-8">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-56" />
+            <Skeleton className="h-4 w-72" />
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <Card key={i} className="p-6">
+                <Skeleton className="h-4 w-24 mb-3" />
+                <Skeleton className="h-8 w-16 mb-1" />
+                <Skeleton className="h-3 w-20" />
+              </Card>
+            ))}
+          </div>
+          <div className="grid md:grid-cols-2 gap-6">
+            {Array.from({ length: 2 }).map((_, i) => (
+              <Card key={i} className="p-6 space-y-3">
+                <Skeleton className="h-6 w-32" />
+                {Array.from({ length: 3 }).map((_, j) => (
+                  <Skeleton key={j} className="h-16 w-full rounded-lg" />
+                ))}
+              </Card>
+            ))}
           </div>
         </div>
       </div>

@@ -27,6 +27,7 @@ import { filterChatMessage, maskSensitiveContent } from '@/lib/chatFilter'
 import { FileUpload } from '@/components/ui/file-upload'
 import { uploadChatAttachment, getSignedUrl, isImageFile, isPdfFile, formatFileSize } from '@/lib/supabase/storage'
 import { Download, FileText, Image as ImageIcon, File } from 'lucide-react'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function EmployerChatPage() {
   const { user } = useAuth()
@@ -45,9 +46,13 @@ export default function EmployerChatPage() {
   const [voiceListening, setVoiceListening] = useState(false)
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
+  const [loadingConvs, setLoadingConvs] = useState(true)
+  const [loadingMsgs, setLoadingMsgs] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const isAtBottomRef = useRef(true)
+  const activeConvIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (user) {
@@ -55,25 +60,42 @@ export default function EmployerChatPage() {
     }
   }, [user])
 
-  // Poll for new messages every 3s for lower latency (replaces Supabase realtime)
+  // Poll for new messages every 1.5s for lower latency
   useEffect(() => {
     if (!selectedConversation) return
 
+    // Clear messages immediately when switching conversations
+    setMessages([])
+    setLoadingMsgs(true)
+    isAtBottomRef.current = true
+    activeConvIdRef.current = selectedConversation.id
     loadMessages(selectedConversation.id)
 
     const interval = setInterval(() => {
       loadMessages(selectedConversation.id)
-    }, 3000)
+    }, 1500) // 1.5s polling for fast message delivery
 
     return () => clearInterval(interval)
   }, [selectedConversation?.id])
 
+  // Only auto-scroll on poll if user is already at the bottom
   useEffect(() => {
-    scrollToBottom()
+    if (isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  // Track scroll position on the message container
+  const handleMessagesScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const el = e.currentTarget
+    const threshold = 80 // px from bottom
+    isAtBottomRef.current = el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
+  }
 
   const loadConversations = async () => {
     if (!user) return
+    setLoadingConvs(true)
+    try {
     const userConvs = await db.getConversationsByUser(user.id)
     setConversations(userConvs)
     const participantIds = [...new Set(
@@ -114,22 +136,33 @@ export default function EmployerChatPage() {
       }
       setJobsById(jMap)
     }
+    } finally {
+      setLoadingConvs(false)
+    }
   }
 
   const loadMessages = async (conversationId: string) => {
-    const convMessages = await db.getMessagesByConversation(conversationId)
-    setMessages(convMessages)
-    if (user) {
-      setConversations((prev) =>
-        prev.map((conv) => {
-          if (conv.id !== conversationId || !conv.lastMessage) return conv
-          if (conv.lastMessage.senderId === user.id || conv.lastMessage.read) return conv
-          return {
-            ...conv,
-            lastMessage: { ...conv.lastMessage, read: true },
-          }
-        })
-      )
+    try {
+      const convMessages = await db.getMessagesByConversation(conversationId)
+      // Stale-fetch guard: discard if conversation changed while fetching
+      if (activeConvIdRef.current !== conversationId) return
+      setMessages(convMessages)
+      setLoadingMsgs(false)
+      if (user) {
+        setConversations((prev) =>
+          prev.map((conv) => {
+            if (conv.id !== conversationId || !conv.lastMessage) return conv
+            if (conv.lastMessage.senderId === user.id || conv.lastMessage.read) return conv
+            return {
+              ...conv,
+              lastMessage: { ...conv.lastMessage, read: true },
+            }
+          })
+        )
+      }
+    } catch {
+      // Silently swallow timeout/network errors during polling — the next poll will retry
+      setLoadingMsgs(false)
     }
   }
 
@@ -151,6 +184,7 @@ export default function EmployerChatPage() {
 
     setUploading(true)
     let attachmentData: { url: string; name: string; type: string; size: number } | undefined
+    let tempMessage: ChatMessage | undefined
 
     try {
       // Upload file if attached
@@ -169,7 +203,7 @@ export default function EmployerChatPage() {
       }
 
       // Optimistic UI: show message immediately
-      const tempMessage: ChatMessage = {
+      tempMessage = {
         id: `temp-${Date.now()}`,
         conversationId: selectedConversation.id,
         senderId: user.id,
@@ -183,10 +217,11 @@ export default function EmployerChatPage() {
           attachmentSize: attachmentData.size,
         }),
       }
-      setMessages((prev) => [...prev, tempMessage])
-      const messageToSend = tempMessage.message
+      setMessages((prev) => [...prev, tempMessage!])
+      const messageToSend = tempMessage!.message
       setNewMessage('')
       setSelectedFile(null)
+      scrollToBottom(true)
 
       const message = await db.sendMessage({
         conversationId: selectedConversation.id,
@@ -200,11 +235,11 @@ export default function EmployerChatPage() {
         }),
       })
       // Replace temp message with real one
-      setMessages((prev) => prev.map(m => m.id === tempMessage.id ? message : m))
+      setMessages((prev) => prev.map(m => m.id === tempMessage!.id ? message : m))
       loadConversations()
     } catch (error) {
-      // Remove temp message on error
-      setMessages((prev) => prev.filter(m => m.id.startsWith('temp-')))
+      // Remove only the failed temp message
+      if (tempMessage) setMessages((prev) => prev.filter(m => m.id !== tempMessage!.id))
       toast({
         title: 'Failed to send message',
         description: error instanceof Error ? error.message : 'Please try again',
@@ -215,8 +250,11 @@ export default function EmployerChatPage() {
     }
   }
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  const scrollToBottom = (force = false) => {
+    if (force || isAtBottomRef.current) {
+      messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+      isAtBottomRef.current = true
+    }
   }
 
   const handleReportAbuse = async () => {
@@ -320,7 +358,19 @@ export default function EmployerChatPage() {
                 />
               </div>
               <div className="flex-1 overflow-y-auto space-y-2">
-                {filteredConversations.length === 0 ? (
+                {loadingConvs ? (
+                  <div className="space-y-3 px-1 pt-1">
+                    {Array.from({ length: 6 }).map((_, i) => (
+                      <div key={i} className="flex items-center gap-3 p-2">
+                        <Skeleton className="h-12 w-12 rounded-full shrink-0" />
+                        <div className="flex-1 space-y-2">
+                          <Skeleton className="h-4 w-3/4" />
+                          <Skeleton className="h-3 w-1/2" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : filteredConversations.length === 0 ? (
                   <div className="text-center py-12">
                     <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -415,8 +465,21 @@ export default function EmployerChatPage() {
               </div>
 
               {/* Mobile Messages Area with Independent Scroll */}
-              <div className="flex-1 min-h-0 overflow-y-auto px-2 space-y-2">
-                {messages.length === 0 ? (
+              <div
+                className="flex-1 min-h-0 overflow-y-auto px-2 space-y-2"
+                onScroll={handleMessagesScroll}
+              >
+                {loadingMsgs ? (
+                  <div className="space-y-3 py-4">
+                    {[true, false, true, false, true].map((isSent, i) => (
+                      <div key={i} className={`flex items-end gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                        {!isSent && <Skeleton className="h-7 w-7 rounded-full shrink-0" />}
+                        <Skeleton className={`h-10 rounded-2xl ${isSent ? 'w-40' : 'w-52'}`} />
+                        {isSent && <div className="w-7" />}
+                      </div>
+                    ))}
+                  </div>
+                ) : messages.length === 0 ? (
                   <div className="text-center py-12">
                     <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                     <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
@@ -569,7 +632,19 @@ export default function EmployerChatPage() {
               </CardHeader>
               <ScrollArea className="h-[calc(100vh-380px)]">
                 <CardContent className="space-y-2">
-                  {filteredConversations.length === 0 ? (
+                  {loadingConvs ? (
+                    <div className="space-y-3 py-2">
+                      {Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="flex items-center gap-3 p-2">
+                          <Skeleton className="h-10 w-10 rounded-full shrink-0" />
+                          <div className="flex-1 space-y-2">
+                            <Skeleton className="h-4 w-3/4" />
+                            <Skeleton className="h-3 w-1/2" />
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : filteredConversations.length === 0 ? (
                     <div className="text-center py-8">
                       <MessageCircle className="h-12 w-12 mx-auto mb-3 text-muted-foreground" />
                       <p className="text-sm text-muted-foreground">No conversations yet</p>
@@ -621,7 +696,7 @@ export default function EmployerChatPage() {
               </ScrollArea>
             </Card>
 
-            <Card className="lg:col-span-2 flex flex-col">
+            <Card className="lg:col-span-2 flex flex-col overflow-hidden">
             {selectedConversation ? (
               <>
                 <CardHeader className="border-b">
@@ -648,9 +723,22 @@ export default function EmployerChatPage() {
                     </Button>
                   </div>
                 </CardHeader>
-                <ScrollArea className="flex-1 p-4 md:p-6 bg-background">
+                <div
+                  className="flex-1 min-h-0 overflow-y-auto p-4 md:p-6 bg-background"
+                  onScroll={handleMessagesScroll}
+                >
                   <div className="space-y-2">
-                    {messages.length === 0 ? (
+                    {loadingMsgs ? (
+                      <div className="space-y-3 py-4">
+                        {[true, false, true, false, true].map((isSent, i) => (
+                          <div key={i} className={`flex items-end gap-2 ${isSent ? 'justify-end' : 'justify-start'}`}>
+                            {!isSent && <Skeleton className="h-7 w-7 rounded-full shrink-0" />}
+                            <Skeleton className={`h-10 rounded-2xl ${isSent ? 'w-40' : 'w-52'}`} />
+                            {isSent && <div className="w-7" />}
+                          </div>
+                        ))}
+                      </div>
+                    ) : messages.length === 0 ? (
                       <div className="text-center py-12">
                         <MessageCircle className="h-16 w-16 mx-auto mb-3 text-muted-foreground/40" />
                         <p className="text-muted-foreground">No messages yet. Start the conversation!</p>
@@ -695,7 +783,7 @@ export default function EmployerChatPage() {
                     )}
                     <div ref={messagesEndRef} />
                   </div>
-                </ScrollArea>
+                </div>
                 <CardContent className="border-t pt-4 pb-4 bg-background/50">
                   {selectedConversation.jobId && jobsById[selectedConversation.jobId]?.status === 'completed' ? (
                     <div className="flex items-center gap-2 p-3 bg-muted/60 rounded-2xl text-sm text-muted-foreground">

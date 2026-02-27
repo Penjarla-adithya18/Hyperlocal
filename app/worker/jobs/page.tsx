@@ -18,6 +18,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { GeolocationPrompt } from '@/components/ui/geolocation-prompt'
 import { Slider } from '@/components/ui/slider'
 import { LocationInput } from '@/components/ui/location-input'
+import { Skeleton } from '@/components/ui/skeleton'
 
 export default function WorkerJobsPage() {
   const router = useRouter()
@@ -263,8 +264,39 @@ export default function WorkerJobsPage() {
     return (
       <div className="app-surface">
         <WorkerNav />
-        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8">
-          <p className="text-center text-muted-foreground">Loading jobs...</p>
+        <div className="container mx-auto px-4 py-8 pb-28 md:pb-8 space-y-6">
+          <div className="space-y-2">
+            <Skeleton className="h-8 w-40" />
+            <Skeleton className="h-4 w-64" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <Card key={i} className="p-6">
+                <Skeleton className="h-4 w-20 mb-2" />
+                <Skeleton className="h-8 w-12" />
+              </Card>
+            ))}
+          </div>
+          <div className="flex gap-2">
+            <Skeleton className="h-10 flex-1 rounded-md" />
+            <Skeleton className="h-10 w-32 rounded-md" />
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <Card key={i} className="p-5 space-y-3">
+                <div className="flex justify-between">
+                  <Skeleton className="h-5 w-40" />
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-28" />
+                <div className="flex gap-4">
+                  <Skeleton className="h-4 w-20" />
+                  <Skeleton className="h-4 w-20" />
+                </div>
+                <Skeleton className="h-9 w-full rounded-md" />
+              </Card>
+            ))}
+          </div>
         </div>
       </div>
     )
