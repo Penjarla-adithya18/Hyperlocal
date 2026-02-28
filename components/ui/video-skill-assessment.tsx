@@ -29,6 +29,8 @@ import {
   Globe,
   ArrowRight,
   SkipForward,
+  Users,
+  Volume2,
 } from 'lucide-react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -65,7 +67,7 @@ const LANG_LABELS: Record<Language, string> = {
   te: '🇮🇳 తెలుగు',
 }
 
-const QUESTION_READ_TIME_S = 60  // 1 minute to read question
+const QUESTION_READ_TIME_S = 30  // 30 seconds to read question
 const RECORDING_TIME_S = 60      // 1 minute to record answer
 const MAX_VIDEO_SIZE_MB = 8      // Keep under Next.js body limit (base64 adds ~33%)
 
@@ -171,6 +173,202 @@ class AudioAnalyzer {
   }
 }
 
+// ── Face Detection Helper ─────────────────────────────────────────────────────
+// Uses Google MediaPipe Vision (WASM) for reliable face detection in all browsers.
+// Model + WASM runtime are loaded from CDN on first use (~2 MB one-time download).
+
+class FaceMonitor {
+  private detector: any = null
+  private timerId: ReturnType<typeof setTimeout> | null = null
+  private onMultipleFaces: (count: number) => void
+  private running = false
+  private lastAlertTime = 0
+  private static ALERT_COOLDOWN_MS = 3000
+
+  constructor(onMultipleFaces: (count: number) => void) {
+    this.onMultipleFaces = onMultipleFaces
+  }
+
+  async start(videoEl: HTMLVideoElement) {
+    try {
+      // Dynamically import MediaPipe Vision to keep the initial bundle lean
+      const { FaceDetector, FilesetResolver } = await import('@mediapipe/tasks-vision')
+
+      const vision = await FilesetResolver.forVisionTasks(
+        'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm'
+      )
+
+      this.detector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath:
+            'https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite',
+          delegate: 'GPU',
+        },
+        runningMode: 'VIDEO',
+      })
+
+      this.running = true
+      console.log('[FaceMonitor] MediaPipe face detector loaded ✓')
+      this.loop(videoEl)
+    } catch (e) {
+      console.warn('FaceMonitor: Failed to initialise MediaPipe', e)
+      this.running = false
+    }
+  }
+
+  private loop(videoEl: HTMLVideoElement) {
+    if (!this.running || !this.detector) return
+
+    const detect = () => {
+      if (!this.running || !this.detector) return
+      try {
+        // MediaPipe VIDEO mode needs monotonically-increasing timestamps
+        const nowMs = performance.now()
+        const result = this.detector.detectForVideo(videoEl, nowMs)
+        const faceCount = result?.detections?.length ?? 0
+
+        if (faceCount > 1) {
+          const now = Date.now()
+          if (now - this.lastAlertTime > FaceMonitor.ALERT_COOLDOWN_MS) {
+            this.lastAlertTime = now
+            this.onMultipleFaces(faceCount)
+          }
+        }
+      } catch {
+        // Frame detection error — skip
+      }
+      // Run at ~3 fps to keep CPU usage low
+      if (this.running) {
+        this.timerId = setTimeout(() => {
+          requestAnimationFrame(() => detect())
+        }, 333)
+      }
+    }
+
+    detect()
+  }
+
+  stop() {
+    this.running = false
+    if (this.timerId != null) {
+      clearTimeout(this.timerId)
+      this.timerId = null
+    }
+    if (this.detector) {
+      try { this.detector.close() } catch { /* ignore */ }
+      this.detector = null
+    }
+  }
+}
+
+// ── Noise Detection Helper ────────────────────────────────────────────────────
+// Monitors frequency spectrum during recording. Detects:
+//  1. Sudden loud non-speech noise spikes (e.g. banging, shouting from others)
+//  2. Persistent background noise (e.g. traffic, music)
+// Human speech is concentrated in 300 Hz – 3400 Hz. Energy outside that range
+// that exceeds a threshold triggers a noise alert.
+
+class NoiseMonitor {
+  private analyser: AnalyserNode | null = null
+  private audioContext: AudioContext | null = null
+  private source: MediaStreamAudioSourceNode | null = null
+  private intervalId: ReturnType<typeof setInterval> | null = null
+  private onNoiseDetected: (type: 'spike' | 'background') => void
+  private lastAlertTime = 0
+  private static ALERT_COOLDOWN_MS = 4000
+
+  // Tuneable thresholds
+  private static SPIKE_THRESHOLD = 0.25       // RMS spike detection
+  private static BG_NOISE_THRESHOLD = 0.08    // Persistent non-speech energy
+  private bgNoiseWindowCount = 0
+  private bgNoiseWindowTotal = 0
+  private static BG_WINDOW_SIZE = 20          // ~2 seconds at 100ms intervals
+
+  constructor(onNoiseDetected: (type: 'spike' | 'background') => void) {
+    this.onNoiseDetected = onNoiseDetected
+  }
+
+  start(stream: MediaStream) {
+    try {
+      this.audioContext = new AudioContext()
+      this.analyser = this.audioContext.createAnalyser()
+      this.analyser.fftSize = 2048
+      this.source = this.audioContext.createMediaStreamSource(stream)
+      this.source.connect(this.analyser)
+
+      const freqData = new Uint8Array(this.analyser.frequencyBinCount)
+      const sampleRate = this.audioContext.sampleRate
+      const binSize = sampleRate / this.analyser.fftSize // Hz per bin
+
+      // Speech band bins (300 Hz – 3400 Hz)
+      const speechLow = Math.floor(300 / binSize)
+      const speechHigh = Math.ceil(3400 / binSize)
+
+      this.intervalId = setInterval(() => {
+        if (!this.analyser) return
+        this.analyser.getByteFrequencyData(freqData)
+
+        // Compute energy in speech band vs. non-speech band
+        let speechEnergy = 0
+        let nonSpeechEnergy = 0
+        let speechBins = 0
+        let nonSpeechBins = 0
+
+        for (let i = 0; i < freqData.length; i++) {
+          const normalised = freqData[i] / 255
+          if (i >= speechLow && i <= speechHigh) {
+            speechEnergy += normalised * normalised
+            speechBins++
+          } else {
+            nonSpeechEnergy += normalised * normalised
+            nonSpeechBins++
+          }
+        }
+
+        const speechRms = speechBins > 0 ? Math.sqrt(speechEnergy / speechBins) : 0
+        const nonSpeechRms = nonSpeechBins > 0 ? Math.sqrt(nonSpeechEnergy / nonSpeechBins) : 0
+        const totalRms = Math.sqrt((speechEnergy + nonSpeechEnergy) / (speechBins + nonSpeechBins))
+
+        const now = Date.now()
+
+        // 1. Sudden spike: total volume is very high and non-speech dominates
+        if (totalRms > NoiseMonitor.SPIKE_THRESHOLD &&
+          nonSpeechRms > speechRms * 1.5 &&
+          now - this.lastAlertTime > NoiseMonitor.ALERT_COOLDOWN_MS) {
+          this.lastAlertTime = now
+          this.onNoiseDetected('spike')
+        }
+
+        // 2. Persistent background noise: track non-speech energy over a window
+        this.bgNoiseWindowCount++
+        this.bgNoiseWindowTotal += nonSpeechRms
+
+        if (this.bgNoiseWindowCount >= NoiseMonitor.BG_WINDOW_SIZE) {
+          const avgBgNoise = this.bgNoiseWindowTotal / this.bgNoiseWindowCount
+          if (avgBgNoise > NoiseMonitor.BG_NOISE_THRESHOLD &&
+            now - this.lastAlertTime > NoiseMonitor.ALERT_COOLDOWN_MS) {
+            this.lastAlertTime = now
+            this.onNoiseDetected('background')
+          }
+          this.bgNoiseWindowCount = 0
+          this.bgNoiseWindowTotal = 0
+        }
+      }, 100) // 10 Hz monitoring
+    } catch (e) {
+      console.warn('NoiseMonitor: Failed to start', e)
+    }
+  }
+
+  stop() {
+    if (this.intervalId) clearInterval(this.intervalId)
+    if (this.source) this.source.disconnect()
+    if (this.audioContext) this.audioContext.close().catch(() => {})
+    this.analyser = null
+    this.audioContext = null
+    this.source = null
+  }
+}
+
 // ── Component ─────────────────────────────────────────────────────────────────
 
 export function VideoSkillAssessment({
@@ -197,6 +395,12 @@ export function VideoSkillAssessment({
   const audioAnalyzerRef = useRef<AudioAnalyzer | null>(null)
   const audioMetricsRef = useRef<AudioMetrics | null>(null)
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  // Face & noise monitoring
+  const faceMonitorRef = useRef<FaceMonitor | null>(null)
+  const noiseMonitorRef = useRef<NoiseMonitor | null>(null)
+  const [faceAlert, setFaceAlert] = useState<{ visible: boolean; count: number }>({ visible: false, count: 0 })
+  const [noiseAlert, setNoiseAlert] = useState<{ visible: boolean; type: 'spike' | 'background' | null }>({ visible: false, type: null })
 
   // Refs to avoid stale closures in recording pipeline
   const currentSkillRef = useRef('')
@@ -244,10 +448,20 @@ export function VideoSkillAssessment({
       audioMetricsRef.current = audioAnalyzerRef.current.stop()
       audioAnalyzerRef.current = null
     }
+    if (faceMonitorRef.current) {
+      faceMonitorRef.current.stop()
+      faceMonitorRef.current = null
+    }
+    if (noiseMonitorRef.current) {
+      noiseMonitorRef.current.stop()
+      noiseMonitorRef.current = null
+    }
     if (timerRef.current) {
       clearInterval(timerRef.current)
       timerRef.current = null
     }
+    setFaceAlert({ visible: false, count: 0 })
+    setNoiseAlert({ visible: false, type: null })
   }, [])
 
   // ── Phase: Load question ────────────────────────────────────────────────────
@@ -302,13 +516,36 @@ export function VideoSkillAssessment({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream
-        videoRef.current.play()
+        await videoRef.current.play()
       }
 
       // Start audio analysis
       const analyzer = new AudioAnalyzer()
       analyzer.start(stream)
       audioAnalyzerRef.current = analyzer
+
+      // Start face detection (multi-person monitoring)
+      // Wait a tick so the <video> has rendered at least one frame for MediaPipe
+      const faceMonitor = new FaceMonitor((count) => {
+        setFaceAlert({ visible: true, count })
+        // Auto-hide after 4 seconds
+        setTimeout(() => setFaceAlert(prev => prev.count === count ? { visible: false, count: 0 } : prev), 4000)
+      })
+      faceMonitorRef.current = faceMonitor
+      if (videoRef.current) {
+        const vidEl = videoRef.current
+        // Small delay ensures the video element has produced at least one frame
+        setTimeout(() => faceMonitor.start(vidEl), 500)
+      }
+
+      // Start noise detection
+      const noiseMonitor = new NoiseMonitor((type) => {
+        setNoiseAlert({ visible: true, type })
+        // Auto-hide after 4 seconds
+        setTimeout(() => setNoiseAlert(prev => prev.type === type ? { visible: false, type: null } : prev), 4000)
+      })
+      noiseMonitor.start(stream)
+      noiseMonitorRef.current = noiseMonitor
 
       // Start recording
       const mimeType = MediaRecorder.isTypeSupported('video/webm;codecs=vp9,opus')
@@ -364,6 +601,18 @@ export function VideoSkillAssessment({
       audioMetricsRef.current = audioAnalyzerRef.current.stop()
       audioAnalyzerRef.current = null
     }
+
+    // Stop face & noise monitors
+    if (faceMonitorRef.current) {
+      faceMonitorRef.current.stop()
+      faceMonitorRef.current = null
+    }
+    if (noiseMonitorRef.current) {
+      noiseMonitorRef.current.stop()
+      noiseMonitorRef.current = null
+    }
+    setFaceAlert({ visible: false, count: 0 })
+    setNoiseAlert({ visible: false, type: null })
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
@@ -518,6 +767,8 @@ export function VideoSkillAssessment({
                   <li>• Do NOT use AI voice tools (e.g., Parrot.ai)</li>
                   <li>• Answer in your own words from your experience</li>
                   <li>• You need camera & microphone permission</li>
+                  <li>• <strong>Only you should be visible</strong> — multiple faces will trigger an alert</li>
+                  <li>• <strong>Ensure a quiet environment</strong> — background noise will be flagged</li>
                 </ul>
               </Card>
 
@@ -682,6 +933,40 @@ export function VideoSkillAssessment({
                     <Mic className="w-3 h-3 mr-1" /> Audio recording
                   </Badge>
                 </div>
+
+                {/* ── Multiple faces alert overlay ──────────────────────────── */}
+                {faceAlert.visible && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-red-500/20 backdrop-blur-[2px] animate-in fade-in duration-300 z-10">
+                    <div className="bg-red-600 text-white rounded-xl px-5 py-4 shadow-2xl flex items-center gap-3 max-w-[90%]">
+                      <Users className="w-7 h-7 flex-shrink-0 animate-bounce" />
+                      <div>
+                        <p className="font-bold text-sm">Multiple People Detected!</p>
+                        <p className="text-xs opacity-90">
+                          {faceAlert.count} faces found. Only the worker should be in frame during the assessment.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Noise alert overlay ──────────────────────────────────── */}
+                {noiseAlert.visible && (
+                  <div className="absolute inset-0 flex items-end justify-center pb-14 z-10 pointer-events-none">
+                    <div className="bg-amber-600 text-white rounded-xl px-5 py-3 shadow-2xl flex items-center gap-3 max-w-[90%] animate-in slide-in-from-bottom duration-300">
+                      <Volume2 className="w-6 h-6 flex-shrink-0 animate-pulse" />
+                      <div>
+                        <p className="font-bold text-sm">
+                          {noiseAlert.type === 'spike' ? 'Loud Noise Detected!' : 'Background Noise Detected!'}
+                        </p>
+                        <p className="text-xs opacity-90">
+                          {noiseAlert.type === 'spike'
+                            ? 'A sudden loud sound was detected. Please ensure a quiet environment.'
+                            : 'Persistent background noise detected. Please reduce surrounding noise.'}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Quick reference of the question */}
@@ -732,9 +1017,6 @@ export function VideoSkillAssessment({
                   <div className="flex items-center gap-2 mb-2">
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
                     <span className="font-semibold text-green-700 dark:text-green-400">Skill Verified ✓</span>
-                    {latestResult?.score != null && (
-                      <Badge className="ml-auto bg-green-600">{latestResult.score}/100</Badge>
-                    )}
                   </div>
                   <p className="text-sm text-green-700 dark:text-green-300">
                     Your <strong>{currentSkill}</strong> skill has been verified automatically.
@@ -747,9 +1029,6 @@ export function VideoSkillAssessment({
                   <div className="flex items-center gap-2 mb-2">
                     <AlertTriangle className="w-5 h-5 text-red-600" />
                     <span className="font-semibold text-red-700 dark:text-red-400">Not Passed</span>
-                    {latestResult?.score != null && (
-                      <Badge variant="destructive" className="ml-auto">{latestResult.score}/100</Badge>
-                    )}
                   </div>
                   <p className="text-sm text-red-700 dark:text-red-300">
                     {latestResult?.verdictReason || 'Your answer did not meet the required criteria.'}

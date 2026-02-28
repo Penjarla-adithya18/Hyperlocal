@@ -84,7 +84,7 @@ export default function WorkerJobsPage() {
             const recommended = getRecommendedJobs(profile, activeJobs, 50)
             setMatchedJobs(recommended.map(({ job, matchScore }) => ({ job, score: matchScore })))
           } else if (profile && profile.categories.length > 0) {
-            const basic = getBasicRecommendations(profile.categories, activeJobs, 50)
+            const basic = getBasicRecommendations(profile.categories, activeJobs, 50, profile.skills || [])
             setMatchedJobs(basic.map((job) => ({ job, score: 0 })))
           } else {
             const basic = getBasicRecommendations([], activeJobs, 50)

@@ -4,7 +4,8 @@
  * Architecture:
  *  - Gemini AI (optional) for smart skill extraction & match explanations
  *  - Deterministic keyword fallback when API key is absent
- *  - Weighted scoring: Skills(40) + Category(20) + Location(15) + Availability(15) + Experience(10)
+ *  - Weighted scoring: Skills(60) + Location(15) + Availability(15) + Experience(10)
+ *  - Category matching removed — recommendations are purely skills-based.
  */
 import { Job, WorkerProfile } from './types';
 import { generateWithGemini } from './gemini';
@@ -225,8 +226,8 @@ function categoryMatches(jobCategory: string, workerCategories: string[]): boole
 
 /** Scoring weight constants (must sum to 100) */
 const WEIGHTS = {
-  SKILLS: 40,
-  CATEGORY: 20,
+  SKILLS: 60,         // ← Increased from 40; skills are the primary signal
+  // CATEGORY removed — recommendations are purely skills-based
   LOCATION_EXACT: 15,
   LOCATION_PARTIAL: 10,
   AVAILABILITY_EXACT: 15,
@@ -377,9 +378,8 @@ function extractCity(location: string): string {
 /**
  * Calculate a match score (0–100) between a worker profile and a job.
  *
- * Scoring breakdown:
- *  - Skills overlap:        40 pts (token-based similarity)
- *  - Category match:        20 pts (with alias resolution)
+ * Scoring breakdown (skills-only — no category matching):
+ *  - Skills overlap:        60 pts (token-based similarity with synonym resolution)
  *  - Location proximity:    15 pts (exact city) / 10 pts (partial)
  *  - Availability match:    15 pts (exact) / 8 pts (partial)
  *  - Experience relevance:  10 pts (keyword overlap with job description)
@@ -390,26 +390,31 @@ export function calculateMatchScore(
 ): number {
   let score = 0;
 
-  // ── 1. Skill matching (40 pts) ──────────────────────────────────────────
+  // ── 1. Skill matching (60 pts) — PRIMARY GATE ───────────────────────────
+  // If both worker and job have skills defined, at least ONE skill must match.
+  // Otherwise the job is irrelevant and we return 0 immediately.
   const jobSkills = job.requiredSkills;
   const workerSkills = workerProfile.skills;
 
+  let skillMatchedCount = 0;
   if (jobSkills.length > 0 && workerSkills.length > 0) {
-    let matchedCount = 0;
     for (const js of jobSkills) {
-      // Find the best-matching worker skill for this job skill
       const bestSim = Math.max(
         ...workerSkills.map((ws) => skillSimilarity(ws, js)),
       );
-      if (bestSim >= SKILL_MATCH_THRESHOLD) matchedCount++;
+      if (bestSim >= SKILL_MATCH_THRESHOLD) skillMatchedCount++;
     }
-    score += (matchedCount / jobSkills.length) * WEIGHTS.SKILLS;
+    // ★ SKILL GATE: no matching skills → score 0 (don't recommend)
+    if (skillMatchedCount === 0) return 0;
+    score += (skillMatchedCount / jobSkills.length) * WEIGHTS.SKILLS;
+  } else if (jobSkills.length > 0 && workerSkills.length === 0) {
+    // Worker has no skills on profile — can't score, return 0
+    return 0;
   }
+  // If job has no requiredSkills, we skip the gate (legacy jobs)
 
-  // ── 2. Category matching (20 pts) ───────────────────────────────────────
-  if (categoryMatches(job.category, workerProfile.categories)) {
-    score += WEIGHTS.CATEGORY;
-  }
+  // ── 2. Category matching — REMOVED (skills-only recommendations) ─────
+  // Category match was 20 pts, now redistributed to skills (60 pts total).
 
   // ── 3. Location proximity (15 pts) ──────────────────────────────────────
   if (workerProfile.location && job.location) {
@@ -465,7 +470,7 @@ export function calculateMatchScore(
 // ────────────────────────────────────────────────────────────────────────────
 
 /** Minimum match score to include in recommendations */
-const MIN_RECOMMENDATION_SCORE = 20;
+const MIN_RECOMMENDATION_SCORE = 25;
 
 /**
  * Get AI-scored job recommendations for a worker with a completed profile.
@@ -488,26 +493,75 @@ export function getRecommendedJobs(
 }
 
 /**
- * Basic category-only recommendations for workers with incomplete profiles.
- * Uses `categoryMatches()` with alias resolution (previously used strict equality — bug fix).
+ * Skill-based recommendations for workers with incomplete profiles.
+ * Uses skill similarity matching — if no skills available, falls back to
+ * matching worker categories against job requiredSkills, then recency.
  */
 export function getBasicRecommendations(
   categories: string[],
   allJobs: Job[],
   limit = 10,
+  skills: string[] = [],
 ): Job[] {
   const activeJobs = allJobs.filter((j) => j.status === 'active');
 
-  if (categories.length === 0) {
-    // No categories selected → return most recent jobs
+  // If worker has skills, score jobs by skill overlap and return top matches
+  if (skills.length > 0) {
     return activeJobs
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-      .slice(0, limit);
+      .map((job) => {
+        let matched = 0;
+        for (const js of job.requiredSkills) {
+          const best = Math.max(...skills.map((ws) => skillSimilarity(ws, js)));
+          if (best >= SKILL_MATCH_THRESHOLD) matched++;
+        }
+        const score = job.requiredSkills.length > 0
+          ? matched / job.requiredSkills.length
+          : 0;
+        return { job, score };
+      })
+      .filter((item) => item.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, limit)
+      .map((item) => item.job);
   }
 
-  // Use alias-aware matching instead of strict equality
+  // Fallback: use categories to infer skills, then match those
+  if (categories.length > 0) {
+    // Expand categories into likely skills via the taxonomy
+    const inferredSkills = new Set<string>();
+    for (const cat of categories) {
+      const lower = cat.toLowerCase();
+      for (const [keyword, skillSet] of Object.entries(SKILL_TAXONOMY)) {
+        if (lower.includes(keyword) || keyword.includes(lower)) {
+          skillSet.forEach((s) => inferredSkills.add(s));
+        }
+      }
+      // Also add the category itself as a skill string
+      inferredSkills.add(cat);
+    }
+    if (inferredSkills.size > 0) {
+      return activeJobs
+        .map((job) => {
+          let matched = 0;
+          const infArr = Array.from(inferredSkills);
+          for (const js of job.requiredSkills) {
+            const best = Math.max(...infArr.map((ws) => skillSimilarity(ws, js)));
+            if (best >= SKILL_MATCH_THRESHOLD) matched++;
+          }
+          const score = job.requiredSkills.length > 0
+            ? matched / job.requiredSkills.length
+            : 0;
+          return { job, score };
+        })
+        .filter((item) => item.score > 0)
+        .sort((a, b) => b.score - a.score)
+        .slice(0, limit)
+        .map((item) => item.job);
+    }
+  }
+
+  // No skills or categories — return most recent jobs
   return activeJobs
-    .filter((job) => categoryMatches(job.category, categories))
     .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
     .slice(0, limit);
 }
@@ -542,9 +596,10 @@ export async function matchJobs(
       .map((job) => ({ job, score: 0 }));
   }
 
-  // Full scoring with worker profile
+  // Full scoring with worker profile — filter out zero-score (no skill match) jobs
   return activeJobs
     .map((job) => ({ job, score: calculateMatchScore(profile, job) }))
+    .filter((item) => item.score > 0)
     .sort((a, b) => b.score - a.score);
 }
 

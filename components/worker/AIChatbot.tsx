@@ -363,7 +363,7 @@ export default function AIChatbot() {
 
       // Fallback: category-based or recency
       if (results.length === 0 && profile) {
-        const basic = getBasicRecommendations(profile.categories || [], allJobs, 8)
+        const basic = getBasicRecommendations(profile.categories || [], allJobs, 8, profile.skills || [])
         results = basic.map(job => ({ job, matchScore: 0 }))
       }
 

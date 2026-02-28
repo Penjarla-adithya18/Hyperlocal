@@ -488,9 +488,15 @@ Return ONLY valid JSON (no markdown):
     }
 
     // ── Step 5: AUTO-DECISION ───────────────────────────────────────────────
-    // Use the SCORE as the primary signal (LLM booleans can be inconsistent).
-    // The LLM sometimes returns is_correct=false with score=72 — contradictory.
-    // Score thresholds:  >=50 → approved,  40-49 → pending (admin),  <40 → rejected
+    // Compute finalScore first — it is the composite pass/fail signal:
+    //   audio quality 25% + originality 35% + answer correctness 40%
+    // Pass threshold: finalScore >= 50
+    const finalScore = Math.round(
+      (audioAnalysis.score * 0.25) +
+      ((originalityCheck ? (originalityCheck.is_original ? 80 : 25) : 50) * 0.35) +
+      ((answerCheck ? answerCheck.score : 50) * 0.40),
+    )
+
     let autoDecision: AutoDecision = 'pending'
     let autoDecisionReason = ''
 
@@ -516,20 +522,14 @@ Return ONLY valid JSON (no markdown):
             : 'non-original content'
       autoDecisionReason = `Rejected: ${patternLabel} detected. ${originalityCheck!.reasoning}`
     }
-    // Case 3: is_correct=true → approve, is_correct=false → reject
-    else if (answerCheck) {
-      if (answerCheck.is_correct) {
-        autoDecision = 'approved'
-        autoDecisionReason = `Skill verified automatically. Answer score: ${answerCheck.score}/100. ${answerCheck.summary}`
-      } else {
-        autoDecision = 'rejected'
-        autoDecisionReason = `Incorrect answer (score: ${answerCheck.score}/100). ${answerCheck.summary}`
-      }
+    // Case 3: Correctness-based — is_correct=true → approved, is_correct=false → rejected
+    else if (answerCheck?.is_correct) {
+      autoDecision = 'approved'
+      autoDecisionReason = `Skill verified. ${answerCheck?.summary ?? ''}`
     }
-    // Case 4: Transcription failed or other issues → pending
     else {
-      autoDecision = 'pending'
-      autoDecisionReason = 'Automated analysis could not make a confident decision. Admin review needed.'
+      autoDecision = 'rejected'
+      autoDecisionReason = `Answer was not correct. ${answerCheck?.summary ?? 'Insufficient knowledge demonstrated.'}`
     }
 
     console.log(`[analyze-assessment] Step 5 ✓ Auto-decision: ${autoDecision} — ${autoDecisionReason.substring(0, 100)}`)
@@ -543,13 +543,7 @@ Return ONLY valid JSON (no markdown):
 
     const details = summaryParts.join(' | ')
 
-    // ── Step 7: Compute final score & compile analysis ──────────────────────
-    const finalScore = Math.round(
-      (audioAnalysis.score * 0.25) +
-      ((originalityCheck ? (originalityCheck.is_original ? 80 : 25) : 50) * 0.35) +
-      ((answerCheck ? answerCheck.score : 50) * 0.40),
-    )
-
+    // ── Step 7: Compile analysis object ──────────────────────────────────
     const analysis: AnalysisResult = {
       confidence_score: Math.max(0, Math.min(100, finalScore)),
       is_reading: audioAnalysis.isReading || originalityCheck?.speech_pattern === 'scripted',

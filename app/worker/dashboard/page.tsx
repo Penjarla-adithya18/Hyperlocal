@@ -76,7 +76,7 @@ export default function WorkerDashboardPage() {
         const recommended = getRecommendedJobs(profileVal, allJobsVal, 5);
         setRecommendedJobs(recommended);
       } else if (profileVal) {
-        const basic = getBasicRecommendations(profileVal.categories, allJobsVal, 5);
+        const basic = getBasicRecommendations(profileVal.categories, allJobsVal, 5, profileVal.skills || []);
         setRecommendedJobs(basic.map((job) => ({ job, matchScore: 0 })));
       } else {
         const basic = getBasicRecommendations([], allJobsVal, 5);
