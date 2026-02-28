@@ -9,7 +9,7 @@ import { fetchWithRetry } from '@/lib/fetchRetry'
  */
 
 // Allow longer execution for video upload + AI analysis pipeline
-export const maxDuration = 120 // 2 minutes
+export const maxDuration = 60  // 60s — upload + DB insert only (analysis is fire-and-forget)
 export const dynamic = 'force-dynamic'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://yecelpnlaruavifzxunw.supabase.co'
@@ -17,13 +17,17 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 const SUPABASE_SERVICE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? SUPABASE_ANON_KEY
 
 async function supabaseInsert(table: string, data: Record<string, unknown>) {
+  // NOTE: We deliberately omit `Prefer: return=representation` here.
+  // With the anon key the INSERT policy passes (sa_insert_any → true),
+  // but the implicit SELECT needed to RETURN the row fails because no
+  // SELECT policy matches an anonymous caller → 42501.
+  // Instead we generate the id client-side and pass it in `data`.
   const res = await fetchWithRetry(`${SUPABASE_URL}/rest/v1/${table}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       apikey: SUPABASE_SERVICE_KEY,
       Authorization: `Bearer ${SUPABASE_SERVICE_KEY}`,
-      Prefer: 'return=representation',
     },
     body: JSON.stringify(data),
   }, { maxAttempts: 3, baseDelayMs: 1500, label: 'SupabaseInsert' })
@@ -31,7 +35,8 @@ async function supabaseInsert(table: string, data: Record<string, unknown>) {
     const err = await res.text()
     throw new Error(`Supabase insert error: ${res.status} ${err}`)
   }
-  return res.json()
+  // Return the data we sent (id was pre-generated client-side)
+  return data
 }
 
 async function supabaseUploadVideo(
@@ -153,8 +158,10 @@ export async function POST(req: NextRequest) {
       videoUrl = videoBase64
     }
 
-    // Insert assessment record
+    // Insert assessment record (ID generated client-side to avoid RETURNING)
+    const assessmentId = crypto.randomUUID()
     const record = {
+      id: assessmentId,
       worker_id: workerId,
       skill,
       question: typeof question === 'string' ? JSON.parse(question) : question,
@@ -165,41 +172,49 @@ export async function POST(req: NextRequest) {
       analysis: null,
     }
 
-    let insertResult
+    let dbInsertOk = false
     try {
-      insertResult = await supabaseInsert('skill_assessments', record)
+      await supabaseInsert('skill_assessments', record)
+      dbInsertOk = true
     } catch (e) {
-      console.warn('[skill-video-submit] DB insert failed, returning with ID:', e)
-      // Fallback: generate a local ID
-      insertResult = [{ id: crypto.randomUUID(), ...record, created_at: new Date().toISOString() }]
+      console.error('[skill-video-submit] DB insert failed:', e)
+      return NextResponse.json(
+        { error: 'Failed to save assessment. Please try again.', details: String(e) },
+        { status: 500 },
+      )
     }
 
-    const assessmentId = Array.isArray(insertResult) ? insertResult[0]?.id : insertResult?.id
-
-    // ── Run analysis pipeline SYNCHRONOUSLY (returns auto-decision) ──────
+    // ── Run analysis pipeline synchronously ──────────────────────────────
+    // With Groq LPU as primary, the full pipeline (Whisper + 2× LLM) completes
+    // in ~5-10s. We await it so the frontend gets the real verdict immediately.
     let verdict: 'approved' | 'rejected' | 'pending' = 'pending'
     let verdictReason = ''
-    let analysisResult: Record<string, unknown> | null = null
+    let score: number | null = null
 
-    try {
-      const analysisUrl = new URL('/api/ai/analyze-assessment', req.url)
-      const analysisRes = await fetch(analysisUrl.toString(), {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language }),
-      })
+    if (dbInsertOk) {
+      try {
+        const analysisUrl = new URL('/api/ai/analyze-assessment', req.url).toString()
+        const analysisRes = await fetch(analysisUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language }),
+          signal: AbortSignal.timeout(55_000), // stay within 60s maxDuration
+        })
 
-      if (analysisRes.ok) {
-        const analysisData = await analysisRes.json()
-        analysisResult = analysisData.analysis ?? null
-        verdict = analysisData.analysis?.auto_decision ?? 'pending'
-        verdictReason = analysisData.analysis?.auto_decision_reason ?? ''
-      } else {
-        console.warn('[skill-video-submit] Analysis returned non-OK:', analysisRes.status)
+        if (analysisRes.ok) {
+          const analysisData = await analysisRes.json()
+          const analysis = analysisData.analysis ?? null
+          verdict = analysis?.auto_decision ?? 'pending'
+          verdictReason = analysis?.auto_decision_reason ?? ''
+          score = analysis?.confidence_score ?? null
+        } else {
+          console.warn('[skill-video-submit] Analysis returned non-OK:', analysisRes.status)
+          verdictReason = 'Analysis pipeline error — needs manual review.'
+        }
+      } catch (e) {
+        console.warn('[skill-video-submit] Analysis pipeline failed:', e)
+        verdictReason = 'Analysis timed out — needs manual review.'
       }
-    } catch (e) {
-      console.warn('[skill-video-submit] Analysis pipeline failed:', e)
-      verdictReason = 'Analysis pipeline error — needs manual review.'
     }
 
     return NextResponse.json({
@@ -207,7 +222,7 @@ export async function POST(req: NextRequest) {
       assessmentId,
       verdict,
       verdictReason,
-      score: analysisResult ? (analysisResult as Record<string, unknown>).confidence_score : null,
+      score,
       message:
         verdict === 'approved'
           ? 'Skill verified successfully!'

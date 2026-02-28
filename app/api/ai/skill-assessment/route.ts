@@ -3,7 +3,9 @@ import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 
-// ── Provider configuration (AI SDK — Gemini primary, Ollama fallback) ─────────
+// ── Provider configuration ──────────────────────────────────────────────────────────────
+// Priority: Groq (fastest, LPU) → Gemini → Ollama
+const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
 const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 let _keyIdx = 0
@@ -39,20 +41,38 @@ Return ONLY a valid JSON array with this exact structure, no markdown, no code f
 ]`
 
 async function callAI(prompt: string): Promise<string> {
-  const geminiKey = nextGeminiKey()
-  if (geminiKey) {
-    const google = createGoogleGenerativeAI({ apiKey: geminiKey })
-    const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
-      system: SYSTEM_PROMPT,
-      prompt,
-      temperature: 0.4,
-      maxOutputTokens: 1200,
-    })
-    return text ?? ''
+  // ── 1. Groq (fastest — LPU hardware, ~500ms) ────────────────────────────────────
+  if (GROQ_API_KEY) {
+    try {
+      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: GROQ_API_KEY })
+      const { text } = await generateText({
+        model: groq('llama-3.1-8b-instant'),
+        system: SYSTEM_PROMPT,
+        prompt,
+        temperature: 0.4,
+        maxOutputTokens: 1200,
+      })
+      if (text) return text
+    } catch { /* fall through to Gemini */ }
   }
 
-  // Ollama fallback via OpenAI-compatible provider
+  // ── 2. Gemini fallback ─────────────────────────────────────────────────────
+  const geminiKey = nextGeminiKey()
+  if (geminiKey) {
+    try {
+      const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+      const { text } = await generateText({
+        model: google('gemini-2.0-flash'),
+        system: SYSTEM_PROMPT,
+        prompt,
+        temperature: 0.4,
+        maxOutputTokens: 1200,
+      })
+      if (text) return text
+    } catch { /* fall through to Ollama */ }
+  }
+
+  // ── 3. Ollama local fallback ────────────────────────────────────────────────
   const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
   const { text } = await generateText({
     model: ollama(OLLAMA_MODEL),

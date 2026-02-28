@@ -3,7 +3,12 @@ import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
 
-// ── Provider configuration (AI SDK — Gemini primary, Ollama fallback) ─────────
+// ── Provider configuration ─────────────────────────────────────────────────
+// Groq is PRIMARY here — it's ~10× faster than Gemini due to LPU hardware.
+// This matters most for the skill-question route since the worker is waiting
+// on screen before their recording starts.
+// Priority: Groq → Gemini → Ollama
+const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
 const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 let _keyIdx = 0
@@ -15,6 +20,9 @@ function nextGeminiKey(): string | undefined {
 }
 const OLLAMA_URL   = process.env.OLLAMA_URL   ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.1:8b'
+
+// Keep execution budget generous — question generation + 3-language translation
+export const maxDuration = 30
 
 const SYSTEM_PROMPT = `You are a technical interview expert for HyperLocal, India's blue-collar job platform.
 
@@ -66,7 +74,22 @@ Return ONLY valid JSON (no markdown, no code fences):
 }`
 
 async function callAI(prompt: string): Promise<string> {
-  // Try Gemini first (cloud, fast)
+  // ── 1. Groq (fastest — LPU hardware, ~500ms response time) ───────────────
+  if (GROQ_API_KEY) {
+    try {
+      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: GROQ_API_KEY })
+      const { text } = await generateText({
+        model: groq('llama-3.1-8b-instant'),
+        system: SYSTEM_PROMPT,
+        prompt,
+        temperature: 0.5,
+        maxOutputTokens: 1500,
+      })
+      if (text) return text
+    } catch { /* fall through to Gemini */ }
+  }
+
+  // ── 2. Gemini fallback (cloud) ─────────────────────────────────────────────
   const geminiKey = nextGeminiKey()
   if (geminiKey) {
     try {
@@ -78,11 +101,11 @@ async function callAI(prompt: string): Promise<string> {
         temperature: 0.5,
         maxOutputTokens: 1500,
       })
-      return text ?? ''
+      if (text) return text
     } catch { /* fall through to Ollama */ }
   }
 
-  // Fallback: Ollama local via OpenAI-compatible provider
+  // ── 3. Ollama local fallback ───────────────────────────────────────────────
   const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
   const { text } = await generateText({
     model: ollama(OLLAMA_MODEL),

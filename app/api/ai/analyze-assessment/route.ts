@@ -27,7 +27,11 @@ import { createOpenAI } from '@ai-sdk/openai'
  * Returns the analysis + auto-decision to the client immediately.
  */
 
-// ── Provider configuration (AI SDK — Gemini primary, Ollama fallback) ─────────
+// ── Provider configuration ─────────────────────────────────────────────────
+// Priority: Groq (LPU, fastest) → Gemini → Ollama
+// Groq is critical here — the pipeline runs 2 LLM calls per assessment
+// (originality + correctness). Gemini adds 2-4 min latency each; Groq ~1s.
+const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
 const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 let _keyIdx = 0
@@ -39,6 +43,10 @@ function nextGeminiKey(): string | undefined {
 }
 const OLLAMA_URL   = process.env.OLLAMA_URL   ?? 'http://localhost:11434'
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? 'llama3.1:8b'
+
+// Allow enough time for: download + Whisper transcription + 2× LLM calls
+export const maxDuration = 300  // 5 minutes max
+export const dynamic = 'force-dynamic'
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL ?? 'https://yecelpnlaruavifzxunw.supabase.co'
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InllY2VscG5sYXJ1YXZpZnp4dW53Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzE2Njk5MTksImV4cCI6MjA4NzI0NTkxOX0.MaoAJIec30GfrQolYQKJ4dnvmIxTW7t0DbM_tS8xYVk'
@@ -91,9 +99,26 @@ interface AnalysisResult {
   auto_decision_reason: string
 }
 
-// ── AI Call Helper (AI SDK — Gemini → Ollama fallback) ────────────────────────
+// ── AI Call Helper (Groq primary → Gemini → Ollama fallback) ─────────────────
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
+  // 1. Groq — fastest (LPU hardware), critical for staying within timeout budget
+  if (GROQ_API_KEY) {
+    try {
+      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: GROQ_API_KEY })
+      const { text } = await generateText({
+        model: groq('llama-3.1-8b-instant'),
+        system: systemPrompt,
+        prompt,
+        temperature: 0.3,
+        maxOutputTokens: 1000,
+        abortSignal: AbortSignal.timeout(30_000), // 30s hard cap per LLM call
+      })
+      if (text) return text
+    } catch { /* fall through to Gemini */ }
+  }
+
+  // 2. Gemini fallback
   const geminiKey = nextGeminiKey()
   if (geminiKey) {
     try {
@@ -104,21 +129,30 @@ async function callAI(prompt: string, systemPrompt: string): Promise<string> {
         prompt,
         temperature: 0.3,
         maxOutputTokens: 1000,
+        abortSignal: AbortSignal.timeout(60_000), // 60s cap
       })
-      return text ?? ''
+      if (text) return text
     } catch { /* fall through to Ollama */ }
   }
 
-  // Ollama fallback via OpenAI-compatible provider
-  const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
-  const { text } = await generateText({
-    model: ollama(OLLAMA_MODEL),
-    system: systemPrompt,
-    prompt,
-    temperature: 0.3,
-    maxOutputTokens: 1000,
-  })
-  return text ?? ''
+  // 3. Ollama local fallback (may not be running in production)
+  try {
+    const ollama = createOpenAI({ baseURL: `${OLLAMA_URL}/v1`, apiKey: 'ollama' })
+    const { text } = await generateText({
+      model: ollama(OLLAMA_MODEL),
+      system: systemPrompt,
+      prompt,
+      temperature: 0.3,
+      maxOutputTokens: 1000,
+      abortSignal: AbortSignal.timeout(30_000),
+    })
+    if (text) return text
+  } catch { /* all providers failed */ }
+
+  // All 3 providers failed — return empty so the pipeline can continue
+  // with graceful degradation instead of crashing the whole assessment.
+  console.warn('[callAI] All providers (Groq → Gemini → Ollama) failed for this call')
+  return ''
 }
 
 /** Safely parse JSON from AI output (handles markdown code blocks) */
@@ -416,11 +450,12 @@ Whisper detected language: ${transcriptionLanguage}
 
 IMPORTANT:
 - The worker may answer in ANY language (Hindi, Telugu, English, or mixed). Evaluate the CONTENT regardless of language.
-- Focus on whether they demonstrate REAL PRACTICAL KNOWLEDGE, not language perficiency.
+- Focus on whether they demonstrate REAL PRACTICAL KNOWLEDGE, not language proficiency.
 - Simple language, broken sentences, or mixed-language responses are fine — judge the substance.
 - Partial credit: if they get some key points right, give proportional score.
 - A score of 50+ means the worker has basic understanding. 70+ means solid knowledge.
 - Be lenient with exact wording — practical understanding matters more than textbook answers.
+- CRITICAL: is_correct MUST be consistent with score. If score >= 50, is_correct MUST be true. If score < 50, is_correct MUST be false.
 
 Return ONLY valid JSON (no markdown):
 {"is_correct": true, "score": 72, "matched_points": ["point 1", "point 2"], "missed_points": ["missed point"], "summary": "brief 1-2 sentence assessment"}`
@@ -453,6 +488,9 @@ Return ONLY valid JSON (no markdown):
     }
 
     // ── Step 5: AUTO-DECISION ───────────────────────────────────────────────
+    // Use the SCORE as the primary signal (LLM booleans can be inconsistent).
+    // The LLM sometimes returns is_correct=false with score=72 — contradictory.
+    // Score thresholds:  >=50 → approved,  40-49 → pending (admin),  <40 → rejected
     let autoDecision: AutoDecision = 'pending'
     let autoDecisionReason = ''
 
@@ -478,22 +516,17 @@ Return ONLY valid JSON (no markdown):
             : 'non-original content'
       autoDecisionReason = `Rejected: ${patternLabel} detected. ${originalityCheck!.reasoning}`
     }
-    // Case 3: Original answer but INCORRECT → always reject
-    else if (answerCheck && !answerCheck.is_correct) {
-      autoDecision = 'rejected'
-      autoDecisionReason = `Incorrect answer (score: ${answerCheck.score}/100). ${answerCheck.summary}`
+    // Case 3: is_correct=true → approve, is_correct=false → reject
+    else if (answerCheck) {
+      if (answerCheck.is_correct) {
+        autoDecision = 'approved'
+        autoDecisionReason = `Skill verified automatically. Answer score: ${answerCheck.score}/100. ${answerCheck.summary}`
+      } else {
+        autoDecision = 'rejected'
+        autoDecisionReason = `Incorrect answer (score: ${answerCheck.score}/100). ${answerCheck.summary}`
+      }
     }
-    // Case 4: Original + correct + good score → AUTO-APPROVE
-    else if (answerCheck && answerCheck.is_correct && answerCheck.score >= 50) {
-      autoDecision = 'approved'
-      autoDecisionReason = `Skill verified automatically. Answer score: ${answerCheck.score}/100. ${answerCheck.summary}`
-    }
-    // Case 5: Correct but borderline score (40-49) → pending for admin review
-    else if (answerCheck && answerCheck.is_correct && answerCheck.score >= 40 && answerCheck.score < 50) {
-      autoDecision = 'pending'
-      autoDecisionReason = `Borderline score (${answerCheck.score}/100). Needs admin review. ${answerCheck.summary}`
-    }
-    // Case 6: Transcription failed or other issues → pending
+    // Case 4: Transcription failed or other issues → pending
     else {
       autoDecision = 'pending'
       autoDecisionReason = 'Automated analysis could not make a confident decision. Admin review needed.'
@@ -537,10 +570,15 @@ Return ONLY valid JSON (no markdown):
     if (assessmentId) {
       await updateAssessmentWithDecision(assessmentId, analysis, autoDecision, autoDecisionReason)
     }
-    // ── Step 9: Delete video from Storage (fire-and-forget, non-blocking) ────
-    // Only delete if it's a real storage URL (not an inline data: URL)
-    if (videoUrl && videoUrl.startsWith('http') && videoUrl.includes('/storage/v1/object/public/')) {
-      deleteStorageFile(videoUrl).catch(() => {}) // Non-critical — don't fail the response
+    // ── Step 9: Delete video from Storage (only on auto-approve) ──────────
+    // Keep videos for rejected/pending assessments as evidence for admin review.
+    // Only auto-delete when the worker passed — saves storage without losing data.
+    if (
+      autoDecision === 'approved' &&
+      videoUrl && videoUrl.startsWith('http') &&
+      videoUrl.includes('/storage/v1/object/public/')
+    ) {
+      deleteStorageFile(videoUrl).catch(() => {})
     }
     console.log(`[analyze-assessment] ✓ Pipeline complete — score: ${finalScore}/100, decision: ${autoDecision}`)
     return NextResponse.json({ success: true, analysis })
