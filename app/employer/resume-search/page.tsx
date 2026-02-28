@@ -34,7 +34,7 @@ export default function ResumeSearchPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [searching, setSearching] = useState(false)
-  const [indexing, setIndexing] = useState(true)
+  const [indexing, setIndexing] = useState(false)
   const [indexedCount, setIndexedCount] = useState(0)
   const chatEndRef = useRef<HTMLDivElement>(null)
 
@@ -167,8 +167,15 @@ export default function ResumeSearchPage() {
           : 'Could not load applicant data. Please refresh and try again.',
         timestamp: new Date(),
       }])
-    } catch {
-      toast({ title: 'Error loading applicants', description: 'Could not load job applicants', variant: 'destructive' })
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Could not load job applicants'
+      toast({ title: 'Error loading applicants', description: msg, variant: 'destructive' })
+      setMessages([{
+        id: 'error',
+        role: 'assistant',
+        content: `Failed to load applicant data: ${msg}\n\nPlease check your internet connection and refresh the page.`,
+        timestamp: new Date(),
+      }])
     } finally {
       setIndexing(false)
     }

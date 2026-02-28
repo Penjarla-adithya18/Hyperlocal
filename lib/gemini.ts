@@ -135,16 +135,22 @@ async function _callModelServer(prompt: string, maxTokens: number, systemInstruc
   const geminiKey = _nextGeminiKey()
 
   if (geminiKey) {
-    // ── Google Gemini via Vercel AI SDK ─────────────────────────────────────
-    const google = createGoogleGenerativeAI({ apiKey: geminiKey })
-    const { text } = await generateText({
-      model: google('gemini-2.0-flash'),
-      system: systemInstruction,
-      prompt,
-      maxOutputTokens: maxTokens,
-      temperature: 0.2,
-    })
-    return text ?? ''
+    try {
+      // ── Google Gemini via Vercel AI SDK ─────────────────────────────────────
+      const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+      const { text } = await generateText({
+        model: google('gemini-2.0-flash'),
+        system: systemInstruction,
+        prompt,
+        maxOutputTokens: maxTokens,
+        temperature: 0.2,
+      })
+      return text ?? ''
+    } catch (geminiErr) {
+      // Gemini failed (leaked/revoked keys, quota exceeded, etc.)
+      // Fall through to Ollama instead of throwing
+      console.warn('[AI] Gemini failed, falling back to Ollama:', geminiErr instanceof Error ? geminiErr.message : geminiErr)
+    }
   }
 
   // ── Ollama fallback via AI SDK OpenAI-compatible provider ─────────────────

@@ -394,7 +394,7 @@ export default function WorkerChatPage() {
                               </AvatarFallback>
                             </Avatar>
                             <div className="flex-1 min-w-0">
-                              <div className="flex justify-between items-center mb-1">
+                              <div className="flex justify-between items-center mb-0.5">
                                 <p className="font-semibold text-base truncate">
                                   {otherUser.fullName}
                                 </p>
@@ -404,6 +404,14 @@ export default function WorkerChatPage() {
                                   </span>
                                 )}
                               </div>
+                              {conv.jobId && jobsById[conv.jobId] && (
+                                <p
+                                  className="text-xs text-primary truncate mb-0.5 hover:underline cursor-pointer"
+                                  onClick={(e) => { e.stopPropagation(); router.push(`/worker/jobs/${conv.jobId}`) }}
+                                >
+                                  {jobsById[conv.jobId].title}
+                                </p>
+                              )}
                               <div className="flex items-center justify-between">
                                 <p className="text-sm text-muted-foreground truncate">
                                   {conv.lastMessage?.message || 'Start a conversation'}
@@ -440,7 +448,10 @@ export default function WorkerChatPage() {
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-base truncate">
+                  <p
+                    className={`font-semibold text-base truncate ${selectedConversation.jobId ? 'cursor-pointer hover:text-primary transition-colors' : ''}`}
+                    onClick={() => selectedConversation.jobId && router.push(`/worker/jobs/${selectedConversation.jobId}`)}
+                  >
                     {getOtherUser(selectedConversation)?.fullName}
                   </p>
                   <p

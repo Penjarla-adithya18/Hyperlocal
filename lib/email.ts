@@ -1,42 +1,18 @@
 /**
  * Email service for HyperLocal Jobs
- * Powered by Nodemailer + SMTP (works with Gmail, SendGrid, Zoho, AWS SES, etc.)
+ * Powered by a Supabase edge function (supabase/functions/email/index.ts).
  *
- * Required env vars:
- *   SMTP_HOST        - e.g. smtp.gmail.com
- *   SMTP_PORT        - e.g. 587
- *   SMTP_USER        - sender email address
- *   SMTP_PASS        - app password / API key
- *   EMAIL_FROM_NAME  - "HyperLocal Jobs" (optional, has default)
+ * SMTP credentials live exclusively in Supabase secrets — never in Next.js env.
+ * Set them once via:
+ *   supabase secrets set SMTP_HOST=smtp.gmail.com
+ *   supabase secrets set SMTP_PORT=587
+ *   supabase secrets set SMTP_USER=you@gmail.com
+ *   supabase secrets set SMTP_PASS=your-app-password
+ *   supabase secrets set EMAIL_FROM_NAME="HyperLocal Jobs"
+ *
+ * The only key needed locally / in Vercel env:
+ *   SUPABASE_SERVICE_ROLE_KEY  — authenticates the server→edge-function call
  */
-
-import nodemailer from 'nodemailer'
-
-// ── Transport singleton ───────────────────────────────────────────────────────
-
-function createTransport() {
-  const host = process.env.SMTP_HOST?.trim()
-  const port = parseInt(process.env.SMTP_PORT?.trim() ?? '587', 10)
-  const user = process.env.SMTP_USER?.trim()
-  const pass = process.env.SMTP_PASS?.trim()
-
-  if (!host || !user || !pass) {
-    // Return null — callers should handle gracefully
-    return null
-  }
-
-  return nodemailer.createTransport({
-    host,
-    port,
-    secure: port === 465, // true for 465 (SSL), false for 587 (STARTTLS)
-    auth: { user, pass },
-    tls: { rejectUnauthorized: false }, // allow self-signed certs in dev
-  })
-}
-
-const FROM_NAME = process.env.EMAIL_FROM_NAME ?? 'HyperLocal Jobs'
-const FROM_EMAIL = process.env.SMTP_USER ?? 'noreply@hyperlocalJobs.in'
-const FROM = `"${FROM_NAME}" <${FROM_EMAIL}>`
 
 // ── Shared HTML shell ─────────────────────────────────────────────────────────
 
@@ -192,25 +168,42 @@ export interface EmailPayload {
 }
 
 export async function sendEmail(payload: EmailPayload): Promise<{ success: boolean; messageId?: string; error?: string }> {
-  const transport = createTransport()
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim()
+  const serviceKey  = process.env.SUPABASE_SERVICE_ROLE_KEY?.trim()
 
-  // No SMTP config — log in dev, skip in prod
-  if (!transport) {
+  // Dev fallback: if not configured, log to console and treat as success
+  if (!supabaseUrl || !serviceKey) {
     if (process.env.NODE_ENV !== 'production') {
       console.log(`[EMAIL DEV] To: ${payload.to} | Subject: ${payload.subject}`)
+      console.log('[EMAIL DEV] Set SUPABASE_SERVICE_ROLE_KEY in .env.local to send real emails.')
     }
     return { success: true, messageId: 'dev-mock' }
   }
 
   try {
-    const info = await transport.sendMail({
-      from: FROM,
-      to: payload.to,
-      subject: payload.subject,
-      html: payload.html,
-      text: payload.text ?? payload.html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    const res = await fetch(`${supabaseUrl}/functions/v1/email`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey}`,
+      },
+      body: JSON.stringify({
+        to:      payload.to,
+        subject: payload.subject,
+        html:    payload.html,
+        text:    payload.text,
+      }),
     })
-    return { success: true, messageId: info.messageId }
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({})) as { error?: string }
+      const error = body.error ?? `Edge function responded with ${res.status}`
+      console.error('[EMAIL] Edge function error:', error)
+      return { success: false, error }
+    }
+
+    const data = await res.json() as { success: boolean; messageId?: string }
+    return { success: data.success, messageId: data.messageId }
   } catch (err) {
     const error = err instanceof Error ? err.message : String(err)
     console.error('[EMAIL] Send failed:', error)

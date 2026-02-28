@@ -39,18 +39,24 @@ export async function POST(req: NextRequest) {
 
     // ── Google Gemini via AI SDK (production) — skipped when provider==='ollama' ──
     if (geminiKey && provider !== 'ollama') {
-      const google = createGoogleGenerativeAI({ apiKey: geminiKey })
-      const { text } = await generateText({
-        model: google('gemini-2.0-flash'),
-        system: systemInstruction,
-        prompt,
-        maxOutputTokens: maxTokens,
-        temperature: 0.2,
-      })
-      return NextResponse.json({ text: text ?? '' })
+      try {
+        const google = createGoogleGenerativeAI({ apiKey: geminiKey })
+        const { text } = await generateText({
+          model: google('gemini-2.0-flash'),
+          system: systemInstruction,
+          prompt,
+          maxOutputTokens: maxTokens,
+          temperature: 0.2,
+        })
+        return NextResponse.json({ text: text ?? '' })
+      } catch (geminiErr) {
+        // Gemini failed (leaked/revoked keys, quota exceeded, etc.)
+        // Fall through to Ollama instead of returning 500 immediately
+        console.warn('[AI] Gemini failed, falling back to Ollama:', geminiErr instanceof Error ? geminiErr.message : geminiErr)
+      }
     }
 
-    // ── Ollama via AI SDK OpenAI-compatible (development) ────────────────────
+    // ── Ollama via AI SDK OpenAI-compatible (development / fallback) ─────────
     const ollama = createOpenAI({
       baseURL: `${OLLAMA_URL}/v1`,
       apiKey: 'ollama',

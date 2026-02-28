@@ -236,12 +236,16 @@ export const ragStore = new RAGStore()
 
 async function callAIForRAG(prompt: string, systemInstruction: string): Promise<string> {
   try {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30_000) // 30s timeout
     const res = await fetch('/api/ai/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // No provider override — auto-routes: Groq first, Ollama fallback
+      // No provider override — auto-routes: Gemini first, Ollama fallback
       body: JSON.stringify({ prompt, systemInstruction, maxTokens: 512 }),
+      signal: controller.signal,
     })
+    clearTimeout(timer)
     if (!res.ok) return ''
     const data = await res.json() as { text?: string }
     return data.text ?? ''
