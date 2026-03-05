@@ -17,6 +17,7 @@ import {
   Zap,
   Globe,
   Check,
+  Sparkles,
 } from 'lucide-react';
 import { useI18n } from '@/contexts/I18nContext';
 import { localeLabels } from '@/i18n';
