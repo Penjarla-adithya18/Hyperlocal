@@ -348,12 +348,79 @@ export async function POST(req: NextRequest) {
       audioAnalysis.flags.push('No video URL provided — cannot transcribe')
     }
 
-    // ── Step 3: Originality / plagiarism check via Ollama ───────────────────
+    // ── Step 3: Answer correctness / content match check ───────────────────
+    // Check content FIRST — no point running plagiarism on a wrong answer.
+    let answerCheck: CorrectnessResult | undefined
+
+    if (transcribedText.trim().length > 10 && expectedAnswer) {
+      try {
+        console.log('[analyze-assessment] Step 3: Content match / correctness check...')
+
+        // Build multilingual question text
+        let questionText = skill
+        if (typeof question === 'object' && question !== null) {
+          const q = question as Record<string, string>
+          questionText = q.en || q.hi || q.te || JSON.stringify(question)
+        } else if (typeof question === 'string') {
+          questionText = question
+        }
+
+        const correctnessPrompt = `You are an expert skill assessor for blue-collar and service jobs in India.
+
+Question asked (in English):
+"${questionText}"
+
+Expected correct answer (key points):
+"${expectedAnswer}"
+
+Worker's verbal answer (transcribed from video — may be in English, Hindi, Telugu, or mixed):
+"${transcribedText}"
+
+Whisper detected language: ${transcriptionLanguage}
+
+IMPORTANT:
+- The worker may answer in ANY language (Hindi, Telugu, English, or mixed). Evaluate the CONTENT regardless of language.
+- Focus on whether they demonstrate REAL PRACTICAL KNOWLEDGE, not language proficiency.
+- Simple language, broken sentences, or mixed-language responses are fine — judge the substance.
+- Partial credit: if they get some key points right, give proportional score.
+- A score of 50+ means the worker has basic understanding. 70+ means solid knowledge.
+- Be lenient with exact wording — practical understanding matters more than textbook answers.
+- CRITICAL: is_correct MUST be consistent with score. If score >= 50, is_correct MUST be true. If score < 50, is_correct MUST be false.
+
+Return ONLY valid JSON (no markdown):
+{"is_correct": true, "score": 72, "matched_points": ["point 1", "point 2"], "missed_points": ["missed point"], "summary": "brief 1-2 sentence assessment"}`
+
+        const response = await callAI(
+          correctnessPrompt,
+          'You are a practical skill assessor for workers in India. You understand English, Hindi, and Telugu. Judge answers on demonstration of real knowledge across any language. Return ONLY JSON.',
+        )
+
+        answerCheck = parseJsonSafe<CorrectnessResult>(response, {
+          is_correct: false,
+          score: 0,
+          matched_points: [],
+          missed_points: ['Could not evaluate answer'],
+          summary: 'Automated answer check failed.',
+        })
+        console.log(`[analyze-assessment] Step 3 ✓ Content match: correct=${answerCheck.is_correct}, score=${answerCheck.score}`)
+      } catch (e) {
+        console.warn('[analyze-assessment] Step 3 ✗ Content match check failed:', e)
+      }
+    } else if (transcribedText.trim().length === 0 && videoUrl) {
+      audioAnalysis.flags.push('No speech detected in the recording — silent or inaudible')
+      audioAnalysis.score = Math.max(0, audioAnalysis.score - 30)
+    }
+
+    // ── Step 4: Plagiarism / originality check — only if content is correct ──
+    // Plagiarism on a wrong answer is redundant — we reject wrong answers anyway.
+    // Only check originality when the answer content matches, to catch cheating.
     let originalityCheck: OriginalityResult | undefined
 
-    if (transcribedText.trim().length > 10) {
+    const contentIsCorrect = answerCheck?.is_correct ?? false
+
+    if (transcribedText.trim().length > 10 && contentIsCorrect) {
       try {
-        console.log('[analyze-assessment] Step 3: Originality check...')
+        console.log('[analyze-assessment] Step 4: Plagiarism / originality check (content was correct)...')
 
         // Build question context in all languages for the AI
         const questionContext = typeof question === 'object' && question !== null
@@ -406,9 +473,9 @@ Return ONLY valid JSON (no markdown):
           reasoning: 'Could not determine originality.',
           speech_pattern: 'natural',
         })
-        console.log(`[analyze-assessment] Step 3 ✓ Originality: original=${originalityCheck.is_original}, pattern=${originalityCheck.speech_pattern}`)
+        console.log(`[analyze-assessment] Step 4 ✓ Plagiarism: original=${originalityCheck.is_original}, pattern=${originalityCheck.speech_pattern}`)
 
-        // STRICT PLAGIARISM DETECTION: Reject ANY non-natural patterns
+        // Flag and penalise non-original answers
         if (!originalityCheck.is_original) {
           audioAnalysis.flags.push(`NLP: Speech appears ${originalityCheck.speech_pattern} — ${originalityCheck.reasoning}`)
           audioAnalysis.score = Math.max(0, audioAnalysis.score - 30)
@@ -426,101 +493,33 @@ Return ONLY valid JSON (no markdown):
           audioAnalysis.score = Math.max(0, audioAnalysis.score - 30)
         }
       } catch (e) {
-        console.warn('[analyze-assessment] Step 3 ✗ Originality check failed:', e)
+        console.warn('[analyze-assessment] Step 4 ✗ Plagiarism check failed:', e)
       }
-    } else if (transcribedText.trim().length === 0 && videoUrl) {
-      audioAnalysis.flags.push('No speech detected in the recording — silent or inaudible')
-      audioAnalysis.score = Math.max(0, audioAnalysis.score - 30)
-    }
-
-    // ── Step 4: Answer correctness check via Ollama ─────────────────────────
-    let answerCheck: CorrectnessResult | undefined
-
-    // STRICT: Reject if ANY non-natural speech pattern detected with confidence >= 40%
-    const isNotOriginal =
-      originalityCheck &&
-      (
-        // Explicitly not original OR
-        !originalityCheck.is_original ||
-        // Non-natural speech pattern — stricter threshold (35 instead of 40)
-        (originalityCheck.speech_pattern !== 'natural' && originalityCheck.confidence >= 35) ||
-        // AI-generated voice: reject even at low confidence (25)
-        (originalityCheck.speech_pattern === 'ai_generated' && originalityCheck.confidence >= 25)
-      )
-
-    if (transcribedText.trim().length > 10 && expectedAnswer && !isNotOriginal) {
-      try {
-        console.log('[analyze-assessment] Step 4: Answer correctness check...')
-
-        // Build multilingual question text
-        let questionText = skill
-        if (typeof question === 'object' && question !== null) {
-          const q = question as Record<string, string>
-          questionText = q.en || q.hi || q.te || JSON.stringify(question)
-        } else if (typeof question === 'string') {
-          questionText = question
-        }
-
-        const correctnessPrompt = `You are an expert skill assessor for blue-collar and service jobs in India.
-
-Question asked (in English):
-"${questionText}"
-
-Expected correct answer (key points):
-"${expectedAnswer}"
-
-Worker's verbal answer (transcribed from video — may be in English, Hindi, Telugu, or mixed):
-"${transcribedText}"
-
-Whisper detected language: ${transcriptionLanguage}
-
-IMPORTANT:
-- The worker may answer in ANY language (Hindi, Telugu, English, or mixed). Evaluate the CONTENT regardless of language.
-- Focus on whether they demonstrate REAL PRACTICAL KNOWLEDGE, not language proficiency.
-- Simple language, broken sentences, or mixed-language responses are fine — judge the substance.
-- Partial credit: if they get some key points right, give proportional score.
-- A score of 50+ means the worker has basic understanding. 70+ means solid knowledge.
-- Be lenient with exact wording — practical understanding matters more than textbook answers.
-- CRITICAL: is_correct MUST be consistent with score. If score >= 50, is_correct MUST be true. If score < 50, is_correct MUST be false.
-
-Return ONLY valid JSON (no markdown):
-{"is_correct": true, "score": 72, "matched_points": ["point 1", "point 2"], "missed_points": ["missed point"], "summary": "brief 1-2 sentence assessment"}`
-
-        const response = await callAI(
-          correctnessPrompt,
-          'You are a practical skill assessor for workers in India. You understand English, Hindi, and Telugu. Judge answers on demonstration of real knowledge across any language. Return ONLY JSON.',
-        )
-
-        answerCheck = parseJsonSafe<CorrectnessResult>(response, {
-          is_correct: false,
-          score: 0,
-          matched_points: [],
-          missed_points: ['Could not evaluate answer'],
-          summary: 'Automated answer check failed.',
-        })
-        console.log(`[analyze-assessment] Step 4 ✓ Correctness: correct=${answerCheck.is_correct}, score=${answerCheck.score}`)
-      } catch (e) {
-        console.warn('[analyze-assessment] Step 4 ✗ Correctness check failed:', e)
-      }
-    } else if (isNotOriginal) {
-      console.log('[analyze-assessment] Step 4 ⊘ Skipped — answer flagged as not original')
-      answerCheck = {
-        is_correct: false,
-        score: 0,
-        matched_points: [],
-        missed_points: ['Answer flagged as not original — correctness not evaluated'],
-        summary: 'Answer flagged as non-original (likely read or AI-generated). Correctness not evaluated.',
-      }
+    } else if (transcribedText.trim().length > 10 && !contentIsCorrect) {
+      console.log('[analyze-assessment] Step 4 ⊘ Skipped plagiarism — content was incorrect, rejecting on correctness')
     }
 
     // ── Step 5: AUTO-DECISION ───────────────────────────────────────────────
-    // Compute finalScore first — it is the composite pass/fail signal:
-    //   audio quality 25% + originality 35% + answer correctness 40%
-    // Pass threshold: finalScore >= 50
+    // Decision priority:
+    //   0. Network error           → pending
+    //   1. No speech               → rejected
+    //   2. Wrong answer            → rejected  (plagiarism not checked)
+    //   3. Correct + plagiarised   → rejected  (cheating detected)
+    //   4. Correct + original      → approved
+    //
+    // Score weighting: audio 25% + correctness 45% + originality 30%
+    const isNotOriginal =
+      originalityCheck &&
+      (
+        !originalityCheck.is_original ||
+        (originalityCheck.speech_pattern !== 'natural' && originalityCheck.confidence >= 35) ||
+        (originalityCheck.speech_pattern === 'ai_generated' && originalityCheck.confidence >= 25)
+      )
+
     const finalScore = Math.round(
       (audioAnalysis.score * 0.25) +
-      ((originalityCheck ? (originalityCheck.is_original ? 80 : 25) : 50) * 0.35) +
-      ((answerCheck ? answerCheck.score : 50) * 0.40),
+      ((answerCheck ? answerCheck.score : 50) * 0.45) +
+      ((originalityCheck ? (originalityCheck.is_original ? 80 : 25) : 70) * 0.30),
     )
 
     let autoDecision: AutoDecision = 'pending'
@@ -536,7 +535,12 @@ Return ONLY valid JSON (no markdown):
       autoDecision = 'rejected'
       autoDecisionReason = 'No speech detected in the recording. The video was silent or inaudible.'
     }
-    // Case 2: Plagiarism / reading / AI-generated detected
+    // Case 2: Wrong answer content — reject immediately, no plagiarism check needed
+    else if (answerCheck && !answerCheck.is_correct) {
+      autoDecision = 'rejected'
+      autoDecisionReason = `Answer was not correct. ${answerCheck.summary ?? 'Insufficient knowledge demonstrated.'}`
+    }
+    // Case 3: Correct answer but plagiarism/AI/reading detected
     else if (isNotOriginal) {
       autoDecision = 'rejected'
       const patternLabel = originalityCheck!.speech_pattern === 'ai_generated'
@@ -546,9 +550,9 @@ Return ONLY valid JSON (no markdown):
           : originalityCheck!.speech_pattern === 'memorized'
             ? 'Memorized/copied content detected'
             : 'Non-original content detected'
-      autoDecisionReason = `REJECTED: ${patternLabel}. Confidence: ${originalityCheck!.confidence}%. ${originalityCheck!.reasoning}. Strict plagiarism detection enforced.`
+      autoDecisionReason = `REJECTED: Content was correct but ${patternLabel}. Confidence: ${originalityCheck!.confidence}%. ${originalityCheck!.reasoning}`
     }
-    // Case 3: Correctness-based — is_correct=true → approved, is_correct=false → rejected
+    // Case 4: Correct answer + original delivery → approved
     else if (answerCheck?.is_correct) {
       autoDecision = 'approved'
       autoDecisionReason = `Skill verified. ${answerCheck?.summary ?? ''}`
