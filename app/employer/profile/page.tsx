@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Separator } from '@/components/ui/separator';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
-import { Building2, Loader2, Save, Shield, TrendingUp, Trash2, Mail, Phone, MapPin, Globe, CheckCircle2, XCircle, AlertTriangle, User } from 'lucide-react';
+import { Building2, Loader2, Save, Shield, TrendingUp, Trash2, Mail, Phone, MapPin, Globe, CheckCircle2, XCircle, AlertTriangle, User, ArrowLeftRight } from 'lucide-react';
 import { employerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { verifyGSTIN, validateGSTINFormat } from '@/lib/gstinService';
 import type { EmployerProfile, GSTINDetails } from '@/lib/types';
@@ -53,6 +53,8 @@ export default function EmployerProfilePage() {
   const router = useRouter();
   const { user, updateUser, logout } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [switchingRole, setSwitchingRole] = useState(false);
+  const [switchRoleDialogOpen, setSwitchRoleDialogOpen] = useState(false);
   const { toast } = useToast();
   const { t, locale, setLocale } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -246,6 +248,22 @@ export default function EmployerProfilePage() {
       });
     } finally {
       setDeletingAccount(false);
+    }
+  };
+
+  const handleSwitchToWorker = async () => {
+    if (!user) return;
+    setSwitchingRole(true);
+    try {
+      await userOps.update(user.id, { role: 'worker' });
+      updateUser({ role: 'worker' });
+      toast({ title: 'Switched to Worker!', description: 'Your account is now a Worker account. Redirecting...' });
+      setTimeout(() => router.push('/worker/dashboard'), 1200);
+    } catch {
+      toast({ title: 'Switch failed', description: 'Could not switch account type. Please try again.', variant: 'destructive' });
+    } finally {
+      setSwitchingRole(false);
+      setSwitchRoleDialogOpen(false);
     }
   };
 
@@ -606,6 +624,30 @@ export default function EmployerProfilePage() {
             </Button>
           </div>
 
+          {/* Switch Account Type */}
+          <Card className="p-5 mb-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-100 dark:bg-blue-900/40 flex items-center justify-center">
+                <ArrowLeftRight className="w-5 h-5 text-blue-600" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold text-blue-700 dark:text-blue-400">Switch Account Type</h2>
+                <p className="text-sm text-muted-foreground">Looking for a job instead? Switch to a Worker account.</p>
+              </div>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="border-blue-400 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+              onClick={() => setSwitchRoleDialogOpen(true)}
+              disabled={switchingRole}
+            >
+              {switchingRole
+                ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Switching...</>
+                : <><ArrowLeftRight className="w-4 h-4 mr-2" /> Switch to Worker</>}
+            </Button>
+          </Card>
+
           {/* Danger Zone */}
           <Card className="p-6 border-destructive/50">
             <div className="mb-6 space-y-6 border-b border-destructive/20 pb-6">
@@ -737,6 +779,30 @@ export default function EmployerProfilePage() {
                       </>
                     ) : (
                       'Delete Account'
+                    )}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+            <AlertDialog open={switchRoleDialogOpen} onOpenChange={setSwitchRoleDialogOpen}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Switch to Worker Account?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    Your account will be converted to a Worker account. You will be redirected to the Worker dashboard. You can switch back at any time from your profile.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={switchingRole}>Cancel</AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleSwitchToWorker}
+                    disabled={switchingRole}
+                    className="bg-blue-600 hover:bg-blue-700"
+                  >
+                    {switchingRole ? (
+                      <><Loader2 className="w-4 h-4 animate-spin mr-2" />Switching...</>
+                    ) : (
+                      'Switch to Worker'
                     )}
                   </AlertDialogAction>
                 </AlertDialogFooter>

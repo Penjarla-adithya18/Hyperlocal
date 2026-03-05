@@ -11,7 +11,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/contexts/AuthContext';
 import { Progress } from '@/components/ui/progress';
-import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { User, Loader2, X, Plus, Star, Sparkles, Shield, TrendingUp, Trash2, Camera, FileText, Upload, Check, ChevronDown, ChevronUp, CheckCircle2, AlertTriangle, ArrowLeftRight } from 'lucide-react';
 import { VideoSkillAssessment, VideoAssessmentResult } from '@/components/ui/video-skill-assessment';
 import { workerProfileOps, userOps, db, loginUser } from '@/lib/api';
 import { resetPassword, sendOTP, verifyOTP, sendEmailOtp, verifyEmailOtp } from '@/lib/auth';
@@ -39,6 +39,8 @@ export default function WorkerProfilePage() {
   const router = useRouter();
   const { user, updateUser, logout } = useAuth();
   const [deletingAccount, setDeletingAccount] = useState(false);
+  const [switchingRole, setSwitchingRole] = useState(false);
+  const [switchRoleDialogOpen, setSwitchRoleDialogOpen] = useState(false);
   const { toast } = useToast();
   const { t, locale, setLocale } = useI18n();
   const [loading, setLoading] = useState(true);
@@ -262,6 +264,22 @@ export default function WorkerProfilePage() {
       toast({ title: 'Error', description: 'Failed to delete account. Please try again.', variant: 'destructive' });
     } finally {
       setDeletingAccount(false);
+    }
+  };
+
+  const handleSwitchToEmployer = async () => {
+    if (!user) return;
+    setSwitchingRole(true);
+    try {
+      await userOps.update(user.id, { role: 'employer' });
+      updateUser({ role: 'employer' });
+      toast({ title: 'Switched to Employer!', description: 'Your account is now an Employer account. Redirecting...' });
+      setTimeout(() => router.push('/employer/dashboard'), 1200);
+    } catch {
+      toast({ title: 'Switch failed', description: 'Could not switch account type. Please try again.', variant: 'destructive' });
+    } finally {
+      setSwitchingRole(false);
+      setSwitchRoleDialogOpen(false);
     }
   };
 
@@ -622,14 +640,27 @@ export default function WorkerProfilePage() {
                     className="hidden"
                     onChange={handleImageUpload}
                   />
-                  <label htmlFor="profile-image-input">
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <span className="cursor-pointer flex items-center gap-1">
-                        <Camera className="w-4 h-4" />
-                        {formData.profileImage ? t('common.change') || 'Change Photo' : t('common.upload') || 'Upload Photo'}
-                      </span>
-                    </Button>
-                  </label>
+                  <div className="flex gap-2 flex-wrap">
+                    <label htmlFor="profile-image-input">
+                      <Button type="button" variant="outline" size="sm" asChild>
+                        <span className="cursor-pointer flex items-center gap-1">
+                          <Camera className="w-4 h-4" />
+                          {formData.profileImage ? t('common.change') || 'Change Photo' : t('common.upload') || 'Upload Photo'}
+                        </span>
+                      </Button>
+                    </label>
+                    {formData.profileImage && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="text-destructive border-destructive/40 hover:bg-destructive/10"
+                        onClick={() => setFormData(prev => ({ ...prev, profileImage: '' }))}
+                      >
+                        <Trash2 className="w-4 h-4 mr-1" /> Remove Photo
+                      </Button>
+                    )}
+                  </div>
                   <p className="text-xs text-muted-foreground mt-1">JPG or PNG - max 2 MB - shown at 200×200 px</p>
                 </div>
               </div>
@@ -1052,6 +1083,28 @@ export default function WorkerProfilePage() {
               </div>
             </div>
 
+            {/* Switch Account Type */}
+            <Card className="p-5 mb-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/20">
+              <div className="flex items-center gap-2 mb-3">
+                <ArrowLeftRight className="w-4 h-4 text-blue-600" />
+                <h2 className="text-base font-semibold text-blue-700 dark:text-blue-400 uppercase tracking-wide">Switch Account Type</h2>
+              </div>
+              <p className="text-sm text-muted-foreground mb-4">
+                Want to post jobs and hire workers? Switch to an Employer account. You can always switch back.
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                className="border-blue-400 text-blue-700 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30"
+                onClick={() => setSwitchRoleDialogOpen(true)}
+                disabled={switchingRole}
+              >
+                {switchingRole
+                  ? <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Switching...</>
+                  : <><ArrowLeftRight className="w-4 h-4 mr-2" /> Switch to Employer</>}
+              </Button>
+            </Card>
+
             <div className="flex items-center gap-2 mb-3">
               <Trash2 className="w-4 h-4 text-destructive" />
               <h2 className="text-base font-semibold text-muted-foreground uppercase tracking-wide text-destructive">Danger Zone</h2>
@@ -1088,6 +1141,28 @@ export default function WorkerProfilePage() {
                 disabled={deletingAccount}
               >
                 {deletingAccount ? 'Deleting...' : 'Delete Account'}
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Switch Role Confirmation Dialog */}
+        <AlertDialog open={switchRoleDialogOpen} onOpenChange={setSwitchRoleDialogOpen}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Switch to Employer Account?</AlertDialogTitle>
+              <AlertDialogDescription>
+                Your account will be switched to an <strong>Employer</strong> account. You will be redirected to the employer dashboard. You can switch back to Worker from your employer profile at any time.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel disabled={switchingRole}>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => { void handleSwitchToEmployer(); }}
+                disabled={switchingRole}
+                className="bg-blue-600 hover:bg-blue-700"
+              >
+                {switchingRole ? 'Switching...' : 'Yes, Switch to Employer'}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
