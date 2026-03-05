@@ -69,7 +69,7 @@ async function callAI(prompt: string): Promise<string> {
   if (groqKey) {
     try {
       const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: groqKey })
-      const { text } = await generateText({ model: groq('llama-3.1-8b-instant'), prompt, maxTokens: 600 })
+      const { text } = await generateText({ model: groq('llama-3.1-8b-instant'), prompt, maxOutputTokens: 600 })
       return text
     } catch { /* fall through */ }
   }
@@ -77,7 +77,7 @@ async function callAI(prompt: string): Promise<string> {
   if (geminiKey) {
     try {
       const google = createGoogleGenerativeAI({ apiKey: geminiKey })
-      const { text } = await generateText({ model: google('gemini-2.0-flash'), prompt, maxTokens: 600 })
+      const { text } = await generateText({ model: google('gemini-2.0-flash'), prompt, maxOutputTokens: 600 })
       return text
     } catch { /* fall through */ }
   }
