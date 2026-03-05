@@ -31,7 +31,22 @@ import {
   SkipForward,
   Users,
   Volume2,
+  Scan,
+  UserCheck,
+  XCircle,
+  UserX,
+  FileWarning,
 } from 'lucide-react'
+import {
+  loadFaceModels,
+  extractFaceDescriptor,
+  extractFaceFromUrl,
+  extractFaceFromVideo,
+  compareFaceDescriptors,
+  getVerificationMessage,
+  type FaceDescriptor,
+  type FaceMatchResult,
+} from '@/lib/faceVerification'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -48,17 +63,24 @@ export interface VideoAssessmentResult {
   verdict?: 'approved' | 'rejected' | 'pending'
   verdictReason?: string
   score?: number
+  // Verification failure details
+  verificationFailure?: {
+    type: 'face_mismatch' | 'multiple_faces' | 'no_face' | 'plagiarism' | 'wrong_answer' | 'other'
+    message: string
+    timestamp?: string
+  }
 }
 
 interface VideoSkillAssessmentProps {
   skills: string[]
   workerId: string
+  profilePictureUrl?: string | null  // Optional profile picture for verification
   onComplete: (results: VideoAssessmentResult[]) => void
   onCancel: () => void
   open: boolean
 }
 
-type Phase = 'intro' | 'loading' | 'read-question' | 'recording' | 'submitting' | 'skill-done' | 'all-done'
+type Phase = 'selfie-verification' | 'intro' | 'loading' | 'read-question' | 'recording' | 'submitting' | 'skill-done' | 'all-done'
 type Language = 'en' | 'hi' | 'te'
 
 const LANG_LABELS: Record<Language, string> = {
@@ -374,11 +396,12 @@ class NoiseMonitor {
 export function VideoSkillAssessment({
   skills,
   workerId,
+  profilePictureUrl,
   onComplete,
   onCancel,
   open,
 }: VideoSkillAssessmentProps) {
-  const [phase, setPhase] = useState<Phase>('intro')
+  const [phase, setPhase] = useState<Phase>('selfie-verification')
   const [currentSkillIdx, setCurrentSkillIdx] = useState(0)
   const [language, setLanguage] = useState<Language>('en')
   const [question, setQuestion] = useState<MultilingualQuestion | null>(null)
@@ -386,6 +409,19 @@ export function VideoSkillAssessment({
   const [timer, setTimer] = useState(0)
   const [results, setResults] = useState<VideoAssessmentResult[]>([])
   const [error, setError] = useState('')
+
+  // ── Face Verification State ────────────────────────────────────────────────
+  const [selfieDescriptor, setSelfieDescriptor] = useState<FaceDescriptor | null>(null)
+  const [selfieCaptured, setSelfieCaptured] = useState(false)
+  const [verifying, setVerifying] = useState(false)
+  const [verificationError, setVerificationError] = useState('')
+  const [selfieCameraActive, setSelfieCameraActive] = useState(false)
+  const [verificationResult, setVerificationResult] = useState<FaceMatchResult | null>(null)
+  const [faceMatchMonitor, setFaceMatchMonitor] = useState<{ lastCheck: number; failureCount: number }>({ lastCheck: 0, failureCount: 0 })
+  const [faceVerificationFailure, setFaceVerificationFailure] = useState<{ type: string; message: string } | null>(null)
+  const selfieVideoRef = useRef<HTMLVideoElement>(null)
+  const selfieStreamRef = useRef<MediaStream | null>(null)
+  const frameCheckIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Webcam & recording
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -428,18 +464,279 @@ export function VideoSkillAssessment({
   // Reset when dialog opens
   useEffect(() => {
     if (open) {
-      setPhase('intro')
+      setPhase('selfie-verification')
       setCurrentSkillIdx(0)
       setResults([])
       setError('')
       setTimer(0)
+      setSelfieDescriptor(null)
+      setSelfieCaptured(false)
+      setVerifying(false)
+      setVerificationError('')
+      setVerificationResult(null)
+      setSelfieCameraActive(false)
+      setFaceMatchMonitor({ lastCheck: 0, failureCount: 0 })
+      setFaceVerificationFailure(null)
     }
   }, [open])
+
+  // ── Selfie Verification Functions ────────────────────────────────────────────
+
+  const startSelfieCapture = useCallback(async () => {
+    setVerificationError('')
+    setVerifying(true)
+    try {
+      // Load face-api models first
+      await loadFaceModels()
+
+      // Start webcam for selfie
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+        audio: false,
+      })
+      selfieStreamRef.current = stream
+      setSelfieCameraActive(true)
+
+      // Wait for React to render the video element, then set stream
+      await new Promise(resolve => setTimeout(resolve, 100))
+
+      if (selfieVideoRef.current) {
+        console.log('[Selfie] Setting video srcObject and playing...')
+        selfieVideoRef.current.srcObject = stream
+        try {
+          await selfieVideoRef.current.play()
+          console.log('[Selfie] ✓ Video playing')
+        } catch (playError) {
+          console.error('[Selfie] Play error:', playError)
+          // Try again after a short delay
+          setTimeout(async () => {
+            if (selfieVideoRef.current) {
+              await selfieVideoRef.current.play().catch(e => console.error('[Selfie] Retry play failed:', e))
+            }
+          }, 500)
+        }
+      } else {
+        console.error('[Selfie] Video element ref is null!')
+      }
+
+      setVerifying(false)
+    } catch (e) {
+      console.error('Failed to start selfie camera:', e)
+      setVerificationError('Camera access denied. Please allow camera permission.')
+      setVerifying(false)
+      setSelfieCameraActive(false)
+    }
+  }, [])
+
+  const captureSelfie = useCallback(async () => {
+    if (!selfieVideoRef.current) {
+      setVerificationError('Camera not ready. Please try again.')
+      return
+    }
+
+    setVerifying(true)
+    setVerificationError('')
+
+    try {
+      // Extract face from current video frame
+      const faceDesc = await extractFaceFromVideo(selfieVideoRef.current)
+
+      if (!faceDesc) {
+        setVerificationError('No face detected. Please ensure good lighting and face the camera directly.')
+        setVerifying(false)
+        return
+      }
+
+      if (faceDesc.faceCount > 1) {
+        setVerificationError('Multiple faces detected. Please ensure only you are in the frame.')
+        setVerifying(false)
+        return
+      }
+
+      // If profile picture exists, verify against it
+      let matchResult: FaceMatchResult | null = null
+      if (profilePictureUrl) {
+        console.log('[Selfie Verification] Comparing with profile picture...')
+        const profileFace = await extractFaceFromUrl(profilePictureUrl)
+
+        if (!profileFace) {
+          console.warn('[Selfie Verification] Could not extract face from profile picture')
+          // Continue anyway - profile picture might be outdated or low quality
+          matchResult = {
+            isMatch: true,
+            similarity: 0,
+            distance: 0,
+            confidence: 'low',
+            threshold: 0.6,
+          }
+        } else {
+          matchResult = compareFaceDescriptors(faceDesc.descriptor, profileFace.descriptor)
+          console.log('[Selfie Verification] Profile match:', matchResult)
+
+          if (!matchResult.isMatch) {
+            setVerificationError(`Face does not match your profile picture (${matchResult.similarity}% similarity). Please ensure you are the registered user.`)
+            setVerifying(false)
+            return
+          }
+        }
+      } else {
+        // No profile picture - just confirm face detected
+        matchResult = {
+          isMatch: true,
+          similarity: 100,
+          distance: 0,
+          confidence: 'high',
+          threshold: 0.6,
+        }
+      }
+
+      // Store results
+      setSelfieDescriptor(faceDesc)
+      setVerificationResult(matchResult)
+      setSelfieCaptured(true)
+
+      // Capture the frame as blob for storage
+      const canvas = document.createElement('canvas')
+      canvas.width = selfieVideoRef.current.videoWidth
+      canvas.height = selfieVideoRef.current.videoHeight
+      const ctx = canvas.getContext('2d')
+      if (ctx) {
+        ctx.drawImage(selfieVideoRef.current, 0, 0, canvas.width, canvas.height)
+        canvas.toBlob(async (blob) => {
+          if (blob) {
+            // Upload to Supabase with 30-day TTL
+            await uploadSelfieToStorage(blob)
+          }
+        }, 'image/jpeg', 0.9)
+      }
+
+      // Stop selfie stream
+      if (selfieStreamRef.current) {
+        selfieStreamRef.current.getTracks().forEach(t => t.stop())
+        selfieStreamRef.current = null
+      }
+
+      setVerifying(false)
+      // Don't auto-advance to intro - let user see verification result
+    } catch (e) {
+      console.error('[Selfie Verification] Failed:', e)
+      setVerificationError('Face verification failed. Please try again.')
+      setVerifying(false)
+    }
+  }, [profilePictureUrl])
+
+  const uploadSelfieToStorage = async (blob: Blob) => {
+    try {
+      const formData = new FormData()
+      formData.append('file', blob, `verification-${workerId}-${Date.now()}.jpg`)
+      formData.append('workerId', workerId)
+      formData.append('ttlDays', '30')
+
+      const res = await fetch('/api/upload-verification-selfie', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!res.ok) {
+        console.warn('[Selfie Verification] Upload failed:', await res.text())
+      } else {
+        console.log('[Selfie Verification] ✓ Selfie uploaded to storage with 30-day TTL')
+      }
+    } catch (e) {
+      console.warn('[Selfie Verification] Upload error (non-critical):', e)
+    }
+  }
+
+  const stopSelfieStream = useCallback(() => {
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach(t => t.stop())
+      selfieStreamRef.current = null
+    }
+    setSelfieCameraActive(false)
+  }, [])
+
+  // Continuous frame matching during recording
+  const startContinuousFrameCheck = useCallback(() => {
+    if (!selfieDescriptor || !videoRef.current) return
+
+    console.log('[Face Verification] Starting continuous frame monitoring...')
+    let checkCount = 0
+
+    frameCheckIntervalRef.current = setInterval(async () => {
+      checkCount++
+      if (!videoRef.current || !selfieDescriptor) {
+        if (frameCheckIntervalRef.current) {
+          clearInterval(frameCheckIntervalRef.current)
+          frameCheckIntervalRef.current = null
+        }
+        return
+      }
+
+      try {
+        const frameFace = await extractFaceFromVideo(videoRef.current)
+
+        if (!frameFace) {
+          console.warn(`[Face Verification] Check #${checkCount}: No face detected in frame`)
+          setFaceMatchMonitor(prev => {
+            const newFailureCount = prev.failureCount + 1
+            if (newFailureCount >= 3) {
+              // 3 consecutive failures - stop recording and reject
+              console.error('[Face Verification] Too many failures - face not visible')
+              setFaceVerificationFailure({
+                type: 'no_face',
+                message: `Face not visible during recording (${newFailureCount} consecutive checks failed)`,
+              })
+              finishRecording()
+              setError('Face not visible during recording. Assessment terminated.')
+            }
+            return { lastCheck: Date.now(), failureCount: newFailureCount }
+          })
+          return
+        }
+
+        // Compare with selfie
+        const matchResult = compareFaceDescriptors(selfieDescriptor.descriptor, frameFace.descriptor)
+        console.log(`[Face Verification] Check #${checkCount}: ${matchResult.similarity}% match (${matchResult.isMatch ? 'PASS' : 'FAIL'})`)
+
+        if (!matchResult.isMatch) {
+          // Face mismatch - stop recording immediately
+          console.error(`[Face Verification] Face mismatch detected! Similarity: ${matchResult.similarity}%`)
+          setFaceVerificationFailure({
+            type: 'face_mismatch',
+            message: `Different person detected during recording. Similarity: ${matchResult.similarity}% (required: 70%+). Verification check #${checkCount}.`,
+          })
+          if (frameCheckIntervalRef.current) {
+            clearInterval(frameCheckIntervalRef.current)
+            frameCheckIntervalRef.current = null
+          }
+          finishRecording()
+          setError(`Face verification failed during recording. Different person detected (${matchResult.similarity}% match). Assessment terminated.`)
+        } else {
+          // Reset failure count on success
+          setFaceMatchMonitor(prev => ({ lastCheck: Date.now(), failureCount: 0 }))
+        }
+      } catch (e) {
+        console.warn(`[Face Verification] Check #${checkCount} failed:`, e)
+      }
+    }, 5000) // Check every 5 seconds during recording
+  }, [selfieDescriptor])
+
+  const stopContinuousFrameCheck = useCallback(() => {
+    if (frameCheckIntervalRef.current) {
+      clearInterval(frameCheckIntervalRef.current)
+      frameCheckIntervalRef.current = null
+      console.log('[Face Verification] Stopped continuous frame monitoring')
+    }
+  }, [])
 
   const stopStream = useCallback(() => {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
+    }
+    if (selfieStreamRef.current) {
+      selfieStreamRef.current.getTracks().forEach(t => t.stop())
+      selfieStreamRef.current = null
     }
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop()
@@ -455,6 +752,10 @@ export function VideoSkillAssessment({
     if (noiseMonitorRef.current) {
       noiseMonitorRef.current.stop()
       noiseMonitorRef.current = null
+    }
+    if (frameCheckIntervalRef.current) {
+      clearInterval(frameCheckIntervalRef.current)
+      frameCheckIntervalRef.current = null
     }
     if (timerRef.current) {
       clearInterval(timerRef.current)
@@ -517,6 +818,9 @@ export function VideoSkillAssessment({
       if (videoRef.current) {
         videoRef.current.srcObject = stream
         await videoRef.current.play()
+
+        // Start continuous face matching against selfie (after video has started)
+        setTimeout(() => startContinuousFrameCheck(), 1000)
       }
 
       // Start audio analysis
@@ -596,6 +900,9 @@ export function VideoSkillAssessment({
       timerRef.current = null
     }
 
+    // Stop continuous face matching
+    stopContinuousFrameCheck()
+
     // Stop audio analyzer to get metrics
     if (audioAnalyzerRef.current) {
       audioMetricsRef.current = audioAnalyzerRef.current.stop()
@@ -626,7 +933,7 @@ export function VideoSkillAssessment({
       }
       submitRecordingRef.current() // Use ref to always get latest submitRecording
     }, 500)
-  }, [])
+  }, [stopContinuousFrameCheck])
 
   const submitRecording = useCallback(async () => {
     setPhase('submitting')
@@ -664,14 +971,30 @@ export function VideoSkillAssessment({
 
       const data = await res.json()
 
-      setResults(prev => [...prev, {
+      const result: VideoAssessmentResult = {
         skill,
         submitted: res.ok,
         assessmentId: data.assessmentId,
         verdict: data.verdict ?? 'pending',
         verdictReason: data.verdictReason ?? (data.error || ''),
         score: data.score ?? undefined,
-      }])
+      }
+
+      // Add face verification failure if it occurred
+      if (faceVerificationFailure) {
+        result.verificationFailure = {
+          type: faceVerificationFailure.type as any,
+          message: faceVerificationFailure.message,
+          timestamp: new Date().toISOString(),
+        }
+        // Override verdict if face verification failed
+        if (res.ok && result.verdict === 'approved') {
+          result.verdict = 'rejected'
+          result.verdictReason = `Face verification failed: ${faceVerificationFailure.message}`
+        }
+      }
+
+      setResults(prev => [...prev, result])
 
       setPhase('skill-done')
     } catch (e) {
@@ -729,8 +1052,150 @@ export function VideoSkillAssessment({
 
   // ── Render ──────────────────────────────────────────────────────────────────
   return (
-    <Dialog open={open} onOpenChange={(v) => { if (!v) { stopStream(); onCancel() } }}>
+    <Dialog open={open} onOpenChange={(v) => { if (!v) { stopStream(); stopSelfieStream(); onCancel() } }}>
       <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto">
+
+        {/* ── SELFIE VERIFICATION ───────────────────────────────────────────── */}
+        {phase === 'selfie-verification' && (
+          <>
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <Scan className="w-5 h-5 text-primary" />
+                Face Verification Required
+              </DialogTitle>
+              <DialogDescription>
+                Prevent impersonation — verify your identity before starting the skill test
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="space-y-4 py-4">
+              {!selfieCaptured ? (
+                <>
+                  <Card className="p-4 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-800">
+                    <h3 className="font-semibold mb-2 flex items-center gap-2">
+                      <UserCheck className="w-4 h-4" /> Identity Verification
+                    </h3>
+                    <ul className="text-sm space-y-2 text-muted-foreground">
+                      <li>• Take a selfie to verify your identity</li>
+                      {profilePictureUrl && <li>• Your selfie will be matched with your profile picture (70% threshold)</li>}
+                      <li>• Your face will be continuously monitored during the test</li>
+                      <li>• The selfie will be stored for 30 days for dispute resolution</li>
+                      <li>• Ensure good lighting and face the camera directly</li>
+                      <li>• Only your face should be visible (no multiple people)</li>
+                    </ul>
+                  </Card>
+
+                  {/* Webcam preview for selfie capture */}
+                  {selfieCameraActive ? (
+                    <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
+                      <video
+                        ref={selfieVideoRef}
+                        autoPlay
+                        muted
+                        playsInline
+                        className="w-full h-full object-cover mirror"
+                        style={{ transform: 'scaleX(-1)' }}
+                      />
+                      <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                        <div className="w-64 h-64 border-4 border-primary rounded-full opacity-50"></div>
+                      </div>
+                      <div className="absolute bottom-3 left-1/2 -translate-x-1/2">
+                        <Badge className="bg-black/70 text-white border-0">
+                          <Camera className="w-3 h-3 mr-1" /> Position your face in the circle
+                        </Badge>
+                      </div>
+                    </div>
+                  ) : (
+                    <Card className="p-8 text-center bg-muted/50">
+                      <Camera className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">
+                        Click below to start your webcam for selfie capture
+                      </p>
+                    </Card>
+                  )}
+
+                  {verificationError && (
+                    <Card className="p-4 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
+                      <div className="flex items-center gap-2 mb-2">
+                        <AlertTriangle className="w-5 h-5 text-red-600" />
+                        <span className="font-semibold text-red-700 dark:text-red-400">Verification Failed</span>
+                      </div>
+                      <p className="text-sm text-red-700 dark:text-red-300">{verificationError}</p>
+                    </Card>
+                  )}
+                </>
+              ) : (
+                <Card className="p-4 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
+                  <div className="flex items-center gap-2 mb-3">
+                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-green-700 dark:text-green-400">Identity Verified ✓</span>
+                  </div>
+                  <p className="text-sm text-green-700 dark:text-green-300 mb-3">
+                    Your identity has been verified successfully. Your face will be monitored throughout the assessment.
+                  </p>
+                  {verificationResult && (
+                    <div className="bg-white/50 dark:bg-black/20 rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-green-700 dark:text-green-400">Match Score:</span>
+                        <Badge variant="default" className="bg-green-600 text-white">
+                          {verificationResult.similarity.toFixed(1)}% {verificationResult.isMatch ? '✓' : '✗'}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-medium text-green-700 dark:text-green-400">Confidence:</span>
+                        <Badge variant="outline" className="text-xs capitalize">
+                          {verificationResult.confidence}
+                        </Badge>
+                      </div>
+                      {profilePictureUrl ? (
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          ✓ Selfie matched with your profile picture
+                        </p>
+                      ) : (
+                        <p className="text-xs text-green-600 dark:text-green-400">
+                          ✓ Face detected successfully (no profile picture to compare)
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </Card>
+              )}
+            </div>
+
+            <DialogFooter className="gap-2">
+              <Button variant="outline" onClick={() => { stopSelfieStream(); onCancel() }}>Cancel</Button>
+              {!selfieCameraActive && !selfieCaptured ? (
+                <Button onClick={startSelfieCapture} disabled={verifying} className="gap-2">
+                  {verifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Loading Models...
+                    </>
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4" /> Start Camera
+                    </>
+                  )}
+                </Button>
+              ) : !selfieCaptured ? (
+                <Button onClick={captureSelfie} disabled={verifying} className="gap-2">
+                  {verifying ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" /> Verifying...
+                    </>
+                  ) : (
+                    <>
+                      <Scan className="w-4 h-4" /> Capture & Verify
+                    </>
+                  )}
+                </Button>
+              ) : (
+                <Button onClick={() => setPhase('intro')} className="gap-2">
+                  <ArrowRight className="w-4 h-4" /> Continue to Assessment
+                </Button>
+              )}
+            </DialogFooter>
+          </>
+        )}
 
         {/* ── INTRO ─────────────────────────────────────────────────────────── */}
         {phase === 'intro' && (
@@ -1012,6 +1477,34 @@ export function VideoSkillAssessment({
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {/* Final Score Display */}
+              {latestResult?.score !== undefined && (
+                <Card className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border-blue-200 dark:border-blue-800">
+                  <div className="text-center">
+                    <div className="text-5xl font-bold mb-2" style={{
+                      color: latestResult.score >= 70 ? '#16a34a' : latestResult.score >= 50 ? '#eab308' : '#dc2626'
+                    }}>
+                      {latestResult.score}
+                      <span className="text-2xl text-muted-foreground">/100</span>
+                    </div>
+                    <p className="text-sm font-medium text-muted-foreground">
+                      Final Assessment Score
+                    </p>
+                    <div className="mt-2 flex items-center justify-center gap-2">
+                      {latestResult.score >= 70 && (
+                        <Badge className="bg-green-600">Excellent</Badge>
+                      )}
+                      {latestResult.score >= 50 && latestResult.score < 70 && (
+                        <Badge className="bg-yellow-600">Good</Badge>
+                      )}
+                      {latestResult.score < 50 && (
+                        <Badge variant="destructive">Below Threshold</Badge>
+                      )}
+                    </div>
+                  </div>
+                </Card>
+              )}
+
               {v === 'approved' && (
                 <Card className="p-4 bg-green-50 dark:bg-green-950/30 border-green-200 dark:border-green-800">
                   <div className="flex items-center gap-2 mb-2">
@@ -1025,18 +1518,139 @@ export function VideoSkillAssessment({
                 </Card>
               )}
               {v === 'rejected' && (
-                <Card className="p-4 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
-                  <div className="flex items-center gap-2 mb-2">
-                    <AlertTriangle className="w-5 h-5 text-red-600" />
-                    <span className="font-semibold text-red-700 dark:text-red-400">Not Passed</span>
-                  </div>
-                  <p className="text-sm text-red-700 dark:text-red-300">
-                    {latestResult?.verdictReason || 'Your answer did not meet the required criteria.'}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-2">
-                    You can retry this assessment later from your profile.
-                  </p>
-                </Card>
+                <>
+                  <Card className="p-4 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <AlertTriangle className="w-5 h-5 text-red-600" />
+                      <span className="font-semibold text-red-700 dark:text-red-400">Not Passed</span>
+                    </div>
+                    <p className="text-sm text-red-700 dark:text-red-300">
+                      {latestResult?.verdictReason || 'Your answer did not meet the required criteria.'}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-2">
+                      You can retry this assessment later from your profile.
+                    </p>
+                  </Card>
+
+                  {/* Verification Failure Breakdown */}
+                  {latestResult?.verificationFailure && (
+                    <Card className="p-4 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-800">
+                      <div className="flex items-center gap-2 mb-3">
+                        <AlertTriangle className="w-5 h-5 text-orange-600" />
+                        <span className="font-semibold text-orange-700 dark:text-orange-400">Verification Details</span>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {/* Failure Type */}
+                        <div className="flex items-start gap-3">
+                          <div className="mt-0.5">
+                            {latestResult.verificationFailure.type === 'face_mismatch' && (
+                              <XCircle className="w-5 h-5 text-red-500" />
+                            )}
+                            {latestResult.verificationFailure.type === 'no_face' && (
+                              <UserX className="w-5 h-5 text-red-500" />
+                            )}
+                            {latestResult.verificationFailure.type === 'multiple_faces' && (
+                              <Users className="w-5 h-5 text-red-500" />
+                            )}
+                            {latestResult.verificationFailure.type === 'plagiarism' && (
+                              <FileWarning className="w-5 h-5 text-red-500" />
+                            )}
+                            {latestResult.verificationFailure.type === 'wrong_answer' && (
+                              <XCircle className="w-5 h-5 text-red-500" />
+                            )}
+                            {latestResult.verificationFailure.type === 'other' && (
+                              <AlertTriangle className="w-5 h-5 text-red-500" />
+                            )}
+                          </div>
+                          <div className="flex-1">
+                            <p className="text-sm font-medium text-orange-800 dark:text-orange-300">
+                              {latestResult.verificationFailure.type === 'face_mismatch' && 'Face Mismatch Detected'}
+                              {latestResult.verificationFailure.type === 'no_face' && 'Face Not Detected'}
+                              {latestResult.verificationFailure.type === 'multiple_faces' && 'Multiple Faces Detected'}
+                              {latestResult.verificationFailure.type === 'plagiarism' && 'Non-Original Response Detected'}
+                              {latestResult.verificationFailure.type === 'wrong_answer' && 'Answer Incorrect'}
+                              {latestResult.verificationFailure.type === 'other' && 'Verification Failed'}
+                            </p>
+                            <p className="text-xs text-orange-700 dark:text-orange-400 mt-1">
+                              {latestResult.verificationFailure.message}
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Selfie Match Score (if available) */}
+                        {verificationResult && (
+                          <div className="flex items-center gap-3 pt-2 border-t border-orange-200 dark:border-orange-800">
+                            <Camera className="w-4 h-4 text-orange-600" />
+                            <div className="flex-1">
+                              <p className="text-xs font-medium text-orange-800 dark:text-orange-300">
+                                Initial Selfie Match: {verificationResult.similarity.toFixed(1)}%
+                              </p>
+                              <p className="text-xs text-orange-600 dark:text-orange-400">
+                                Confidence: {verificationResult.confidence}
+                              </p>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Timestamp */}
+                        <div className="flex items-center gap-2 pt-2 border-t border-orange-200 dark:border-orange-800">
+                          <Clock className="w-4 h-4 text-orange-600" />
+                          <p className="text-xs text-orange-600 dark:text-orange-400">
+                            Failed at: {new Date(latestResult.verificationFailure.timestamp).toLocaleString()}
+                          </p>
+                        </div>
+
+                        {/* Tips for next attempt */}
+                        <div className="pt-2 border-t border-orange-200 dark:border-orange-800">
+                          <p className="text-xs font-medium text-orange-800 dark:text-orange-300 mb-1">
+                            💡 Tips for next attempt:
+                          </p>
+                          <ul className="text-xs text-orange-700 dark:text-orange-400 space-y-1 ml-4 list-disc">
+                            {latestResult.verificationFailure.type === 'face_mismatch' && (
+                              <>
+                                <li>Ensure good lighting on your face</li>
+                                <li>Look directly at the camera</li>
+                                <li>Remove sunglasses or face coverings</li>
+                                <li>Make sure you are the profile owner</li>
+                              </>
+                            )}
+                            {latestResult.verificationFailure.type === 'no_face' && (
+                              <>
+                                <li>Stay visible in the camera frame</li>
+                                <li>Ensure adequate lighting</li>
+                                <li>Position camera at eye level</li>
+                                <li>Don't cover your face</li>
+                              </>
+                            )}
+                            {latestResult.verificationFailure.type === 'multiple_faces' && (
+                              <>
+                                <li>Take the test alone</li>
+                                <li>Ensure no one is visible in the background</li>
+                                <li>Disable virtual backgrounds</li>
+                              </>
+                            )}
+                            {latestResult.verificationFailure.type === 'plagiarism' && (
+                              <>
+                                <li>Answer in your own words</li>
+                                <li>Speak naturally, not from memory</li>
+                                <li>Don't read from scripts or prompts</li>
+                                <li>Be genuine in your response</li>
+                              </>
+                            )}
+                            {latestResult.verificationFailure.type === 'wrong_answer' && (
+                              <>
+                                <li>Review the skill requirements carefully</li>
+                                <li>Provide specific examples from experience</li>
+                                <li>Speak clearly and confidently</li>
+                              </>
+                            )}
+                          </ul>
+                        </div>
+                      </div>
+                    </Card>
+                  )}
+                </>
               )}
               {v === 'pending' && (
                 <Card className="p-4 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-800">
