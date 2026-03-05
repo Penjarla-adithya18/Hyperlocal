@@ -217,6 +217,18 @@ function EnvCamContent() {
   const startRecordingRef = useRef(startRecording)
   useEffect(() => { startRecordingRef.current = startRecording }, [startRecording])
 
+  // ── Re-attach stream whenever the video element mounts into the DOM ───────
+  // startCamera() may run before the <video> element is rendered (status is
+  // 'waiting-camera' at that time), so videoRef.current is null there.
+  // This effect fires after every status change; once the element is in the
+  // DOM and we have a stream, we attach it.
+  useEffect(() => {
+    if (videoRef.current && streamRef.current && !videoRef.current.srcObject) {
+      videoRef.current.srcObject = streamRef.current
+      videoRef.current.play().catch(() => {})
+    }
+  }, [status])
+
   // ── UI ────────────────────────────────────────────────────────────────────
   return (
     <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4 gap-4">
@@ -271,8 +283,9 @@ function EnvCamContent() {
         )}
       </Card>
 
-      {/* Camera preview */}
-      {(status === 'waiting-start' || status === 'recording') && (
+      {/* Camera preview — show from waiting-camera onwards so the element
+           exists in the DOM when startCamera() sets srcObject */}
+      {(status === 'waiting-camera' || status === 'camera-ready' || status === 'waiting-start' || status === 'recording') && (
         <div className="w-full max-w-sm relative rounded-xl overflow-hidden bg-black aspect-video border border-slate-700">
           {/* video must be absolute so aspect-ratio drives height on all mobile browsers */}
           <video
