@@ -64,7 +64,8 @@ export async function requireAuth(req: Request, supabase: ReturnType<typeof crea
   return {
     user: {
       id: user.id,
-      role: user.role as UserRole,
+      // Normalize role to lowercase to handle any mixed-case values in DB
+      role: ((user.role as string) ?? '').toLowerCase() as UserRole,
       phoneNumber: user.phone_number,
     },
     tokenHash,

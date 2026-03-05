@@ -48,7 +48,9 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'POST') {
-      if (!['worker', 'admin'].includes(auth.user.role)) return errorResponse('Forbidden', 403)
+      if (!['worker', 'admin'].includes(auth.user.role)) {
+        return errorResponse(`Forbidden: role '${auth.user.role}' cannot create applications`, 403)
+      }
 
       const body = await req.json()
       // Always use the server-verified user ID — never trust the client-supplied workerId.

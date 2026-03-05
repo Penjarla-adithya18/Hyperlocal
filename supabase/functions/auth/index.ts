@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
         return errorResponse('Password must be at least 8 characters', 400)
       }
 
-      const normalizedRole = role as 'worker' | 'employer' | 'admin'
+      const normalizedRole = ((role as string) ?? '').toLowerCase() as 'worker' | 'employer' | 'admin'
       if (!['worker', 'employer'].includes(normalizedRole)) {
         return errorResponse('Invalid role', 400)
       }
