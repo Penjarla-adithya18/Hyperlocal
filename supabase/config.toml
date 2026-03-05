@@ -365,6 +365,55 @@ inspector_port = 8083
 # The Deno major version to use.
 deno_version = 2
 
+# ─── Edge Function JWT Verification ──────────────────────────────────────────
+# All functions use a custom session-token auth system (not Supabase JWTs).
+# Disable Supabase's built-in JWT guard so requests with custom Bearer tokens
+# are passed through to our requireAuth() handler instead of being rejected.
+[functions.auth]
+verify_jwt = false
+
+[functions.applications]
+verify_jwt = false
+
+[functions.jobs]
+verify_jwt = false
+
+[functions.users]
+verify_jwt = false
+
+[functions.profiles]
+verify_jwt = false
+
+[functions.chat]
+verify_jwt = false
+
+[functions.notifications]
+verify_jwt = false
+
+[functions.admin]
+verify_jwt = false
+
+[functions.escrow]
+verify_jwt = false
+
+[functions.ratings]
+verify_jwt = false
+
+[functions.reports]
+verify_jwt = false
+
+[functions.trust-scores]
+verify_jwt = false
+
+[functions.wati]
+verify_jwt = false
+
+[functions.email]
+verify_jwt = false
+
+[functions.push]
+verify_jwt = false
+
 # [edge_runtime.secrets]
 # secret_key = "env(SECRET_VALUE)"
 
