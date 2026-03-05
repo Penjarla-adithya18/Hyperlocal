@@ -510,6 +510,7 @@ export function VideoSkillAssessment({
   const [codeSubmitting, setCodeSubmitting] = useState(false)
   const codeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const submitCodeRef = useRef<() => void>(() => {})
+  const codeStandaloneRef = useRef(false) // true = coding-only path (no video result)
 
   const currentSkill = skills[currentSkillIdx] ?? ''
 
@@ -1444,6 +1445,7 @@ export function VideoSkillAssessment({
                         verdictReason: 'Video assessment skipped — coding challenge only',
                         score: undefined,
                       }])
+                      codeStandaloneRef.current = true
                       startCodingChallenge()
                     }}
                     className="gap-2"
@@ -2057,11 +2059,11 @@ export function VideoSkillAssessment({
 
             <DialogFooter>
               {currentSkillIdx + 1 < skills.length ? (
-                <Button onClick={startCodingChallenge} className="gap-2">
+                <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
                   <ArrowRight className="w-4 h-4" /> Next: Coding Challenge
                 </Button>
               ) : (
-                <Button onClick={startCodingChallenge} className="gap-2">
+                <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
                   <CheckCircle2 className="w-4 h-4" /> Final: Coding Challenge
                 </Button>
               )}
@@ -2187,7 +2189,29 @@ export function VideoSkillAssessment({
                     <p className="text-sm leading-relaxed">{codeResult.feedback}</p>
                   </Card>
 
-                  <Button onClick={nextSkill} className="w-full gap-2">
+                  <Button
+                    onClick={() => {
+                      // Patch the placeholder result with the actual coding outcome
+                      if (codeResult && codeStandaloneRef.current) {
+                        setResults(prev => {
+                          const updated = [...prev]
+                          const lastIdx = updated.length - 1
+                          if (lastIdx >= 0) {
+                            updated[lastIdx] = {
+                              ...updated[lastIdx],
+                              submitted: true,
+                              verdict: codeResult.passed ? 'approved' : 'rejected',
+                              verdictReason: codeResult.feedback,
+                              score: codeResult.score,
+                            }
+                          }
+                          return updated
+                        })
+                      }
+                      nextSkill()
+                    }}
+                    className="w-full gap-2"
+                  >
                     {currentSkillIdx + 1 < skills.length ? (
                       <><ArrowRight className="w-4 h-4" /> Continue to Next Skill</>
                     ) : (
@@ -2241,7 +2265,7 @@ export function VideoSkillAssessment({
                       : r.verdict === 'rejected' ? 'destructive'
                         : 'secondary'
                   } className={r.verdict === 'approved' ? 'bg-green-600' : undefined}>
-                    {r.verdict === 'approved' ? '✓ Verified' : r.verdict === 'rejected' ? '✗ Not Passed' : r.submitted ? 'Under Review' : 'Failed'}
+                    {r.verdict === 'approved' ? '✓ Verified' : r.verdict === 'rejected' ? '✗ Not Passed' : r.submitted ? 'Under Review' : 'Pending'}
                   </Badge>
                 </Card>
               ))}
