@@ -309,26 +309,45 @@ function EnvCamContent() {
             onCanPlay={() => { videoRef.current?.play().catch(() => {}) }}
             className="absolute inset-0 w-full h-full object-cover"
           />
-          {status === 'waiting-start' && (
-            <div className="absolute inset-0 flex flex-col items-center justify-between p-3 bg-black/20">
-              {/* Framing guide corners */}
-              <div className="w-full flex justify-between">
-                <div className="w-6 h-6 border-t-2 border-l-2 border-emerald-400 rounded-tl" />
-                <div className="w-6 h-6 border-t-2 border-r-2 border-emerald-400 rounded-tr" />
+          {/* Framing guide — always visible during waiting + recording */}
+          {(status === 'waiting-start' || status === 'recording') && (
+            <div className="absolute inset-0 flex flex-col justify-between p-2 pointer-events-none">
+              {/* Corner bracket guides */}
+              <div className="flex justify-between items-start">
+                <div className="w-7 h-7 border-t-2 border-l-2 border-emerald-400 rounded-tl" />
+                {status === 'recording' && (
+                  <div className="flex items-center gap-1 bg-red-600/80 rounded-full px-2 py-0.5">
+                    <div className="w-2 h-2 bg-white rounded-full animate-pulse" />
+                    <span className="text-white text-[10px] font-bold">REC</span>
+                  </div>
+                )}
+                {status === 'waiting-start' && (
+                  <div className="flex items-center gap-1 bg-black/60 rounded-full px-2 py-0.5">
+                    <Loader2 className="w-3 h-3 text-emerald-400 animate-spin" />
+                    <span className="text-emerald-300 text-[10px]">Waiting...</span>
+                  </div>
+                )}
+                <div className="w-7 h-7 border-t-2 border-r-2 border-emerald-400 rounded-tr" />
               </div>
-              <p className="text-xs text-emerald-300 bg-black/70 px-3 py-1 rounded-full text-center">
-                💻 Laptop + 🧑 Person must both be visible
-              </p>
-              <div className="w-full flex justify-between">
-                <div className="w-6 h-6 border-b-2 border-l-2 border-emerald-400 rounded-bl" />
-                <div className="w-6 h-6 border-b-2 border-r-2 border-emerald-400 rounded-br" />
+
+              {/* Centre framing hint */}
+              <div className="flex justify-center">
+                <p className="text-[11px] font-semibold text-white bg-black/65 px-3 py-1 rounded-full text-center">
+                  💻 Laptop + 🧑 Person (only 1) must be visible
+                </p>
               </div>
-              <div className="absolute bottom-12 left-0 right-0 flex justify-center">
-                <div className="text-center text-white bg-black/60 rounded-xl px-4 py-2">
-                  <p className="text-xs font-medium flex items-center gap-2 justify-center">
-                    <Loader2 className="w-3 h-3 animate-spin text-emerald-400" />
-                    Waiting for assessment to start...
-                  </p>
+
+              {/* Bottom corners + warning strip */}
+              <div className="flex flex-col gap-1">
+                {status === 'recording' && (
+                  <div className="mx-1 bg-amber-500/80 rounded-lg px-3 py-1.5 text-center">
+                    <p className="text-[11px] font-bold text-white">⚠️ Keep BOTH the laptop screen and your upper body in frame</p>
+                    <p className="text-[10px] text-amber-100 mt-0.5">Only ONE person should be visible — AI is monitoring</p>
+                  </div>
+                )}
+                <div className="flex justify-between items-end">
+                  <div className="w-7 h-7 border-b-2 border-l-2 border-emerald-400 rounded-bl" />
+                  <div className="w-7 h-7 border-b-2 border-r-2 border-emerald-400 rounded-br" />
                 </div>
               </div>
             </div>
