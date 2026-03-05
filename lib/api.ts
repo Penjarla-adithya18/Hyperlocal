@@ -303,41 +303,29 @@ async function call<T>(
             // Session not expired — just throw; the caller will handle the error
             // without kicking the user out (likely a transient edge-function error).
           } else if (!currentToken && typeof window !== 'undefined') {
+            // No session token at all — clear everything and redirect immediately.
+            // Silently clearing WITHOUT redirect leaves React state as a ghost
+            // (user appears logged-in but isn't) which causes the AuthContext
+            // periodic check to auto-logout ~5 min later with no explanation.
+            setSessionToken(null)
             localStorage.removeItem('currentUser')
-            localStorage.removeItem(SESSION_TOKEN_KEY)
-            localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
-            localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
+            if (!_pendingRedirectTimer) {
+              _pendingRedirectTimer = setTimeout(() => {
+                _pendingRedirectTimer = null
+                if (!getSessionToken()) {
+                  window.location.href = '/login?reason=session_expired'
+                }
+              }, 500)
+            }
           }
           throw new Error(`Edge function ${fn} error 401: ${text}`)
         }
-        // 403 from Supabase Edge Functions = "Invalid JWT" (expired/bad token)
-        // Treat identically to 401: clear session and redirect to login.
+        // 403 = application-level permission error (wrong role, forbidden resource).
+        // Since all edge functions use --no-verify-jwt, Supabase no longer returns
+        // 403 for JWT issues — that's our code saying "you can't do this operation".
+        // Never clear the session or redirect on 403 — the user is still logged in.
         if (res.status === 403) {
           const text = await res.text()
-          const isAuthCall = fn === 'auth'
-          if (!isAuthCall && typeof window !== 'undefined') {
-            const storedToken = getSessionToken()
-            const tokenAge = Date.now() - _sessionSetAt
-            const expiresAt = getSessionExpiresAt()
-            const isGenuinelyExpired = expiresAt
-              ? new Date(expiresAt).getTime() <= Date.now()
-              : tokenAge > 7 * 24 * 60 * 60 * 1000
-            if (storedToken && tokenAge > 5000 && isGenuinelyExpired) {
-              setSessionToken(null)
-              localStorage.removeItem('currentUser')
-              localStorage.removeItem(SESSION_TOKEN_KEY)
-              localStorage.removeItem(SESSION_EXPIRES_AT_KEY)
-              localStorage.removeItem(SESSION_REFRESHED_AT_KEY)
-              if (!_pendingRedirectTimer) {
-                _pendingRedirectTimer = setTimeout(() => {
-                  _pendingRedirectTimer = null
-                  if (!getSessionToken()) {
-                    window.location.href = '/login?reason=session_expired'
-                  }
-                }, 500)
-              }
-            }
-          }
           throw new Error(`Edge function ${fn} error 403: ${text}`)
         }
         // Retry on 5xx server errors

@@ -51,9 +51,10 @@ Deno.serve(async (req: Request) => {
       if (!['worker', 'admin'].includes(auth.user.role)) return errorResponse('Forbidden', 403)
 
       const body = await req.json()
-      const requestedWorkerId = body.workerId as string
+      // Always use the server-verified user ID — never trust the client-supplied workerId.
+      // Admin can still specify a workerId to submit on behalf of a worker.
+      const requestedWorkerId = isAdmin && body.workerId ? (body.workerId as string) : auth.user.id
       if (!body.jobId || !requestedWorkerId) return errorResponse('jobId and workerId are required', 400)
-      if (!isAdmin && requestedWorkerId !== auth.user.id) return errorResponse('Forbidden', 403)
 
       const payload = {
         job_id: body.jobId,
@@ -290,7 +291,16 @@ async function notifyWorkerOnStatusChange(
     console.log(`[WATI-APP] Sending application_accepted to worker ${workerId} at ${workerPhone}`)
     await callWatiFunction('application_accepted', workerPhone, [workerName, jobTitle, employerName])
   } else {
+    let employerName = 'The employer'
+    if (jobRes.data?.employer_id) {
+      const { data: emp } = await supabase
+        .from('users')
+        .select('full_name')
+        .eq('id', jobRes.data.employer_id)
+        .maybeSingle()
+      employerName = emp?.full_name || employerName
+    }
     console.log(`[WATI-APP] Sending application_rejected to worker ${workerId} at ${workerPhone}`)
-    await callWatiFunction('application_rejected', workerPhone, [workerName, jobTitle])
+    await callWatiFunction('application_rejected', workerPhone, [workerName, jobTitle, employerName])
   }
 }
