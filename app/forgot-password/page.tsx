@@ -176,8 +176,8 @@ export default function ForgotPasswordPage() {
           {step === 1 && (
             <div className="space-y-5">
               <div>
-                <h1 className="text-xl font-bold mb-0.5">{t('forgot.title')}</h1>
-                <p className="text-sm text-muted-foreground">{t('forgot.subtitle')}</p>
+                <h1 suppressHydrationWarning className="text-xl font-bold mb-0.5">{t('forgot.title')}</h1>
+                <p suppressHydrationWarning className="text-sm text-muted-foreground">{t('forgot.subtitle')}</p>
               </div>
 
               {/* Method toggle */}
@@ -267,7 +267,7 @@ export default function ForgotPasswordPage() {
           {step === 3 && (
             <div className="space-y-5">
               <div>
-                <h1 className="text-xl font-bold mb-0.5">{t('forgot.resetPassword')}</h1>
+                <h1 suppressHydrationWarning className="text-xl font-bold mb-0.5">{t('forgot.resetPassword')}</h1>
                 <p className="text-sm text-muted-foreground">Minimum 8 characters</p>
               </div>
               <div className="space-y-1.5">

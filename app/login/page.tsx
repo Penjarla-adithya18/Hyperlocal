@@ -180,10 +180,10 @@ export default function LoginPage() {
           </div>
 
           <div className="z-10 mt-4 max-w-md md:mt-0">
-            <h1 className="mb-6 text-5xl font-bold leading-[1.05] text-slate-900 md:text-6xl dark:text-white">
+            <h1 suppressHydrationWarning className="mb-6 text-5xl font-bold leading-[1.05] text-slate-900 md:text-6xl dark:text-white">
               {t('auth.login.leftTitle')}
             </h1>
-            <p className="mb-10 text-lg leading-relaxed text-slate-700 dark:text-slate-300">
+            <p suppressHydrationWarning className="mb-10 text-lg leading-relaxed text-slate-700 dark:text-slate-300">
               {t('auth.login.leftSubtitle')}
             </p>
 

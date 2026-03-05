@@ -177,17 +177,34 @@ Deno.serve(async (req: Request) => {
           .update({ updated_at: new Date().toISOString() })
           .eq('id', body.conversationId)
 
-        // Push notification to other participants (fire-and-forget)
+        // Notify other participants — in-app notification + web push (fire-and-forget)
         const otherParticipants = participants.filter((p: string) => p !== auth.user.id)
+        const senderName = (auth.user as Record<string, unknown>).fullName as string || 'Someone'
+        const notifTitle = `New message from ${senderName}`
+        const notifBody = message.length > 80 ? message.slice(0, 80) + '…' : message || 'Sent an attachment'
+
         for (const recipientId of otherParticipants) {
-          sendPushToUser(
-            supabase,
-            recipientId,
-            'New Message',
-            `${auth.user.fullName || 'Someone'}: ${message.length > 80 ? message.slice(0, 80) + '…' : message || 'Sent an attachment'}`,
-            '/worker/chat',
-            'new-message'
-          ).catch(() => {})
+          try {
+            const { data: recipientUser } = await supabase
+              .from('users')
+              .select('role')
+              .eq('id', recipientId)
+              .maybeSingle()
+            const chatUrl = recipientUser?.role === 'employer'
+              ? `/employer/chat?convId=${body.conversationId}`
+              : `/worker/chat?convId=${body.conversationId}`
+            // In-app notification (shown in the bell icon)
+            supabase.from('notifications').insert({
+              user_id: recipientId,
+              type: 'message',
+              title: notifTitle,
+              message: notifBody,
+              is_read: false,
+              link: chatUrl,
+            }).catch(() => {})
+            // Web push
+            sendPushToUser(supabase, recipientId, notifTitle, notifBody, chatUrl, 'new-message').catch(() => {})
+          } catch { /* ignore */ }
         }
 
         return jsonResponse({ data: mapMessage(data) })

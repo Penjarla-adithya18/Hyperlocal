@@ -92,6 +92,8 @@ export async function POST(req: NextRequest) {
     let videoBase64: string, videoDurationMs: number, audioMetrics: unknown, faceMetrics: unknown
     let language = 'en'  // worker's chosen UI language — passed to Whisper as hint
     let videoRaw: { buffer: Buffer; mimeType: string } | null = null
+    let tabSwitchCount = 0
+    let envVideoUrl = ''
 
     const contentType = req.headers.get('content-type') ?? ''
 
@@ -109,6 +111,8 @@ export async function POST(req: NextRequest) {
       try { audioMetrics = JSON.parse(metricsRaw) } catch { audioMetrics = null }
       const faceRaw = form.get('faceMetrics') as string || 'null'
       try { faceMetrics = JSON.parse(faceRaw) } catch { faceMetrics = null }
+      tabSwitchCount = Number(form.get('tabSwitchCount') || 0)
+      envVideoUrl = (form.get('envVideoUrl') as string) || ''
 
       // Convert File/Blob to raw buffer for efficient upload
       const videoFile = form.get('video') as File | null
@@ -150,6 +154,31 @@ export async function POST(req: NextRequest) {
         { error: 'workerId, skill, question, and videoBase64 are required' },
         { status: 400 },
       )
+    }
+
+    // ── Early rejection: tab-switch auto-fail (>=3 strikes) ────────────────
+    if (tabSwitchCount >= 3) {
+      // Still insert the record so admins can see the attempt
+      const earlyId = crypto.randomUUID()
+      await supabaseInsert('skill_assessments', {
+        id: earlyId,
+        worker_id: workerId,
+        skill,
+        question: typeof question === 'string' ? JSON.parse(question) : question,
+        expected_answer: expectedAnswer || '',
+        video_url: '',
+        video_duration_ms: 0,
+        status: 'rejected',
+        analysis: { auto_decision: 'rejected', auto_decision_reason: `Tab/window switched ${tabSwitchCount} times. Auto-rejected for suspected plagiarism.`, tab_switch_count: tabSwitchCount },
+      }).catch(() => {})
+      return NextResponse.json({
+        success: false,
+        assessmentId: earlyId,
+        verdict: 'rejected' as const,
+        verdictReason: `Assessment auto-failed: tab switched ${tabSwitchCount} times during the test. Suspected plagiarism.`,
+        score: 0,
+        message: 'Assessment failed due to repeated tab switching.',
+      })
     }
 
     // Upload video (prefer raw buffer if available to avoid base64 round-trip)
@@ -200,7 +229,7 @@ export async function POST(req: NextRequest) {
         const analysisRes = await fetch(analysisUrl, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, faceMetrics, question, language }),
+          body: JSON.stringify({ assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, faceMetrics, question, language, tabSwitchCount, envVideoUrl }),
           signal: AbortSignal.timeout(55_000), // stay within 60s maxDuration
         })
 

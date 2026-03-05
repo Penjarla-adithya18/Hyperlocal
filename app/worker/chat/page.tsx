@@ -46,6 +46,7 @@ export default function WorkerChatPage() {
   const [submittingReport, setSubmittingReport] = useState(false)
   const [voiceListening, setVoiceListening] = useState(false)
   const [loadingConvs, setLoadingConvs] = useState(true)
+  const convLoadedRef = useRef(false)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
@@ -103,7 +104,7 @@ export default function WorkerChatPage() {
 
   const loadConversations = async () => {
     if (!user) return
-    setLoadingConvs(true)
+    if (!convLoadedRef.current) setLoadingConvs(true)
     try {
       const userConvs = await db.getConversationsByUser(user.id)
       setConversations(userConvs)
@@ -168,6 +169,7 @@ export default function WorkerChatPage() {
       }
     } finally {
       setLoadingConvs(false)
+      convLoadedRef.current = true
     }
   }
 
@@ -337,7 +339,7 @@ export default function WorkerChatPage() {
     <div className="app-surface flex flex-col h-screen">
       <WorkerNav />
       
-      <main className="flex-1 flex flex-col overflow-hidden pb-28 md:pb-8">
+      <main className="flex-1 flex flex-col overflow-hidden pb-28 md:pb-8 lg:pb-0">
         {/* Mobile: Show conversation list or chat */}
         <div className="lg:hidden flex flex-col h-full">
           {!selectedConversation ? (
@@ -577,14 +579,9 @@ export default function WorkerChatPage() {
         </div>
 
         {/* Desktop: Show both panels */}
-        <div className="hidden lg:block container mx-auto px-4 py-4 h-full">
-          <div className="mb-4">
-            <h1 className="text-2xl font-bold text-foreground mb-1" suppressHydrationWarning>{t('worker.chat.title')}</h1>
-            <p className="text-sm text-muted-foreground" suppressHydrationWarning>{t('worker.chat.subtitle')}</p>
-          </div>
-
-          <div className="grid lg:grid-cols-3 gap-6 h-[calc(100vh-240px)]">
-            <Card className="lg:col-span-1 flex flex-col overflow-hidden">
+        <div className="hidden lg:flex flex-col flex-1 min-h-0 px-4 pb-4 pt-2">
+          <div className="grid lg:grid-cols-3 gap-4 flex-1 min-h-0">
+            <Card className="lg:col-span-1 flex flex-col overflow-hidden min-h-0">
               <CardHeader className="pb-3">
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />

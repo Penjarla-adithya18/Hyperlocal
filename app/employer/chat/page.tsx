@@ -12,7 +12,6 @@ import { useAuth } from '@/contexts/AuthContext'
 import { db, jobOps, reportOps, userOps } from '@/lib/api'
 import { ChatConversation, ChatMessage, Job, User } from '@/lib/types'
 import { Send, Search, MessageCircle, Flag, AlertCircle, Mic, MicOff, ChevronLeft } from 'lucide-react'
-import { ScrollArea } from '@/components/ui/scroll-area'
 import { useToast } from '@/hooks/use-toast'
 import {
   Dialog,
@@ -54,6 +53,7 @@ function EmployerChatPage() {
   const [submittingReport, setSubmittingReport] = useState(false)
   const [voiceListening, setVoiceListening] = useState(false)
   const [loadingConvs, setLoadingConvs] = useState(true)
+  const convLoadedRef = useRef(false)
   const [loadingMsgs, setLoadingMsgs] = useState(false)
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const recognitionRef = useRef<any>(null)
@@ -120,7 +120,7 @@ function EmployerChatPage() {
     targetAppId?: string | null,
   ) => {
     if (!user) return
-    setLoadingConvs(true)
+    setLoadingConvs(!convLoadedRef.current)
     try {
       const userConvs = await db.getConversationsByUser(user.id)
       setConversations(userConvs)
@@ -189,6 +189,7 @@ function EmployerChatPage() {
       }
     } finally {
       setLoadingConvs(false)
+      convLoadedRef.current = true
     }
   }
 
@@ -349,12 +350,12 @@ function EmployerChatPage() {
   })
 
   return (
-    <div className="app-surface">
+    <div className="app-surface flex flex-col h-screen">
       <EmployerNav />
       
-      <main className="container mx-auto px-2 sm:px-4 py-4 md:py-8 pb-28 md:pb-8">
+      <main className="flex-1 flex flex-col overflow-hidden pb-28 md:pb-8 lg:pb-0">
         {/* Mobile: Full-screen conversation list or chat */}
-        <div className="lg:hidden h-screen flex flex-col">
+        <div className="lg:hidden flex flex-col h-full">
           {!selectedConversation ? (
             // Mobile: Conversation List
             <>
@@ -584,14 +585,9 @@ function EmployerChatPage() {
         </div>
 
         {/* Desktop: Side-by-side layout */}
-        <div className="hidden lg:block">
-          <div className="mb-4 md:mb-6">
-            <h1 className="text-2xl md:text-3xl font-bold text-foreground mb-2">Messages</h1>
-            <p className="text-sm md:text-base text-muted-foreground">Chat with workers about your jobs</p>
-          </div>
-
-          <div className="grid lg:grid-cols-3 gap-4 md:gap-6 h-[calc(100vh-250px)]">
-            <Card className="lg:col-span-1">
+        <div className="hidden lg:flex flex-col flex-1 min-h-0 px-4 pb-4 pt-2">
+          <div className="grid lg:grid-cols-3 gap-4 flex-1 min-h-0">
+            <Card className="lg:col-span-1 flex flex-col overflow-hidden min-h-0">
               <CardHeader>
                 <div className="relative">
                   <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
@@ -603,7 +599,7 @@ function EmployerChatPage() {
                   />
                 </div>
               </CardHeader>
-              <ScrollArea className="h-[calc(100vh-380px)]">
+              <div className="flex-1 overflow-y-auto">
                 <CardContent className="space-y-2">
                   {loadingConvs ? (
                     <div className="space-y-3 py-2">
@@ -666,7 +662,7 @@ function EmployerChatPage() {
                     })
                   )}
                 </CardContent>
-              </ScrollArea>
+              </div>
             </Card>
 
             <Card className="lg:col-span-2 flex flex-col overflow-hidden">

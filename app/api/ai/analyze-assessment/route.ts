@@ -295,11 +295,13 @@ async function deleteStorageFile(fileUrl: string): Promise<void> {
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
-    const { assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language, faceMetrics } = body
+    const { assessmentId, videoUrl, skill, expectedAnswer, audioMetrics, question, language, faceMetrics, tabSwitchCount, envVideoUrl } = body
     // Worker's chosen UI language (en/hi/te) — used as Whisper language hint
     const whisperLang: string | undefined = typeof language === 'string' && language !== 'en' ? language : undefined
+    const tabSwitches = Number(tabSwitchCount ?? 0)
+    const envVidUrl: string = typeof envVideoUrl === 'string' ? envVideoUrl : ''
 
-    console.log(`[analyze-assessment] ▶ Pipeline start — assessment ${assessmentId}, skill: ${skill}, lang: ${language ?? 'en'}`)
+    console.log(`[analyze-assessment] ▶ Pipeline start — assessment ${assessmentId}, skill: ${skill}, lang: ${language ?? 'en'}, tabSwitches: ${tabSwitches}`)
 
     // ── Step 1: Analyze client-side audio metrics ───────────────────────────
     const audioAnalysis = analyzeAudioMetrics(audioMetrics as AudioMetrics | null)
@@ -318,6 +320,19 @@ export async function POST(req: NextRequest) {
       }
       console.log(`[analyze-assessment] Step 1b ✓ Eye contact: ${eyePct}% (${faceMet.framesChecked} frames)`)
     }
+
+    // ── Step 1c: Tab switch proctoring flags ────────────────────────────────
+    if (tabSwitches >= 3) {
+      audioAnalysis.flags.push(`CRITICAL: Window switched ${tabSwitches} times during assessment — strong indicator of plagiarism (looked up answer online)`)
+      audioAnalysis.score = 0
+    } else if (tabSwitches === 2) {
+      audioAnalysis.flags.push(`Window switched ${tabSwitches} times during assessment — suspicious behaviour`)
+      audioAnalysis.score = Math.max(0, audioAnalysis.score - 40)
+    } else if (tabSwitches === 1) {
+      audioAnalysis.flags.push(`Window switched once during assessment — minor concern`)
+      audioAnalysis.score = Math.max(0, audioAnalysis.score - 15)
+    }
+    console.log(`[analyze-assessment] Step 1c ✓ Tab switch count: ${tabSwitches}`)
 
     // ── Step 2: Download video & transcribe with Whisper ────────────────────
     let transcribedText = ''
@@ -565,6 +580,43 @@ Return ONLY valid JSON (no markdown):
     }
 
     console.log(`[analyze-assessment] Step 5 ✓ Auto-decision: ${autoDecision} — ${autoDecisionReason.substring(0, 100)}`)
+
+    // ── Step 5b: Environment Camera Analysis (dual-cam) ─────────────────────
+    if (envVidUrl) {
+      try {
+        console.log('[analyze-assessment] Step 5b: Analyzing environment camera video...')
+        const envAnalysisUrl = new URL('/api/ai/analyze-env-video', req.url).toString()
+        const envRes = await fetch(envAnalysisUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ envVideoUrl: envVidUrl, session: assessmentId, skill }),
+          signal: AbortSignal.timeout(30_000),
+        })
+        if (envRes.ok) {
+          const envData = await envRes.json()
+          const envAnalysis = envData.analysis
+          if (envAnalysis) {
+            console.log(`[analyze-assessment] Step 5b ✓ Env score: ${envAnalysis.suspicionScore}, flags: ${envAnalysis.flags?.length}`)
+            // Add env flags to the main analysis flags
+            if (envAnalysis.flags?.length) {
+              audioAnalysis.flags.push(...envAnalysis.flags.map((f: string) => `[ENV-CAM] ${f}`))
+            }
+            // Override verdict if environment is highly suspicious
+            if (envAnalysis.suspicionScore >= 70) {
+              autoDecision = 'rejected'
+              autoDecisionReason = `Environment camera detected suspicious activity: ${envAnalysis.summary}`
+              audioAnalysis.flags.push(`CRITICAL [ENV-CAM]: High suspicion score ${envAnalysis.suspicionScore}/100 — ${envAnalysis.summary}`)
+            } else if (envAnalysis.suspicionScore >= 40 && autoDecision === 'approved') {
+              // Downgrade to pending review if minor env concerns
+              autoDecision = 'pending'
+              autoDecisionReason = `Answer is correct but environment camera raised concerns (score ${envAnalysis.suspicionScore}/100): ${envAnalysis.summary}`
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[analyze-assessment] Step 5b env analysis failed (non-blocking):', e)
+      }
+    }
 
     // ── Step 6: Generate details summary ────────────────────────────────────
     const summaryParts: string[] = []

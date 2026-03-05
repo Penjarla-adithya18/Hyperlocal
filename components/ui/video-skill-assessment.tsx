@@ -1,6 +1,8 @@
 'use client'
 
 import React, { useState, useCallback, useEffect, useRef } from 'react'
+import { QRCodeSVG } from 'qrcode.react'
+import { supabase } from '@/lib/supabase/client'
 import {
   Dialog,
   DialogContent,
@@ -36,6 +38,9 @@ import {
   XCircle,
   UserX,
   FileWarning,
+  MonitorX,
+  Smartphone,
+  Wifi,
 } from 'lucide-react'
 import {
   loadFaceModels,
@@ -471,6 +476,21 @@ export function VideoSkillAssessment({
   const [noFaceAlert, setNoFaceAlert] = useState(false)
   const [noiseAlert, setNoiseAlert] = useState<{ visible: boolean; type: 'spike' | 'background' | null }>({ visible: false, type: null })
 
+  // ── Tab Switch Proctoring State ─────────────────────────────────────────────
+  const [tabSwitchCount, setTabSwitchCount] = useState(0)
+  const [tabSwitchWarning, setTabSwitchWarning] = useState(false)
+  const tabSwitchCountRef = useRef(0)
+  const phaseRef = useRef<Phase>('selfie-verification')
+
+  // ── Dual Camera (Environment Cam) State ────────────────────────────────
+  const [envCamSessionId, setEnvCamSessionId] = useState('')
+  const [envCamQrUrl, setEnvCamQrUrl] = useState('')
+  const [envCamConnected, setEnvCamConnected] = useState(false)
+  const [envCamSkipped, setEnvCamSkipped] = useState(false)
+  const [envVideoUrl, setEnvVideoUrl] = useState('')
+  const envChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+  const envVideoUrlRef = useRef('')
+
   // Refs to avoid stale closures in recording pipeline
   const currentSkillRef = useRef('')
   const questionRef = useRef<MultilingualQuestion | null>(null)
@@ -489,6 +509,7 @@ export function VideoSkillAssessment({
   }, [])
 
   // Keep refs in sync with state (avoids stale closures in intervals/callbacks)
+  useEffect(() => { phaseRef.current = phase }, [phase])
   useEffect(() => { currentSkillRef.current = currentSkill }, [currentSkill])
   useEffect(() => { questionRef.current = question }, [question])
   useEffect(() => { expectedAnswerRef.current = expectedAnswer }, [expectedAnswer])
@@ -510,8 +531,55 @@ export function VideoSkillAssessment({
       setSelfieCameraActive(false)
       setFaceMatchMonitor({ lastCheck: 0, failureCount: 0 })
       setFaceVerificationFailure(null)
+      setTabSwitchCount(0)
+      tabSwitchCountRef.current = 0
+      setTabSwitchWarning(false)
+      setEnvCamConnected(false)
+      setEnvCamSkipped(false)
+      setEnvVideoUrl('')
+      envVideoUrlRef.current = ''
     }
   }, [open])
+
+  // ── Dual Camera: Supabase Realtime channel (primary device) ──────────────────
+  useEffect(() => {
+    if (!open) {
+      if (envChannelRef.current) {
+        supabase.removeChannel(envChannelRef.current)
+        envChannelRef.current = null
+      }
+      return
+    }
+    // Generate a unique session token for this assessment
+    const sessionId = `${workerId}-${Date.now()}`
+    setEnvCamSessionId(sessionId)
+    const baseUrl = typeof window !== 'undefined' ? window.location.origin : ''
+    const qrUrl = `${baseUrl}/worker/assessment/env-cam?session=${encodeURIComponent(sessionId)}&skill=${encodeURIComponent(skills[0] ?? '')}&workerid=${encodeURIComponent(workerId)}`
+    setEnvCamQrUrl(qrUrl)
+
+    const channel = supabase.channel(`env-cam:${sessionId}`, {
+      config: { broadcast: { self: false } },
+    })
+    channel
+      .on('broadcast', { event: 'env-cam-ready' }, () => {
+        console.log('[dual-cam] Secondary device connected and ready')
+        setEnvCamConnected(true)
+      })
+      .on('broadcast', { event: 'env-video-uploaded' }, (msg: { payload?: { url?: string } }) => {
+        const url = msg.payload?.url ?? ''
+        console.log('[dual-cam] Environment video URL received:', url)
+        setEnvVideoUrl(url)
+        envVideoUrlRef.current = url
+      })
+      .subscribe()
+    envChannelRef.current = channel
+
+    return () => {
+      supabase.removeChannel(channel)
+      envChannelRef.current = null
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, workerId])
 
   // ── Selfie Verification Functions ────────────────────────────────────────────
 
@@ -842,6 +910,13 @@ export function VideoSkillAssessment({
     setTimer(RECORDING_TIME_S)
     chunksRef.current = []
 
+    // Signal secondary (environment) camera to start recording
+    envChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'start-recording',
+      payload: { session: envCamSessionId },
+    })
+
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 320 }, height: { ideal: 240 } },
@@ -1006,6 +1081,10 @@ export function VideoSkillAssessment({
       fd.append('videoDurationMs', String(RECORDING_TIME_S * 1000))
       fd.append('audioMetrics', JSON.stringify(audioMetricsRef.current))
       fd.append('faceMetrics', JSON.stringify(faceMetricsRef.current ?? { eyeContactPercent: 100, framesChecked: 0 }))
+      fd.append('tabSwitchCount', String(tabSwitchCountRef.current))
+      if (envVideoUrlRef.current) {
+        fd.append('envVideoUrl', envVideoUrlRef.current)
+      }
 
       const res = await fetch('/api/ai/skill-video-submit', {
         method: 'POST',
@@ -1076,6 +1155,47 @@ export function VideoSkillAssessment({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [timer, phase]) // startRecording & finishRecording are stable ([] deps)
+
+  // ── Tab Switch / Window Focus Proctoring ────────────────────────────────────
+  // Detects if user hides the tab during read-question or recording phases.
+  // 3 strikes → auto-terminates with plagiarism flag.
+  useEffect(() => {
+    const monitored = phase === 'read-question' || phase === 'recording'
+    if (!monitored) return
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) return // only fire when tab becomes hidden
+      const newCount = tabSwitchCountRef.current + 1
+      tabSwitchCountRef.current = newCount
+      setTabSwitchCount(newCount)
+      setTabSwitchWarning(true)
+      setTimeout(() => setTabSwitchWarning(false), 3500)
+
+      if (newCount >= 3) {
+        setFaceVerificationFailure({
+          type: 'plagiarism',
+          message: `Window switched away ${newCount} times during assessment. Auto-terminated for suspected plagiarism.`,
+        })
+        if (phaseRef.current === 'recording') {
+          finishRecording()
+        } else {
+          // In read-question phase: inject rejected result directly
+          setResults(prev => [...prev, {
+            skill: currentSkillRef.current,
+            submitted: false,
+            verdict: 'rejected',
+            verdictReason: `Tab switching detected ${newCount} times during question-read phase. Suspected plagiarism.`,
+          }])
+          if (timerRef.current) { clearInterval(timerRef.current); timerRef.current = null }
+          setPhase('skill-done')
+        }
+      }
+    }
+
+    document.addEventListener('visibilitychange', handleVisibilityChange)
+    return () => { document.removeEventListener('visibilitychange', handleVisibilityChange) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]) // finishRecording is stable ([] deps via useCallback)
 
   // ── Move to next skill ──────────────────────────────────────────────────────
   const nextSkill = useCallback(() => {
@@ -1277,7 +1397,61 @@ export function VideoSkillAssessment({
                   <li>• You need camera & microphone permission</li>
                   <li>• <strong>Only you should be visible</strong> — multiple faces will trigger an alert</li>
                   <li>• <strong>Ensure a quiet environment</strong> — background noise will be flagged</li>
+                  <li>• <strong>Do NOT switch tabs or minimize</strong> — window changes are tracked (3 strikes = auto-fail)</li>
                 </ul>
+              </Card>
+
+              {/* ── Dual Camera QR Code ───────────────────────────────────────── */}
+              <Card className={`p-4 border-2 ${
+                envCamConnected
+                  ? 'border-green-500 bg-green-50 dark:bg-green-950/30'
+                  : 'border-blue-300 bg-blue-50 dark:bg-blue-950/20'
+              }`}>
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-sm flex items-center gap-2 mb-1">
+                      <Smartphone className="w-4 h-4" />
+                      Environment Camera
+                      {envCamConnected && (
+                        <Badge className="bg-green-600 text-white text-xs">Connected ✓</Badge>
+                      )}
+                    </h3>
+                    {envCamConnected ? (
+                      <p className="text-xs text-green-700 dark:text-green-400">
+                        Secondary device is ready. It will record automatically when the assessment starts.
+                      </p>
+                    ) : envCamSkipped ? (
+                      <p className="text-xs text-slate-500">Skipped — single-camera mode.</p>
+                    ) : (
+                      <p className="text-xs text-muted-foreground">
+                        Scan with a second phone and place it to your side to record the workspace environment.
+                        <span className="block mt-1 text-slate-400">(Optional — skip if you only have one device)</span>
+                      </p>
+                    )}
+                    {!envCamConnected && !envCamSkipped && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="mt-2 h-7 text-xs text-muted-foreground px-2"
+                        onClick={() => setEnvCamSkipped(true)}
+                      >
+                        Skip → Single camera only
+                      </Button>
+                    )}
+                  </div>
+                  {!envCamConnected && !envCamSkipped && envCamQrUrl && (
+                    <div className="flex-shrink-0 bg-white p-2 rounded-lg border">
+                      <QRCodeSVG value={envCamQrUrl} size={80} />
+                    </div>
+                  )}
+                  {envCamConnected && (
+                    <div className="flex-shrink-0">
+                      <div className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900/50 flex items-center justify-center">
+                        <Wifi className="w-5 h-5 text-green-600" />
+                      </div>
+                    </div>
+                  )}
+                </div>
               </Card>
 
               {/* Language selector */}
@@ -1337,6 +1511,27 @@ export function VideoSkillAssessment({
             </DialogHeader>
 
             <div className="space-y-4 py-4">
+              {/* Tab switch strike warning */}
+              {tabSwitchWarning && (
+                <div className="flex items-center gap-3 bg-orange-500 text-white px-4 py-3 rounded-xl animate-in slide-in-from-top duration-300">
+                  <MonitorX className="w-5 h-5 flex-shrink-0 animate-pulse" />
+                  <div>
+                    <p className="font-bold text-sm">Tab Switch Detected! Strike {tabSwitchCount}/3</p>
+                    <p className="text-xs opacity-90">
+                      {tabSwitchCount >= 3
+                        ? 'Assessment auto-terminated for suspected plagiarism.'
+                        : `${3 - tabSwitchCount} strike${3 - tabSwitchCount !== 1 ? 's' : ''} remaining before auto-fail.`}
+                    </p>
+                  </div>
+                </div>
+              )}
+              {tabSwitchCount > 0 && !tabSwitchWarning && (
+                <div className="flex items-center justify-between text-xs text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30 px-3 py-1.5 rounded-lg">
+                  <span className="flex items-center gap-1.5"><MonitorX className="w-3.5 h-3.5" /> Tab switch on record</span>
+                  <Badge variant="outline" className="border-orange-400 text-orange-600 dark:text-orange-400 text-xs">{tabSwitchCount}/3 strikes</Badge>
+                </div>
+              )}
+
               {/* Timer bar */}
               <div className="flex items-center gap-3">
                 <Clock className="w-5 h-5 text-blue-500" />
@@ -1421,6 +1616,23 @@ export function VideoSkillAssessment({
                 </Badge>
               </div>
 
+              {/* Tab switch persistent strike indicator */}
+              {tabSwitchCount > 0 && (
+                <div className={`flex items-center justify-between text-xs px-3 py-1.5 rounded-lg ${
+                  tabSwitchWarning
+                    ? 'bg-orange-500 text-white'
+                    : 'text-orange-600 dark:text-orange-400 bg-orange-50 dark:bg-orange-950/30'
+                }`}>
+                  <span className="flex items-center gap-1.5 font-medium">
+                    <MonitorX className="w-3.5 h-3.5" />
+                    {tabSwitchWarning ? `⚠ Tab switch detected! Strike ${tabSwitchCount}/3` : 'Window switch on record'}
+                  </span>
+                  {!tabSwitchWarning && (
+                    <Badge variant="outline" className="border-orange-400 text-orange-600 dark:text-orange-400 text-xs">{tabSwitchCount}/3 strikes</Badge>
+                  )}
+                </div>
+              )}
+
               {/* Video preview */}
               <div className="relative rounded-xl overflow-hidden bg-black aspect-video">
                 <video
@@ -1464,6 +1676,23 @@ export function VideoSkillAssessment({
                         <p className="font-bold text-sm">Multiple People Detected!</p>
                         <p className="text-xs opacity-90">
                           {faceAlert.count} faces found. Only the worker should be in frame during the assessment.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* ── Tab switch warning overlay ──────────────────────────── */}
+                {tabSwitchWarning && (
+                  <div className="absolute inset-0 flex items-center justify-center bg-orange-500/25 backdrop-blur-[2px] animate-in fade-in duration-300 z-20">
+                    <div className="bg-orange-600 text-white rounded-xl px-5 py-4 shadow-2xl flex items-center gap-3 max-w-[90%]">
+                      <MonitorX className="w-7 h-7 flex-shrink-0 animate-pulse" />
+                      <div>
+                        <p className="font-bold text-sm">Tab Switch Detected! Strike {tabSwitchCount}/3</p>
+                        <p className="text-xs opacity-90">
+                          {tabSwitchCount >= 3
+                            ? 'Assessment auto-terminated for suspected plagiarism.'
+                            : `${3 - tabSwitchCount} strike${3 - tabSwitchCount !== 1 ? 's' : ''} remaining. Do NOT switch windows.`}
                         </p>
                       </div>
                     </div>

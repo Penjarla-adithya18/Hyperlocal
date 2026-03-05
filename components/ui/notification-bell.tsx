@@ -43,8 +43,8 @@ export function NotificationBell() {
 
   const startPolling = () => {
     if (timerRef.current) return
-    // Poll every 60s, only when tab is visible
-    timerRef.current = setInterval(load, 60_000)
+    // Poll every 8s so message notifications appear quickly
+    timerRef.current = setInterval(load, 8_000)
     const handler = () => { if (document.visibilityState === 'visible') load() }
     visHandlerRef.current = handler
     document.addEventListener('visibilitychange', handler)

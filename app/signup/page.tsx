@@ -430,7 +430,7 @@ function SignupPageContent() {
           </div>
 
           <div className="z-10 mt-4 max-w-md md:mt-0">
-            <h1 className="mb-6 text-5xl font-bold leading-[1.05] text-slate-900 md:text-6xl dark:text-white">
+            <h1 suppressHydrationWarning className="mb-6 text-5xl font-bold leading-[1.05] text-slate-900 md:text-6xl dark:text-white">
               {t('auth.signup.hero.joinYour')} <br />
               {t('auth.signup.hero.local')} <br />
               <span className="relative inline-block text-emerald-500 dark:text-emerald-400">
@@ -441,7 +441,7 @@ function SignupPageContent() {
               </span>{' '}
               {t('auth.signup.hero.network')}
             </h1>
-            <p className="mb-10 text-lg leading-relaxed text-slate-700 dark:text-slate-300">
+            <p suppressHydrationWarning className="mb-10 text-lg leading-relaxed text-slate-700 dark:text-slate-300">
               {t('auth.signup.hero.description')}
             </p>
 
