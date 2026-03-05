@@ -257,6 +257,20 @@ export default function WorkerProfilePage() {
     if (!user) return;
     setDeletingAccount(true);
     try {
+      // Clear all personal data from the worker profile first
+      try {
+        await workerProfileOps.update(user.id, {
+          profilePictureUrl: undefined,
+          bio: '',
+          location: '',
+          skills: [],
+          categories: [],
+          experience: '',
+          availability: '',
+          resumeUrl: '',
+        });
+        await workerProfileOps.deleteByUserId(user.id);
+      } catch { /* best-effort — proceed regardless */ }
       await db.deleteAccount(user.id);
       logout();
       router.push('/login');
@@ -657,7 +671,7 @@ export default function WorkerProfilePage() {
                         className="text-destructive border-destructive/40 hover:bg-destructive/10"
                         onClick={() => setFormData(prev => ({ ...prev, profileImage: '' }))}
                       >
-                        <Trash2 className="w-4 h-4 mr-1" /> {t('common.remove')} Photo
+                        <Trash2 className="w-4 h-4 mr-1" /> Remove Photo
                       </Button>
                     )}
                   </div>

@@ -574,6 +574,11 @@ export const workerProfileOps = {
     const res = await call<R<WorkerProfile | null>>('profiles', 'PATCH', { userId, role: 'worker' }, updates)
     return res.data
   },
+  deleteByUserId: async (userId: string): Promise<void> => {
+    try {
+      await call<{ success: boolean }>('profiles', 'DELETE', { userId, role: 'worker' })
+    } catch { /* ignore if endpoint doesn't support DELETE */ }
+  },
   /** Fetch all worker profiles on the platform (employer-accessible) */
   getAll: async (): Promise<WorkerProfile[]> => {
     try {
