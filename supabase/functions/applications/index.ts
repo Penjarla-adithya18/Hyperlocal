@@ -48,8 +48,21 @@ Deno.serve(async (req: Request) => {
     }
 
     if (method === 'POST') {
-      if (!['worker', 'admin'].includes(auth.user.role)) {
-        return errorResponse(`Forbidden: role '${auth.user.role}' cannot create applications`, 403)
+      // Role check: allow 'worker' or 'admin'. Also allow any authenticated user whose
+      // worker_profile exists (handles edge cases where role is stored unexpectedly).
+      const role = (auth.user.role ?? '').toLowerCase()
+      console.log(`[applications POST] user=${auth.user.id} role="${role}"`)
+      if (role !== 'worker' && role !== 'admin') {
+        // Fallback: check if they have a worker_profile — if so, treat as worker
+        const { data: wp } = await supabase
+          .from('worker_profiles')
+          .select('user_id')
+          .eq('user_id', auth.user.id)
+          .maybeSingle()
+        if (!wp) {
+          return errorResponse(`Forbidden: role '${role}' has no worker profile`, 403)
+        }
+        console.log(`[applications POST] worker_profile found — allowing despite role='${role}'`)
       }
 
       const body = await req.json()
