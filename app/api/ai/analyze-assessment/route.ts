@@ -4,6 +4,7 @@ import { fetchWithRetry, isRetryableError } from '@/lib/fetchRetry'
 import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
+import { nextGroqKey } from '@/lib/groqKeys'
 
 /**
  * POST /api/ai/analyze-assessment
@@ -29,9 +30,9 @@ import { createOpenAI } from '@ai-sdk/openai'
 
 // ── Provider configuration ─────────────────────────────────────────────────
 // Priority: Groq (LPU, fastest) → Gemini → Ollama
-// Groq is critical here — the pipeline runs 2 LLM calls per assessment
-// (originality + correctness). Gemini adds 2-4 min latency each; Groq ~1s.
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
+// Groq keys are loaded from Supabase app_config (round-robin pool of 8).
+// Falls back to GROQ_API_KEYS / GROQ_API_KEY env vars if Supabase unavailable.
+// Gemini adds 2-4 min latency each; Groq ~1s.
 const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 let _keyIdx = 0
@@ -102,10 +103,11 @@ interface AnalysisResult {
 // ── AI Call Helper (Groq primary → Gemini → Ollama fallback) ─────────────────
 
 async function callAI(prompt: string, systemPrompt: string): Promise<string> {
-  // 1. Groq — fastest (LPU hardware), critical for staying within timeout budget
-  if (GROQ_API_KEY) {
+  // 1. Groq — fastest (LPU hardware), round-robin across 8-key pool
+  const groqKey = await nextGroqKey()
+  if (groqKey) {
     try {
-      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: GROQ_API_KEY })
+      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: groqKey })
       const { text } = await generateText({
         model: groq('llama-3.1-8b-instant'),
         system: systemPrompt,

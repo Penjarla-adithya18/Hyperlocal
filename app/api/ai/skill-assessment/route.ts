@@ -2,10 +2,11 @@ import { NextRequest, NextResponse } from 'next/server'
 import { generateText } from 'ai'
 import { createGoogleGenerativeAI } from '@ai-sdk/google'
 import { createOpenAI } from '@ai-sdk/openai'
+import { nextGroqKey } from '@/lib/groqKeys'
 
-// ── Provider configuration ──────────────────────────────────────────────────────────────
+// ── Provider configuration ──────────────────────────────────────────────────
 // Priority: Groq (fastest, LPU) → Gemini → Ollama
-const GROQ_API_KEY = process.env.GROQ_API_KEY ?? ''
+// Groq keys loaded from Supabase app_config (round-robin pool of 8).
 const GEMINI_KEYS = (process.env.NEXT_PUBLIC_GEMINI_API_KEYS ?? '')
   .split(',').map(k => k.trim()).filter(Boolean)
 let _keyIdx = 0
@@ -41,10 +42,11 @@ Return ONLY a valid JSON array with this exact structure, no markdown, no code f
 ]`
 
 async function callAI(prompt: string): Promise<string> {
-  // ── 1. Groq (fastest — LPU hardware, ~500ms) ────────────────────────────────────
-  if (GROQ_API_KEY) {
+  // ── 1. Groq (fastest — LPU hardware, ~500ms) ──────────────────────────────
+  const groqKey = await nextGroqKey()
+  if (groqKey) {
     try {
-      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: GROQ_API_KEY })
+      const groq = createOpenAI({ baseURL: 'https://api.groq.com/openai/v1', apiKey: groqKey })
       const { text } = await generateText({
         model: groq('llama-3.1-8b-instant'),
         system: SYSTEM_PROMPT,
