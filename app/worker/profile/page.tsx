@@ -640,7 +640,6 @@ export default function WorkerProfilePage() {
                     className="hidden"
                     onChange={handleImageUpload}
                   />
-<<<<<<< HEAD
                   <div className="flex gap-2 flex-wrap">
                     <label htmlFor="profile-image-input">
                       <Button type="button" variant="outline" size="sm" asChild>
@@ -662,14 +661,6 @@ export default function WorkerProfilePage() {
                       </Button>
                     )}
                   </div>
-                  <label htmlFor="profile-image-input">
-                    <Button type="button" variant="outline" size="sm" asChild>
-                      <span className="cursor-pointer flex items-center gap-1">
-                        <Camera className="w-4 h-4" />
-                        {formData.profileImage ? t('common.change') || 'Change Photo' : t('common.upload') || 'Upload Photo'}
-                      </span>
-                    </Button>
-                  </label>
                   <p className="text-xs text-muted-foreground mt-1">{t('profile.photoHint')}</p>
                 </div>
               </div>
