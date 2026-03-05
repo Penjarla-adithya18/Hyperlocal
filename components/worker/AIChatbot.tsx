@@ -106,6 +106,15 @@ async function extractIntent(
     return { action: 'help' }
   }
 
+  // Name queries
+  if (/what\s+is\s+your\s+name|your\s+name|who\s+are\s+you|what\s+are\s+you\s+called|what\s+should\s+i\s+call\s+you/i.test(lower)) {
+    return {
+      action: 'unknown',
+      message:
+        "My name is **HyperLocal AI** 🤖 — your job search assistant on the HyperLocal platform!\n\nI can help you find local jobs, apply for positions, and track your applications. Visit **hyperlocal.com** to explore all features.\n\nHow can I help you today?",
+    }
+  }
+
   // Platform info — "what is this", "explain the platform", "about hyperlocal", etc.
   if (
     /what\s+is\s+(this|hyperlocal|the platform|this app|this platform|this service)/i.test(lower) ||
@@ -176,7 +185,15 @@ async function extractIntent(
     // Fall through to search
   }
 
-  // Default: treat as a job search
+  // Default: treat as a job search only if it looks job-related
+  const JOB_KEYWORDS = /job|work|hire|employ|salary|pay|skill|plumb|electr|driver|cook|clean|deliver|labour|labor|carpenter|weld|mason|nurs|teach|secur|guard|helper|assistant|staff|recruit|vacanc/i
+  if (!JOB_KEYWORDS.test(lower)) {
+    return {
+      action: 'unknown',
+      message:
+        "These details are not corresponding to our website. Please enter valid details related to jobs, employment, or the HyperLocal platform.\n\nYou can ask me things like:\n• **\"Find plumber jobs in Hyderabad\"**\n• **\"Show recommended jobs\"**\n• **\"My applications\"**",
+    }
+  }
   return { action: 'search_jobs', query: lower }
 }
 
@@ -649,7 +666,10 @@ export default function AIChatbot() {
           break
 
         case 'unknown':
-          addMessage('assistant', intent.message || "I'm not sure what you mean. Try asking me to search jobs, check your applications, or apply for a job!")
+          addMessage('assistant', intent.message || "I'm not sure what you mean. Try asking me to search jobs, check your applications, or apply for a job!", {
+            type: 'suggestions',
+            suggestions: ['Show all jobs', 'Recommended jobs', 'My applications'],
+          })
           break
 
         default:

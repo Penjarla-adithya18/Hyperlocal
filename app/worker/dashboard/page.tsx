@@ -345,7 +345,7 @@ export default function WorkerDashboardPage() {
                   <div className="flex items-center justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold mb-1" suppressHydrationWarning>
-                        {t('worker.dashboard.application')} #{app.id.slice(-8)}
+                        {jobsMap[app.jobId]?.title ?? `${t('worker.dashboard.application')} #${app.id.slice(-8)}`}
                       </h3>
                       <p className="text-sm text-muted-foreground" suppressHydrationWarning>
                         {t('worker.dashboard.applied')} {new Date(app.createdAt).toLocaleDateString()}
