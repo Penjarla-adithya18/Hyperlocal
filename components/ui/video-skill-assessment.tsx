@@ -1594,12 +1594,14 @@ export function VideoSkillAssessment({
                         )}
 
                         {/* Timestamp */}
-                        <div className="flex items-center gap-2 pt-2 border-t border-orange-200 dark:border-orange-800">
-                          <Clock className="w-4 h-4 text-orange-600" />
-                          <p className="text-xs text-orange-600 dark:text-orange-400">
-                            Failed at: {new Date(latestResult.verificationFailure.timestamp).toLocaleString()}
-                          </p>
-                        </div>
+                        {latestResult.verificationFailure.timestamp && (
+                          <div className="flex items-center gap-2 pt-2 border-t border-orange-200 dark:border-orange-800">
+                            <Clock className="w-4 h-4 text-orange-600" />
+                            <p className="text-xs text-orange-600 dark:text-orange-400">
+                              Failed at: {new Date(latestResult.verificationFailure.timestamp).toLocaleString()}
+                            </p>
+                          </div>
+                        )}
 
                         {/* Tips for next attempt */}
                         <div className="pt-2 border-t border-orange-200 dark:border-orange-800">
