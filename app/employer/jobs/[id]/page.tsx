@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import EmployerNav from '@/components/employer/EmployerNav'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -65,6 +65,14 @@ export default function EmployerJobDetailPage() {
   // Block worker
   const [blockConfirmWorkerId, setBlockConfirmWorkerId] = useState<string | null>(null)
   const [blockReason, setBlockReason] = useState('')
+
+  // Block is only allowed ON the job day (start date)
+  const isJobDay = useMemo(() => {
+    if (!job?.startDate) return false
+    const today = new Date().toISOString().split('T')[0]          // "YYYY-MM-DD" local UTC
+    const jobDay = job.startDate.split('T')[0]                    // handle datetime strings too
+    return today === jobDay
+  }, [job?.startDate])
 
   const loadData = useCallback(async () => {
     // Fetch job, its applications, and its escrow in parallel
@@ -563,15 +571,17 @@ export default function EmployerJobDetailPage() {
                                 <MessageSquare className="w-4 h-4 mr-1" /> {t('common.chat')}
                               </Button>
                               {app.status === 'accepted' && !workersById[app.workerId]?.isBlocked && (
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  className="text-red-600 border-red-300 hover:bg-red-50"
-                                  onClick={() => { setBlockConfirmWorkerId(app.workerId); setBlockReason(''); }}
-                                  disabled={actionLoading}
-                                >
-                                  <UserMinus className="w-4 h-4 mr-1" /> Block
-                                </Button>
+                                <div title={isJobDay ? undefined : `Block is only available on the job day${job?.startDate ? ` (${job.startDate.split('T')[0]})` : ''}`}>
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    className={isJobDay ? 'text-red-600 border-red-300 hover:bg-red-50' : 'opacity-40 cursor-not-allowed'}
+                                    onClick={() => { if (isJobDay) { setBlockConfirmWorkerId(app.workerId); setBlockReason(''); } }}
+                                    disabled={actionLoading || !isJobDay}
+                                  >
+                                    <UserMinus className="w-4 h-4 mr-1" /> Block
+                                  </Button>
+                                </div>
                               )}
                               {workersById[app.workerId]?.isBlocked && (
                                 <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">Blocked</Badge>
