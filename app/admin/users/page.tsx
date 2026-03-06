@@ -11,7 +11,7 @@ import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { useAuth } from '@/contexts/AuthContext'
 import { userOps } from '@/lib/api'
 import { User } from '@/lib/types'
-import { Search, Star, CheckCircle, ShieldOff, ShieldCheck, Trash2 } from 'lucide-react'
+import { Search, Star, CheckCircle, ShieldOff, ShieldCheck, Trash2, UserMinus, PhoneCall } from 'lucide-react'
 
 /** Returns true if the user signed up within the last 7 days */
 const isNewUser = (createdAt: string) =>
@@ -102,10 +102,20 @@ export default function AdminUsersPage() {
   // ── Memoized derived lists (single source of truth for all tabs) ──
   const workers = useMemo(() => users.filter((u) => u.role === 'worker'), [users])
   const employers = useMemo(() => users.filter((u) => u.role === 'employer'), [users])
+  const blockedWorkers = useMemo(() => users.filter((u) => u.role === 'worker' && u.isBlocked), [users])
 
   const filteredUsers = useMemo(() => users.filter((u) => matchesSearch(u, searchQuery)), [users, searchQuery])
   const filteredWorkers = useMemo(() => workers.filter((u) => matchesSearch(u, searchQuery)), [workers, searchQuery])
   const filteredEmployers = useMemo(() => employers.filter((u) => matchesSearch(u, searchQuery)), [employers, searchQuery])
+  const filteredBlocked = useMemo(() => blockedWorkers.filter((u) => matchesSearch(u, searchQuery)), [blockedWorkers, searchQuery])
+
+  const handleUnblockWorker = useCallback(async (userId: string) => {
+    const updated = await userOps.update(userId, { isBlocked: false, blockedAt: undefined, blockedReason: undefined, blockedBy: undefined })
+    if (updated) {
+      setUsers((prev) => prev.map((u) => (u.id === userId ? { ...u, isBlocked: false, blockedAt: undefined, blockedReason: undefined, blockedBy: undefined } : u)))
+      toast({ title: 'Worker Unblocked', description: 'The worker\'s profile is now visible again.' })
+    }
+  }, [toast])
 
   const UserCard = ({ user }: { user: User }) => (
     <Card className="hover:border-primary transition-colors">
@@ -242,6 +252,9 @@ export default function AdminUsersPage() {
             <TabsTrigger value="all" className="flex-1 min-w-[100px]">All Users ({users.length})</TabsTrigger>
             <TabsTrigger value="workers" className="flex-1 min-w-[100px]">Workers ({workers.length})</TabsTrigger>
             <TabsTrigger value="employers" className="flex-1 min-w-[100px]">Employers ({employers.length})</TabsTrigger>
+            <TabsTrigger value="blocked" className="flex-1 min-w-[100px] text-red-600">
+              <UserMinus className="h-3.5 w-3.5 mr-1" /> Blocked ({blockedWorkers.length})
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="all">
@@ -266,6 +279,68 @@ export default function AdminUsersPage() {
                 <UserCard key={user.id} user={user} />
               ))}
             </div>
+          </TabsContent>
+
+          <TabsContent value="blocked">
+            {filteredBlocked.length === 0 ? (
+              <Card><CardContent className="py-10 text-center text-muted-foreground">No blocked workers</CardContent></Card>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 md:gap-6">
+                {filteredBlocked.map((u) => (
+                  <Card key={u.id} className="border-red-200 bg-red-50/30 dark:bg-red-950/10">
+                    <CardContent className="pt-6">
+                      <div className="flex items-start gap-4">
+                        <div className="h-12 w-12 rounded-full bg-red-100 dark:bg-red-900 flex items-center justify-center shrink-0 text-red-700 dark:text-red-300 font-bold text-lg">
+                          {u.fullName.charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="font-semibold truncate">{u.fullName}</h3>
+                            <Badge className="bg-red-100 text-red-700 border-red-200 text-xs shrink-0">Blocked</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{u.email || 'No email'}</p>
+                          <p className="text-sm text-muted-foreground">{u.phone || u.phoneNumber}</p>
+                          {u.blockedReason && (
+                            <p className="text-xs text-red-600 mt-1 bg-red-50 dark:bg-red-950/30 rounded px-2 py-1">
+                              <strong>Reason:</strong> {u.blockedReason}
+                            </p>
+                          )}
+                          {u.blockedAt && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                              Blocked on {new Date(u.blockedAt).toLocaleDateString()}
+                            </p>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-4">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="text-green-600 border-green-300 hover:bg-green-50"
+                              onClick={() => handleUnblockWorker(u.id)}
+                            >
+                              <ShieldCheck className="h-4 w-4 mr-1" /> Unblock
+                            </Button>
+                            {(u.phone || u.phoneNumber) && (
+                              <a href={`tel:${u.phone || u.phoneNumber}`}>
+                                <Button size="sm" variant="outline" className="text-blue-600 border-blue-300 hover:bg-blue-50">
+                                  <PhoneCall className="h-4 w-4 mr-1" /> Contact
+                                </Button>
+                              </a>
+                            )}
+                            {u.email && (
+                              <a href={`mailto:${u.email}?subject=HyperLocal Account Blocked&body=Dear ${u.fullName},%0A%0AYour HyperLocal account has been blocked. Please contact us to resolve this issue.`}>
+                                <Button size="sm" variant="outline">
+                                  Email
+                                </Button>
+                              </a>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </TabsContent>
         </Tabs>
       </main>

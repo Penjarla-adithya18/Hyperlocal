@@ -55,6 +55,14 @@ export interface User {
   aadhaarVerified?: boolean;
   /** Aadhaar verification timestamp */
   aadhaarVerifiedAt?: string;
+  /** Whether the worker has been blocked by an employer for no-show */
+  isBlocked?: boolean;
+  /** Timestamp when the worker was blocked */
+  blockedAt?: string;
+  /** Reason provided by the employer for blocking */
+  blockedReason?: string;
+  /** ID of the employer who blocked the worker */
+  blockedBy?: string;
 }
 
 /** GSTIN verification details from ClearTax API */

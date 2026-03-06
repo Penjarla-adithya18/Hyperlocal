@@ -28,7 +28,7 @@ import { Job, Application, EscrowTransaction, WorkerProfile } from '@/lib/types'
 import {
   ArrowLeft, Lock, Unlock, RefreshCcw, MapPin, Clock, IndianRupee, Users,
   Briefcase, CheckCircle2, AlertCircle, Edit, Shield, Star, MessageSquare,
-  FileText, Download, Search, X,
+  FileText, Download, Search, X, UserMinus,
 } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -62,6 +62,9 @@ export default function EmployerJobDetailPage() {
   const [viewingResume, setViewingResume] = useState<{ name: string; url: string } | null>(null)
   // Applicant search
   const [appSearch, setAppSearch] = useState('')
+  // Block worker
+  const [blockConfirmWorkerId, setBlockConfirmWorkerId] = useState<string | null>(null)
+  const [blockReason, setBlockReason] = useState('')
 
   const loadData = useCallback(async () => {
     // Fetch job, its applications, and its escrow in parallel
@@ -256,6 +259,26 @@ export default function EmployerJobDetailPage() {
       loadData()
     } catch { toast({ title: t('common.error'), description: t('employer.jobDetail.updateApplicationFailed'), variant: 'destructive' }) }
     finally { setActionLoading(false) }
+  }
+
+  const handleBlockWorker = async (workerId: string) => {
+    setActionLoading(true)
+    try {
+      await userOps.update(workerId, {
+        isBlocked: true,
+        blockedAt: new Date().toISOString(),
+        blockedReason: blockReason || 'No-show after job acceptance',
+        blockedBy: user?.id,
+      })
+      toast({ title: 'Worker Blocked', description: 'The worker has been blocked. Their profile is now hidden. Admin has been notified.' })
+      setBlockConfirmWorkerId(null)
+      setBlockReason('')
+      loadData()
+    } catch {
+      toast({ title: 'Error', description: 'Failed to block worker.', variant: 'destructive' })
+    } finally {
+      setActionLoading(false)
+    }
   }
 
   const handleChatWithWorker = async (app: Application) => {
@@ -539,6 +562,20 @@ export default function EmployerJobDetailPage() {
                               <Button size="sm" variant="outline" onClick={() => handleChatWithWorker(app)}>
                                 <MessageSquare className="w-4 h-4 mr-1" /> {t('common.chat')}
                               </Button>
+                              {app.status === 'accepted' && !workersById[app.workerId]?.isBlocked && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  className="text-red-600 border-red-300 hover:bg-red-50"
+                                  onClick={() => { setBlockConfirmWorkerId(app.workerId); setBlockReason(''); }}
+                                  disabled={actionLoading}
+                                >
+                                  <UserMinus className="w-4 h-4 mr-1" /> Block
+                                </Button>
+                              )}
+                              {workersById[app.workerId]?.isBlocked && (
+                                <Badge className="bg-red-100 text-red-700 border-red-200 text-xs">Blocked</Badge>
+                              )}
                             </div>
                           </div>
                           {/* Applicant skills preview */}
@@ -741,6 +778,40 @@ export default function EmployerJobDetailPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Block Worker Confirm Dialog */}
+      <AlertDialog open={!!blockConfirmWorkerId} onOpenChange={(open) => { if (!open) { setBlockConfirmWorkerId(null); setBlockReason(''); } }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2">
+              <UserMinus className="w-5 h-5 text-red-600" /> Block this Worker?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              The worker <strong>{workersById[blockConfirmWorkerId ?? '']?.fullName ?? 'this worker'}</strong> will be blocked. Their profile will be hidden from all employers and workers. They must contact admin to get their account restored.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div className="px-1 pb-1">
+            <Label className="text-sm font-medium">Reason for blocking</Label>
+            <Textarea
+              className="mt-1.5"
+              rows={2}
+              placeholder="e.g. Worker did not show up after accepting the job"
+              value={blockReason}
+              onChange={(e) => setBlockReason(e.target.value)}
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-600 hover:bg-red-700 text-white"
+              onClick={() => { if (blockConfirmWorkerId) void handleBlockWorker(blockConfirmWorkerId) }}
+              disabled={actionLoading}
+            >
+              <UserMinus className="w-4 h-4 mr-1" /> Yes, Block Worker
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }

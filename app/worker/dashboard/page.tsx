@@ -20,6 +20,7 @@ import {
   ArrowRight,
   CheckCircle2,
   AlertCircle,
+  UserMinus,
 } from 'lucide-react';
 import { workerProfileOps, jobOps, applicationOps, trustScoreOps } from '@/lib/api';
 import { WorkerProfile, Job, Application, TrustScore } from '@/lib/types';
@@ -163,6 +164,44 @@ export default function WorkerDashboardPage() {
             ))}
           </div>
         </div>
+      </div>
+    );
+  }
+
+  if (user?.isBlocked) {
+    return (
+      <div className="app-surface">
+        <WorkerNav />
+        <main className="container mx-auto px-4 py-16 max-w-lg">
+          <Card className="border-red-200 bg-red-50/50 dark:bg-red-950/20 shadow-lg">
+            <div className="p-8 text-center">
+              <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100 dark:bg-red-900">
+                <UserMinus className="h-8 w-8 text-red-600 dark:text-red-300" />
+              </div>
+              <h2 className="text-xl font-bold text-red-700 dark:text-red-300 mb-2">Account Blocked</h2>
+              <p className="text-sm text-muted-foreground mb-3">
+                Your account has been blocked. Your profile is currently hidden from employers and job listings.
+              </p>
+              {user.blockedReason && (
+                <div className="mb-4 rounded-lg border border-red-200 bg-white dark:bg-red-950/30 px-4 py-2 text-sm">
+                  <span className="font-medium text-red-600">Reason: </span>
+                  <span className="text-foreground">{user.blockedReason}</span>
+                </div>
+              )}
+              {user.blockedAt && (
+                <p className="text-xs text-muted-foreground mb-4">
+                  Blocked on {new Date(user.blockedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' })}
+                </p>
+              )}
+              <p className="text-sm text-muted-foreground mb-4">
+                To reactivate your account, please contact the admin team:
+              </p>
+              <div className="rounded-lg border border-red-200 bg-white dark:bg-red-950/30 p-3 text-sm font-medium">
+                📧 admin@hyperlocal.com
+              </div>
+            </div>
+          </Card>
+        </main>
       </div>
     );
   }
