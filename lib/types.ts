@@ -86,6 +86,12 @@ export interface WorkerProfile {
   resumeText?: string;
   /** Resume parsed metadata (projects, experience, education) */
   resumeParsed?: ResumeData;
+  /** Aadhaar number used for KYC verification */
+  aadhaarNumber?: string;
+  /** Whether Aadhaar has been verified */
+  aadhaarVerified?: boolean;
+  /** Aadhaar verification timestamp */
+  aadhaarVerifiedAt?: string;
 }
 
 /** Structured data extracted from a resume */
