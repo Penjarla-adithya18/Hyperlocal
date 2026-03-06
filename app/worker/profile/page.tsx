@@ -58,6 +58,9 @@ export default function WorkerProfilePage() {
     profileImage: '',
     resumeUrl: '',
     resumeFileName: '',
+    aadhaarNumber: '',
+    aadhaarVerified: false,
+    aadhaarVerifiedAt: '',
   });
   const [resumeUploading, setResumeUploading] = useState(false);
   const [pwForm, setPwForm] = useState({ current: '', newPw: '', confirm: '' });
@@ -109,6 +112,9 @@ export default function WorkerProfilePage() {
           profileImage: workerProfile.profilePictureUrl || '',
           resumeUrl: workerProfile.resumeUrl || '',
           resumeFileName: workerProfile.resumeUrl ? 'Resume uploaded' : '',
+          aadhaarNumber: workerProfile.aadhaarNumber || '',
+          aadhaarVerified: workerProfile.aadhaarVerified ?? false,
+          aadhaarVerifiedAt: workerProfile.aadhaarVerifiedAt || '',
         });
         // Existing profile skills are already verified
         const existingSkills = workerProfile.skills || [];
@@ -214,6 +220,17 @@ export default function WorkerProfilePage() {
       toast({ title: t('profile.uploadFailed'), description: t('profile.uploadFailedDesc2'), variant: 'destructive' });
       setResumeUploading(false);
     }
+  };
+
+  const handleAadhaarChange = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 12);
+    const verified = digits.length === 12;
+    setFormData(prev => ({
+      ...prev,
+      aadhaarNumber: digits,
+      aadhaarVerified: verified,
+      aadhaarVerifiedAt: verified ? (prev.aadhaarVerifiedAt || new Date().toISOString()) : '',
+    }));
   };
 
   const addSkill = () => {
@@ -502,6 +519,9 @@ export default function WorkerProfilePage() {
         profilePictureUrl: formData.profileImage || undefined,
         resumeUrl: formData.resumeUrl || undefined,
         profileCompleted: !!isComplete,
+        aadhaarNumber: formData.aadhaarNumber || undefined,
+        aadhaarVerified: formData.aadhaarVerified,
+        aadhaarVerifiedAt: formData.aadhaarVerifiedAt || undefined,
       };
 
       if (profile) {
@@ -946,6 +966,47 @@ export default function WorkerProfilePage() {
                 <option value="Evening">{t('profile.eveningShifts')}</option>
                 <option value="Morning">{t('profile.morningShifts')}</option>
               </select>
+            </div>
+          </Card>
+
+          {/* Aadhaar Verification */}
+          <Card className="p-6 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                <Shield className="w-5 h-5 text-primary" />
+              </div>
+              <div>
+                <h2 className="text-xl font-semibold">Aadhaar Verification</h2>
+                <p className="text-sm text-muted-foreground">Enter your 12-digit Aadhaar number to verify your identity</p>
+              </div>
+            </div>
+            <div className="space-y-3">
+              <Label htmlFor="aadhaar-number">Aadhaar Number</Label>
+              <div className="flex items-center gap-3">
+                <Input
+                  id="aadhaar-number"
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={12}
+                  placeholder="Enter 12-digit Aadhaar number"
+                  value={formData.aadhaarNumber}
+                  onChange={(e) => handleAadhaarChange(e.target.value)}
+                  className="max-w-xs font-mono tracking-wider"
+                />
+                {formData.aadhaarVerified && (
+                  <Badge className="bg-green-600 text-white gap-1 shrink-0">
+                    <CheckCircle2 className="w-3 h-3" /> Verified
+                  </Badge>
+                )}
+                {formData.aadhaarNumber.length > 0 && formData.aadhaarNumber.length < 12 && (
+                  <p className="text-xs text-muted-foreground">{12 - formData.aadhaarNumber.length} more digits needed</p>
+                )}
+              </div>
+              {formData.aadhaarVerified && (
+                <p className="text-xs text-green-600 flex items-center gap-1">
+                  <CheckCircle2 className="w-3 h-3" /> Aadhaar verified automatically
+                </p>
+              )}
             </div>
           </Card>
 

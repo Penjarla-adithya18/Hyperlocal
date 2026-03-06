@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="primary">#16a34a</color>
+    <color name="primary_dark">#15803d</color>
+    <color name="primary_light">#4ade80</color>
+    <color name="background">#f0fdf4</color>
+    <color name="surface">#ffffff</color>
+    <color name="text_primary">#111827</color>
+    <color name="text_secondary">#6b7280</color>
+    <color name="white">#ffffff</color>
+    <color name="black">#000000</color>
+    <color name="splash_background">#f0fdf4</color>
+    <color name="progress_bar">#16a34a</color>
+</resources>
