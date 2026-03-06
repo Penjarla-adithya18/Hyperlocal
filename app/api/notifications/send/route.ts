@@ -15,6 +15,7 @@ type NotificationTemplate =
   | 'escrow_locked'
   | 'escrow_released'
   | 'trust_score_update'
+  | 'job_day_reminder'
 
 function getTwilioConfig() {
   return {
@@ -52,6 +53,8 @@ function buildMessage(template: NotificationTemplate, params: string[]): string 
       return `Hi ${p0 ?? 'there'}, ₹${p1 ?? '0'} has been released to your account for completing "${p2 ?? 'the job'}". Great work! 💰`
     case 'trust_score_update':
       return `Hi ${p0 ?? 'there'}, your HyperLocal Trust Score has been updated to ${p1 ?? 'N/A'} (Level: ${p2 ?? 'N/A'}). Keep up the great work!`
+    case 'job_day_reminder':
+      return `📍 Hi ${p0 ?? 'there'}! Reminder: Your job "${p1 ?? 'the job'}" at ${p2 ?? 'the employer'} is TODAY. Please report on time and give your best. Good luck! - HyperLocal Jobs`
     default:
       return `You have a new notification from HyperLocal Jobs. Open the app for details.`
   }
