@@ -2079,14 +2079,26 @@ export function VideoSkillAssessment({
             </div>
 
             <DialogFooter>
-              {currentSkillIdx + 1 < skills.length ? (
-                <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
-                  <ArrowRight className="w-4 h-4" /> Next: Coding Challenge
-                </Button>
+              {isCodingSkill(currentSkill) ? (
+                currentSkillIdx + 1 < skills.length ? (
+                  <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
+                    <ArrowRight className="w-4 h-4" /> Next: Coding Challenge
+                  </Button>
+                ) : (
+                  <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Final: Coding Challenge
+                  </Button>
+                )
               ) : (
-                <Button onClick={() => { codeStandaloneRef.current = false; startCodingChallenge() }} className="gap-2">
-                  <CheckCircle2 className="w-4 h-4" /> Final: Coding Challenge
-                </Button>
+                currentSkillIdx + 1 < skills.length ? (
+                  <Button onClick={() => { nextSkill() }} className="gap-2">
+                    <ArrowRight className="w-4 h-4" /> Next Skill
+                  </Button>
+                ) : (
+                  <Button onClick={() => onComplete(results)} className="gap-2">
+                    <CheckCircle2 className="w-4 h-4" /> Finish Assessment
+                  </Button>
+                )
               )}
             </DialogFooter>
           </>
